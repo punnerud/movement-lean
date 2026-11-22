@@ -73,6 +73,7 @@ def reduced(m1, m2):
 
 
 G_MAG = "Magnetism: the electron cloud as a tiny superconductor"
+G_VDW = "Forces between neutral atoms: two helium atoms"
 G_BOND = "Chemical bonds: shared electrons (H₂) and transferred electrons (NaCl)"
 G_ONE, G_MANY, G_ROT, G_HEAT, G_NUM, G_VAL = (
     "One-electron atoms", "Atoms with several electrons: simple models", "Rotating molecules",
@@ -510,6 +511,39 @@ if quantum is not None:
     row(G_MAG, "He", "diamagnetic susceptibility", "Hylleraas vs. best published calculation",
         "not formalised", chi_he, MAG["He_susceptibility_theory_1e6_cm3_per_mol"], "10⁻⁶ cm³/mol",
         "ok", 1e-3, 1e-4)
+
+
+# ---------------------------------------------------------------- van der Waals
+# Two neutral atoms attract because each one's fluctuating electron cloud
+# polarises the other. At long range the energy is -C6 / r^6.
+DISP = DATA["helium_dispersion"]
+HARTREE_K = 315775.02480407
+alpha_meas = (DISP["molar_polarizability_cm3_per_mol"] * 3 / (4 * math.pi * 6.02214076e23)
+              / (BOHR_A * 1e-8) ** 3)
+u_alpha = DISP["molar_polarizability_uncertainty"] / DISP["molar_polarizability_cm3_per_mol"]
+v1 = row(G_VDW, "He", "polarizability", "one screening parameter, ζ = Z − 5/16",
+         "helium_variational", 9 / (2 - 5 / 16) ** 4, alpha_meas, "a₀³", "limit", 0.05, u_alpha,
+         "a single exponential is too stiff: the cloud is easier to distort than that")
+if quantum is not None:
+    alpha_he, c6_he, f_sum = quantum.helium_dispersion()
+    row(G_VDW, "He", "polarizability", "full CI, sum over all excited states", "not formalised",
+        alpha_he, alpha_meas, "a₀³", "ok", 0.02, u_alpha, base=v1,
+        fix="the field mixes in excited states; correlation included",
+        note="reference: measured dielectric constant of helium gas; the missing 1 % needs d orbitals")
+    i_he = ie["He"] / HARTREE_EV
+    v3 = row(G_VDW, "He–He", "van der Waals coefficient C₆", "London formula, ¾ α² I",
+             "not formalised", 0.75 * alpha_he ** 2 * i_he, DISP["C6_au"], "a.u.", "limit", 0.05,
+             1e-6, "treats the atom as a single oscillator at the ionization energy")
+    row(G_VDW, "He–He", "van der Waals coefficient C₆", "Casimir–Polder sum over all excited states",
+        "not formalised", c6_he, DISP["C6_au"], "a.u.", "ok", 0.03, 1e-6, base=v3,
+        fix="every excited state contributes with its own frequency",
+        note="reference: benchmark calculation, not a measurement")
+    r_m = DISP["well_position_bohr"]
+    row(G_VDW, f"He–He at {r_m * BOHR_A:.2f} Å", "attraction (as a temperature)", "−C₆/r⁶ alone",
+        "not formalised", c6_he / r_m ** 6 * HARTREE_K, DISP["well_depth_K"], "K", "limit", 0.05,
+        1e-3, "leading term only: at this distance the clouds also start to overlap and repel")
+    STABILITY += [("He oscillator strengths sum to the number of electrons (within 2 %)",
+                   abs(f_sum - 2.0) < 0.04)]
 
 
 def bond_figure():

@@ -77,7 +77,8 @@
     "H2 curve benchmark energies: Pachucki, Phys. Rev. A 82, 032509 (2010).",
     "H2 triplet (b 3Sigma_u+) energies: Kolos & Wolniewicz, J. Chem. Phys. 43, 2429 (1965), Table VII; variational upper bounds from 1965, not checked against later work.",
     "Magnetic shielding of H (CODATA 2022) and 3He (Pachucki 2023) are theoretical values; no direct measurement of the neutral-atom shielding exists.",
-    "Helium susceptibility: measured -2.02(7)e-6 cm^3/mol (Barter, Meisenheimer, Stevenson 1960, as quoted by Puchalski, Lesiuk, Jeziorski 2023, and tabulated in the CRC Handbook); theory -1.891035(30)e-6 (same 2023 paper). No modern precise measurement was found."
+    "Helium susceptibility: measured -2.02(7)e-6 cm^3/mol (Barter, Meisenheimer, Stevenson 1960, as quoted by Puchalski, Lesiuk, Jeziorski 2023, and tabulated in the CRC Handbook); theory -1.891035(30)e-6 (same 2023 paper). No modern precise measurement was found.",
+    "Helium dispersion: measured molar polarizability 0.5172544(10) cm^3/mol (Gaiser & Fellmuth 2018, as quoted by Puchalski et al. 2020); C6 = 1.4609778 a.u. (Yan, Babb, Dalgarno, Drake 1996, theory); well depth 10.996(4) K at 5.6080(1) bohr (Cencek et al. 2012, theory). The helium dimer itself is measured to be bound by only 151.9(13.3) neV (Zeller et al. 2016)."
   ],
   "vibration_cm1": {
     "H2": [
@@ -175,5 +176,12 @@
     "He_susceptibility_theory_1e6_cm3_per_mol": -1.891035,
     "He_susceptibility_measured_1e6_cm3_per_mol": -2.02,
     "He_susceptibility_measured_uncertainty": 0.07
+  },
+  "helium_dispersion": {
+    "molar_polarizability_cm3_per_mol": 0.5172544,
+    "molar_polarizability_uncertainty": 1e-06,
+    "C6_au": 1.4609778,
+    "well_depth_K": 10.996,
+    "well_position_bohr": 5.608
   }
 }

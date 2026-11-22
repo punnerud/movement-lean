@@ -149,6 +149,16 @@ Each formula's derivation is proved in Lean where a theorem is named; the compar
 | He | diamagnetic susceptibility | Hylleraas wavefunction, Σ⟨r²⟩ | `not formalised` | -1.891034 10⁻⁶ cm³/mol | -2.02 10⁻⁶ cm³/mol | -6.38 % | fails, as expected (the measurement (1960) is the weak link here: see the next row) | 1.8× |
 | He | diamagnetic susceptibility | Hylleraas vs. best published calculation | `not formalised` | -1.891034 10⁻⁶ cm³/mol | -1.891035 10⁻⁶ cm³/mol | -0.00003 % | matches | 0.0× |
 
+## Forces between neutral atoms: two helium atoms
+
+| System | Quantity | Model | Lean theorem | Predicted | Reference | Error | Verdict | Error ÷ uncertainty |
+|---|---|---|---|---|---|---|---|---|
+| He | polarizability | one screening parameter, ζ = Z − 5/16 | `helium_variational` | 1.109858 a₀³ | 1.383762 a₀³ | -20 % | fails, as expected (a single exponential is too stiff: the cloud is easier to distort than that) | 102 386× |
+| He | polarizability | full CI, sum over all excited states | `not formalised` | 1.368956 a₀³ | 1.383762 a₀³ | -1.07 % | matches (reference: measured dielectric constant of helium gas; the missing 1 % needs d orbitals) | 5 534× |
+| He–He | van der Waals coefficient C₆ | London formula, ¾ α² I | `not formalised` | 1.269996 a.u. | 1.460978 a.u. | -13 % | fails, as expected (treats the atom as a single oscillator at the ionization energy) | 130 722× |
+| He–He | van der Waals coefficient C₆ | Casimir–Polder sum over all excited states | `not formalised` | 1.437484 a.u. | 1.460978 a.u. | -1.61 % | matches (reference: benchmark calculation, not a measurement) | 16 081× |
+| He–He at 2.97 Å | attraction (as a temperature) | −C₆/r⁶ alone | `not formalised` | 14.5926 K | 10.996 K | +33 % | fails, as expected (leading term only: at this distance the clouds also start to overlap and repel) | 327× |
+
 ## Where do the deviations come from?
 
 Each line follows one quantity from the simplest model to the best one here.
@@ -251,6 +261,12 @@ Each line follows one quantity from the simplest model to the best one here.
 |  |  | one screening parameter, ζ = Z − 5/16 | -17 % | average screening by the other electron |
 |  |  | Hylleraas wavefunction, Σ⟨r²⟩ | -6.38 % | the correlated electron cloud |
 | | | **remaining** | 1.8× the reference uncertainty | within the reference uncertainty |
+| He | polarizability | one screening parameter, ζ = Z − 5/16 | -20 % | starting point |
+|  |  | full CI, sum over all excited states | -1.07 % | the field mixes in excited states; correlation included |
+| | | **remaining** | 5 534× the reference uncertainty | model error, far above the reference uncertainty |
+| He–He | van der Waals coefficient C₆ | London formula, ¾ α² I | -13 % | starting point |
+|  |  | Casimir–Polder sum over all excited states | -1.61 % | every excited state contributes with its own frequency |
+| | | **remaining** | 16 081× the reference uncertainty | model error, far above the reference uncertainty |
 
 ## Caveats
 
@@ -261,4 +277,4 @@ Each line follows one quantity from the simplest model to the best one here.
 - The uncertainty column uses one representative relative uncertainty per class of data (see relative_uncertainty in reference_data.json), not a separate figure for every value.
 - The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
 
-**105 comparisons: 87 inside the model's domain and matching, 18 documented limits.**
+**110 comparisons: 89 inside the model's domain and matching, 21 documented limits.**

@@ -281,6 +281,20 @@ A magnetic field sets the whole electron cloud circulating, and the induced curr
 
 The shielding references are calculations; nobody has measured the shielding of a neutral atom directly. The last row is the one place in this analyzer where the measurement is the likely weak link: the only gas-phase measurement (1960, −2.02 ± 0.07 in units of 10⁻⁶ cm³/mol) lies 7 % from both this code and the best modern calculation (−1.891), which agree with each other. The 2023 paper behind that calculation notes the same gap and asks for a new measurement.
 
+### Forces between neutral atoms: two helium atoms
+
+Two neutral atoms still attract. Each atom's electron cloud fluctuates, the momentary lopsidedness polarises the other atom, and the two induced dipoles attract with an energy `−C₆/r⁶`. The analyzer gets both the polarizability and `C₆` from one full-CI calculation of all excited states of helium:
+
+| Quantity | Model | Error |
+|---|---|---|
+| He polarizability | one screening parameter | −20 %, **fails** |
+| He polarizability | full CI, sum over all excited states | −1.1 % (against the measured dielectric constant of helium gas) |
+| He–He `C₆` | London formula `¾ α² I` | −13 %, **fails** |
+| He–He `C₆` | Casimir–Polder sum over all excited states | −1.6 % |
+| He–He attraction at 2.97 Å | `−C₆/r⁶` alone | +33 %, **fails**: the clouds also begin to repel |
+
+At its strongest the attraction corresponds to 11 K, about 0.001 eV: five thousand times weaker than the bond in H₂. That is why helium only liquefies at 4 K. The full helium–helium curve is not computed here; it needs four electrons on two centres to a precision of 10⁻⁶ hartree.
+
 ### Where do the deviations come from?
 
 For each simple model that misses, the analyzer adds the known physical correction and checks whether the gap closes:

@@ -334,7 +334,7 @@ if __name__ == "__main__":
 # --------------------------------------------------------------------------
 # p-type orbitals and full CI for any number of electrons
 # --------------------------------------------------------------------------
-def contracted_integrals(exponents, centers, nuclei, W):
+def contracted_integrals(exponents, centers, nuclei, W, dipole=False):
     """S, h and (pq|rs) for functions that are fixed combinations (columns of W)
     of s-Gaussians. The two-electron integrals are built in slices, so the full
     primitive array is never stored."""
@@ -366,10 +366,38 @@ def contracted_integrals(exponents, centers, nuclei, W):
         half[lo:hi] = np.einsum("xkl,kc,ld->xcd", block, W, W, optimize=True)
     half = half.reshape(n, n, nc, nc)
     eri = np.einsum("ijcd,ia,jb->abcd", half, W, W, optimize=True)
+    if dipole:
+        return W.T @ S @ W, W.T @ (T + V) @ W, eri, W.T @ (P[:, :, 2] * S) @ W
     return W.T @ S @ W, W.T @ (T + V) @ W, eri
 
 
-def atom_raw_basis(Z, p_exponents, d_exponents=(), delta_p=0.1, delta_d=0.3):
+_STENCIL = {0: {0: 1.0},                       # finite-difference derivatives on a line
+            1: {1: 0.5, -1: -0.5},
+            2: {1: 1.0, 0: -2.0, -1: 1.0},
+            3: {2: 0.5, 1: -1.0, -1: 1.0, -2: -0.5}}
+# the seven f shapes as harmonic polynomials in (d/dx, d/dy, d/dz): {(a, b, c): coefficient}
+_F_SHAPES = [{(1, 1, 1): 1.0},
+             {(2, 0, 1): 1.0, (0, 2, 1): -1.0},
+             {(3, 0, 0): 1.0, (1, 2, 0): -3.0},
+             {(2, 1, 0): 3.0, (0, 3, 0): -1.0},
+             {(0, 0, 3): 2.0, (2, 0, 1): -3.0, (0, 2, 1): -3.0},
+             {(1, 0, 2): 4.0, (3, 0, 0): -1.0, (1, 2, 0): -1.0},
+             {(0, 1, 2): 4.0, (2, 1, 0): -1.0, (0, 3, 0): -1.0}]
+
+
+def _difference_lobes(shape):
+    """Grid points and weights of a finite-difference version of a derivative polynomial."""
+    out = {}
+    for (a, b, c), coef in shape.items():
+        for i, wi in _STENCIL[a].items():
+            for j, wj in _STENCIL[b].items():
+                for k, wk in _STENCIL[c].items():
+                    out[(i, j, k)] = out.get((i, j, k), 0.0) + coef * wi * wj * wk
+    return {pt: w for pt, w in out.items() if abs(w) > 1e-14}
+
+
+def atom_raw_basis(Z, p_exponents, d_exponents=(), f_exponents=(), delta_p=0.1, delta_d=0.3,
+                   delta_f=0.4, dipole=False):
     """s, p and d functions for an atom, all made from s-Gaussians.
 
     p: g(r - d e) - g(r + d e) along x, y, z (odd along the axis).
@@ -412,12 +440,69 @@ def atom_raw_basis(Z, p_exponents, d_exponents=(), delta_p=0.1, delta_d=0.3):
         cols.append({ax[0][0]: 1.0, ax[0][1]: 1.0, ax[1][0]: -1.0, ax[1][1]: -1.0})
         cols.append({ax[2][0]: 2.0, ax[2][1]: 2.0, ax[0][0]: -1.0, ax[0][1]: -1.0,
                      ax[1][0]: -1.0, ax[1][1]: -1.0})
+    for a in f_exponents:
+        # f: third differences of the Gaussian on a small grid of lobes (step d).
+        # Each has the angular shape of an f orbital plus a little p, which is harmless.
+        d = delta_f / math.sqrt(a)
+        grid = {}
+        for shape in _F_SHAPES:
+            col = {}
+            for pt, w in _difference_lobes(shape).items():
+                if pt not in grid:
+                    grid[pt] = lobe(a, [d * x for x in pt])
+                col[grid[pt]] = w
+            cols.append(col)
     W = np.zeros((len(exps), len(cols)))
     for c, col in enumerate(cols):
         for k, v in col.items():
             W[k, c] = v
+    if dipole:
+        return contracted_integrals(exps, np.array(cen), [(Z, (0, 0, 0))], W, dipole=True)
     S, h, eri = contracted_integrals(exps, np.array(cen), [(Z, (0, 0, 0))], W)
     return S, h, eri, ns
+
+
+HE_RESPONSE_P = (0.04, 0.09, 0.2, 0.45, 1.0, 2.3, 5.5)
+
+
+def helium_dispersion(p_exponents=HE_RESPONSE_P):
+    """How a helium atom responds to an electric field, from all its excited states.
+
+    Full CI for the two electrons gives the ground state and every excited
+    state the basis can hold. With excitation energies w_n and transition
+    dipoles z_n along one axis (oscillator strengths f_n = 2 w_n z_n^2):
+
+      polarizability      alpha = sum_n f_n / w_n^2
+      van der Waals       C6    = (3/2) sum_mn f_m f_n / (w_m w_n (w_m + w_n))
+
+    The second is the Casimir-Polder formula for two identical atoms: the
+    fluctuating dipole of one atom induces a dipole in the other.
+    Returns (alpha, C6, sum of f_n) in atomic units; the last should be 2,
+    the number of electrons."""
+    S, h, eri, Zm = atom_raw_basis(2, p_exponents, dipole=True)
+    X = orthogonalizer(S, 1e-8)
+    m = X.shape[1]
+    ho, zo, g = X.T @ h @ X, X.T @ Zm @ X, _transform(eri, X)
+    eye = np.eye(m)
+    H = (np.einsum("ik,jl->ijkl", ho, eye) + np.einsum("ik,jl->ijkl", eye, ho)
+         + g.transpose(0, 2, 1, 3)).reshape(m * m, m * m)
+    Zp = (np.einsum("ik,jl->ijkl", zo, eye) + np.einsum("ik,jl->ijkl", eye, zo)).reshape(m * m, m * m)
+    pairs = [(i, j) for i in range(m) for j in range(i, m)]
+    B = np.zeros((m * m, len(pairs)))
+    for col, (i, j) in enumerate(pairs):
+        if i == j:
+            B[i * m + j, col] = 1.0
+        else:
+            B[i * m + j, col] = B[j * m + i, col] = math.sqrt(0.5)
+    w, V = np.linalg.eigh(B.T @ H @ B)
+    z = (V.T @ (B.T @ Zp @ B) @ V[:, 0])[1:]
+    omega = w[1:] - w[0]
+    keep = np.abs(z) > 1e-10
+    z, omega = z[keep], omega[keep]
+    f = 2.0 * omega * z ** 2
+    alpha = float(np.sum(f / omega ** 2))
+    c6 = 1.5 * float(np.sum(np.outer(f / omega, f / omega) / (omega[:, None] + omega[None, :])))
+    return alpha, c6, float(np.sum(f))
 
 
 def _average_hf(S, h, eri, ns, occupations):
@@ -447,13 +532,13 @@ def _transform(eri, W):
     return np.einsum("sl,ijks->ijkl", W, g)
 
 
-def atom_sp_orbitals(Z, occupations, s_keep, p_exponents, d_exponents=()):
+def atom_sp_orbitals(Z, occupations, s_keep, p_exponents, d_exponents=(), f_exponents=()):
     """Orthonormal orbitals for an atom, with h and (pq|rs) in that basis.
 
     s space: the Hartree-Fock orbitals of the atom (occupation numbers given),
     plus the primitive s-Gaussians with indices `s_keep`; then all p and d
     functions from `atom_raw_basis`."""
-    S, h, eri, ns = atom_raw_basis(Z, p_exponents, d_exponents)
+    S, h, eri, ns = atom_raw_basis(Z, p_exponents, d_exponents, f_exponents)
     n = S.shape[0]
     C, D = _average_hf(S, h, eri, ns, occupations)
     columns = [C[:, k] for k in range(C.shape[1])]
@@ -469,7 +554,7 @@ def atom_sp_orbitals(Z, occupations, s_keep, p_exponents, d_exponents=()):
     return W.T @ h @ W, _transform(eri, W)
 
 
-def frozen_core_valence(Z, p_exponents, d_exponents=()):
+def frozen_core_valence(Z, p_exponents, d_exponents=(), f_exponents=()):
     """Two valence electrons outside a frozen 1s² core (for beryllium).
 
     The core is the Hartree-Fock 1s orbital of the neutral atom. The valence
@@ -477,7 +562,7 @@ def frozen_core_valence(Z, p_exponents, d_exponents=()):
     in all orbitals orthogonal to it. Returns (energy of the valence pair by
     full CI, energy of a single valence electron); their difference is the
     ionization energy in this model."""
-    S, h, eri, ns = atom_raw_basis(Z, p_exponents, d_exponents)
+    S, h, eri, ns = atom_raw_basis(Z, p_exponents, d_exponents, f_exponents)
     C, _ = _average_hf(S, h, eri, ns, (2, 2))
     core = C[:, :1]
     Dc = 2.0 * core @ core.T
@@ -528,17 +613,24 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200):
     k = h - 0.5 * np.einsum("prrq->pq", eri)
     g2 = eri.reshape(n * n, n * n)
 
+    order_a, order_b = np.argsort(pq_a, kind="stable"), np.argsort(pq_b, kind="stable")
+    pq_a, I_a, J_a, s_a = pq_a[order_a], I_a[order_a], J_a[order_a], s_a[order_a]
+    pq_b, I_b, J_b, s_b = pq_b[order_b], I_b[order_b], J_b[order_b], s_b[order_b]
+    step = max(1, min(n * n, 200_000_000 // (Na * Nb)))    # rows of G held at once (about 1.6 GB)
+
     def sigma(C):
         D = np.zeros((n * n, Na, Nb))
         np.add.at(D, (pq_a, I_a), s_a[:, None] * C[J_a])
-        Dt = D.transpose(0, 2, 1)
-        np.add.at(Dt, (pq_b, I_b), s_b[:, None] * C.T[J_b])
-        G = (g2 @ D.reshape(n * n, Na * Nb)).reshape(n * n, Na, Nb)
-        G *= 0.5
-        out = np.tensordot(k.ravel(), D, 1)
-        np.add.at(out, I_a, s_a[:, None] * G[pq_a, J_a])
-        Gt = G.transpose(0, 2, 1)
-        np.add.at(out.T, I_b, s_b[:, None] * Gt[pq_b, J_b])
+        np.add.at(D.transpose(0, 2, 1), (pq_b, I_b), s_b[:, None] * C.T[J_b])
+        D2 = D.reshape(n * n, Na * Nb)
+        out = (k.ravel() @ D2).reshape(Na, Nb)
+        for lo in range(0, n * n, step):
+            hi = min(n * n, lo + step)
+            G = (0.5 * g2[lo:hi] @ D2).reshape(hi - lo, Na, Nb)
+            a0, a1 = np.searchsorted(pq_a, [lo, hi])
+            np.add.at(out, I_a[a0:a1], s_a[a0:a1, None] * G[pq_a[a0:a1] - lo, J_a[a0:a1]])
+            b0, b1 = np.searchsorted(pq_b, [lo, hi])
+            np.add.at(out.T, I_b[b0:b1], s_b[b0:b1, None] * G.transpose(0, 2, 1)[pq_b[b0:b1] - lo, J_b[b0:b1]])
         return out
 
     hd = np.diag(h)
