@@ -334,7 +334,7 @@ if __name__ == "__main__":
 # --------------------------------------------------------------------------
 # p-type orbitals and full CI for any number of electrons
 # --------------------------------------------------------------------------
-def contracted_integrals(exponents, centers, nuclei, W, dipole=False):
+def contracted_integrals(exponents, centers, nuclei, W, dipole=False, two_electron=True):
     """S, h and (pq|rs) for functions that are fixed combinations (columns of W)
     of s-Gaussians. The two-electron integrals are built in slices, so the full
     primitive array is never stored."""
@@ -354,6 +354,8 @@ def contracted_integrals(exponents, centers, nuclei, W, dipole=False):
         V -= charge * 2.0 * np.pi / p * K * boys0(p * r2)
     pf, Kf, Pf = p.ravel(), K.ravel(), P.reshape(n * n, 3)
     sq = (Pf ** 2).sum(-1)
+    if not two_electron:
+        return W.T @ S @ W, W.T @ (T + V) @ W, None
     half = np.empty((n * n, nc, nc))
     step = max(1, 4_000_000 // (n * n))
     for lo in range(0, n * n, step):
@@ -367,7 +369,11 @@ def contracted_integrals(exponents, centers, nuclei, W, dipole=False):
     half = half.reshape(n, n, nc, nc)
     eri = np.einsum("ijcd,ia,jb->abcd", half, W, W, optimize=True)
     if dipole:
-        return W.T @ S @ W, W.T @ (T + V) @ W, eri, W.T @ (P[:, :, 2] * S) @ W
+        # A harmonic polynomial averaged over a round Gaussian equals its value at
+        # the centre, so the multipole operators r^l P_l(cos theta) need only P.
+        z, r2 = P[:, :, 2], (P ** 2).sum(-1)
+        Q = {1: z, 2: 1.5 * z ** 2 - 0.5 * r2, 3: 2.5 * z ** 3 - 1.5 * z * r2}[int(dipole)]
+        return W.T @ S @ W, W.T @ (T + V) @ W, eri, W.T @ (Q * S) @ W
     return W.T @ S @ W, W.T @ (T + V) @ W, eri
 
 
@@ -457,52 +463,180 @@ def atom_raw_basis(Z, p_exponents, d_exponents=(), f_exponents=(), delta_p=0.1, 
         for k, v in col.items():
             W[k, c] = v
     if dipole:
-        return contracted_integrals(exps, np.array(cen), [(Z, (0, 0, 0))], W, dipole=True)
+        return contracted_integrals(exps, np.array(cen), [(Z, (0, 0, 0))], W, dipole=dipole)
     S, h, eri = contracted_integrals(exps, np.array(cen), [(Z, (0, 0, 0))], W)
     return S, h, eri, ns
 
 
 HE_RESPONSE_P = (0.04, 0.09, 0.2, 0.45, 1.0, 2.3, 5.5)
+# (p, d, f) exponents used for the response to a field of each multipole order
+HE_RESPONSE = {1: (HE_RESPONSE_P, (0.2, 0.7, 2.5), ()),
+               2: ((0.2, 1.0, 4.0), (0.07, 0.2, 0.55, 1.5), ()),
+               3: ((0.2, 1.0, 4.0), (), (0.1, 0.28, 0.8))}
 
 
-def helium_dispersion(p_exponents=HE_RESPONSE_P):
-    """How a helium atom responds to an electric field, from all its excited states.
+def helium_multipole_states(order, p_exponents, d_exponents=(), f_exponents=()):
+    """Excited states of helium reached by a field of the given multipole order.
 
     Full CI for the two electrons gives the ground state and every excited
-    state the basis can hold. With excitation energies w_n and transition
-    dipoles z_n along one axis (oscillator strengths f_n = 2 w_n z_n^2):
-
-      polarizability      alpha = sum_n f_n / w_n^2
-      van der Waals       C6    = (3/2) sum_mn f_m f_n / (w_m w_n (w_m + w_n))
-
-    The second is the Casimir-Polder formula for two identical atoms: the
-    fluctuating dipole of one atom induces a dipole in the other.
-    Returns (alpha, C6, sum of f_n) in atomic units; the last should be 2,
-    the number of electrons."""
-    S, h, eri, Zm = atom_raw_basis(2, p_exponents, dipole=True)
+    state the basis can hold. Returns (excitation energies w_n, squared
+    transition moments |<n| sum_i r_i^l P_l(cos theta_i) |0>|^2)."""
+    S, h, eri, Q = atom_raw_basis(2, p_exponents, d_exponents, f_exponents, dipole=order)
     X = orthogonalizer(S, 1e-8)
     m = X.shape[1]
-    ho, zo, g = X.T @ h @ X, X.T @ Zm @ X, _transform(eri, X)
+    ho, qo, g = X.T @ h @ X, X.T @ Q @ X, _transform(eri, X)
     eye = np.eye(m)
-    H = (np.einsum("ik,jl->ijkl", ho, eye) + np.einsum("ik,jl->ijkl", eye, ho)
-         + g.transpose(0, 2, 1, 3)).reshape(m * m, m * m)
-    Zp = (np.einsum("ik,jl->ijkl", zo, eye) + np.einsum("ik,jl->ijkl", eye, zo)).reshape(m * m, m * m)
-    pairs = [(i, j) for i in range(m) for j in range(i, m)]
-    B = np.zeros((m * m, len(pairs)))
-    for col, (i, j) in enumerate(pairs):
-        if i == j:
-            B[i * m + j, col] = 1.0
-        else:
-            B[i * m + j, col] = B[j * m + i, col] = math.sqrt(0.5)
-    w, V = np.linalg.eigh(B.T @ H @ B)
-    z = (V.T @ (B.T @ Zp @ B) @ V[:, 0])[1:]
+    I, J = np.triu_indices(m)                  # symmetric (singlet) pair functions
+    norm = np.where(I == J, 0.5, math.sqrt(0.5))
+    a, b, c, d = I[:, None], J[:, None], I[None, :], J[None, :]
+
+    def pair_matrix(one, two=None):
+        def element(i, j, k, l):
+            out = one[i, k] * eye[j, l] + eye[i, k] * one[j, l]
+            return out if two is None else out + two[i, k, j, l]
+        return ((element(a, b, c, d) + element(b, a, c, d) + element(a, b, d, c)
+                 + element(b, a, d, c)) * norm[:, None] * norm[None, :])
+
+    w, V = np.linalg.eigh(pair_matrix(ho, g))
+    moment = (V.T @ (pair_matrix(qo) @ V[:, 0]))[1:]
     omega = w[1:] - w[0]
-    keep = np.abs(z) > 1e-10
-    z, omega = z[keep], omega[keep]
-    f = 2.0 * omega * z ** 2
-    alpha = float(np.sum(f / omega ** 2))
-    c6 = 1.5 * float(np.sum(np.outer(f / omega, f / omega) / (omega[:, None] + omega[None, :])))
-    return alpha, c6, float(np.sum(f))
+    keep = np.abs(moment) > 1e-10
+    return omega[keep], moment[keep] ** 2
+
+
+def helium_dispersion():
+    """How a helium atom responds to an electric field, and what that does to
+    a second helium atom far away.
+
+    With excitation energies w_n and squared transition moments a_n for a
+    field of multipole order l (dipole 1, quadrupole 2, octupole 3):
+
+      polarizability   alpha_l = 2 sum_n a_n / w_n
+      pair sums        S(l, l') = sum_mn a_m a'_n / (w_m + w'_n)
+      van der Waals    C6 = 6 S(1,1),  C8 = 30 S(1,2),  C10 = 56 S(1,3) + 70 S(2,2)
+
+    These are the Casimir-Polder formulas for two identical atoms: the
+    fluctuating multipoles of one atom induce multipoles in the other, and
+    the energy at distance R is -C6/R^6 - C8/R^8 - C10/R^10.
+    Returns a dict in atomic units; "f_sum" is the dipole oscillator-strength
+    sum, which should equal 2, the number of electrons."""
+    st = {l: helium_multipole_states(l, *HE_RESPONSE[l]) for l in (1, 2, 3)}
+
+    def pair_sum(l1, l2):
+        (w1, a1), (w2, a2) = st[l1], st[l2]
+        return float(np.sum(np.outer(a1, a2) / (w1[:, None] + w2[None, :])))
+
+    out = {f"alpha{l}": float(2.0 * np.sum(st[l][1] / st[l][0])) for l in (1, 2, 3)}
+    out["f_sum"] = float(2.0 * np.sum(st[1][0] * st[1][1]))
+    out["C6"] = 6.0 * pair_sum(1, 1)
+    out["C8"] = 30.0 * pair_sum(1, 2)
+    out["C10"] = 56.0 * pair_sum(1, 3) + 70.0 * pair_sum(2, 2)
+    return out
+
+
+HE_PAIR_P = (0.15, 0.5, 1.5, 4.5)
+HE_PAIR_R = (3.0, 3.5, 4.0, 4.5, 5.0, 5.6, 6.2, 7.0)
+
+
+def helium_pair_hf(R, p_exponents=HE_PAIR_P, delta=0.1):
+    """Hartree-Fock energy of two helium atoms at distance R minus that of two
+    separate atoms (hartree). Each atom is computed in the basis of the whole
+    pair, so that borrowing the neighbour's basis functions does not show up
+    as a false attraction (the counterpoise correction)."""
+    s_exps = even_tempered(*ATOM_BASIS[2])
+    exps, cen, cols = [], [], []
+    for zc in (0.0, R):
+        for a in s_exps:
+            exps.append(a); cen.append((0.0, 0.0, zc)); cols.append({len(exps) - 1: 1.0})
+        for a in p_exponents:
+            d = delta / math.sqrt(a)
+            for axis in range(3):
+                plus, minus = [0.0, 0.0, zc], [0.0, 0.0, zc]
+                plus[axis] += d; minus[axis] -= d
+                exps += [a, a]; cen += [tuple(plus), tuple(minus)]
+                cols.append({len(exps) - 2: 1.0, len(exps) - 1: -1.0})
+    W = np.zeros((len(exps), len(cols)))
+    for c, col in enumerate(cols):
+        for k, v in col.items():
+            W[k, c] = v
+    cen = np.array(cen)
+    S, h_pair, eri = contracted_integrals(exps, cen, [(2, (0, 0, 0)), (2, (0, 0, R))], W)
+    _, h_one, _ = contracted_integrals(exps, cen, [(2, (0, 0, 0))], W, two_electron=False)
+    return uhf(S, h_pair, eri, 2, 2, 4.0 / R) - 2.0 * uhf(S, h_one, eri, 1, 1)
+
+
+class HeliumPair:
+    """Model for the whole helium-helium curve: Hartree-Fock repulsion plus
+    damped dispersion.
+
+      V(R) = V_HF(R) - sum_n f_n(b R) C_n / R^n,      n = 6, 8, 10
+
+    V_HF is computed at a few distances and interpolated as exp(quadratic in R).
+    The damping f_n(x) = 1 - exp(-x) sum_{k<=n} x^k / k! (Tang and Toennies)
+    switches the dispersion off where the clouds overlap; its range parameter
+    b(R) = -d ln V_HF / dR is taken from the repulsion itself, so nothing is
+    fitted to the reference curve."""
+
+    def __init__(self, coefficients, distances=HE_PAIR_R):
+        self.R = np.array(distances, float)
+        self.hf = np.array([helium_pair_hf(R) for R in self.R])
+        self.fit = np.polyfit(self.R, np.log(self.hf), 2)
+        self.C = {6: coefficients["C6"], 8: coefficients["C8"], 10: coefficients["C10"]}
+
+    def repulsion(self, R):
+        return np.exp(np.polyval(self.fit, np.asarray(R, float)))
+
+    def __call__(self, R, terms=(6, 8, 10), extrapolate=False):
+        R = np.asarray(R, float)
+        C = {n: self.C[n] for n in terms}
+        if extrapolate:                      # Tang-Toennies guess for the next three terms
+            for n in (12, 14, 16):
+                C[n] = (C[n - 2] / C[n - 4]) ** 3 * C[n - 6]
+        x = -(2.0 * self.fit[0] * R + self.fit[1]) * R
+        v = self.repulsion(R)
+        for n, c in C.items():
+            series = sum(x ** k / math.factorial(k) for k in range(n + 1))
+            v = v - (1.0 - np.exp(-x) * series) * c / R ** n
+        return v
+
+    def well(self, **kw):
+        """(depth, position of the minimum, distance where V = 0), atomic units."""
+        grid = np.linspace(4.0, 9.0, 50001)
+        v = self(grid, **kw)
+        i = int(v.argmin())
+        j = int(np.where(v < 0)[0][0])
+        sigma = grid[j - 1] + (grid[j] - grid[j - 1]) * v[j - 1] / (v[j - 1] - v[j])
+        return float(-v[i]), float(grid[i]), float(sigma)
+
+    def second_virial(self, kT, mass):
+        """Second virial coefficient in bohr^3 per atom pair: (classical part,
+        first quantum correction). kT in hartree, mass of one atom in electron masses.
+
+          B_cl = -2 pi  int (exp(-V/kT) - 1) r^2 dr
+          B_q  = pi / (6 m kT^3)  int exp(-V/kT) V'(r)^2 r^2 dr"""
+        r = np.linspace(2.0, 80.0, 780001)
+        v = self(r)
+        boltz = np.exp(-v / kT)
+        dr = r[1] - r[0]
+        classical = -2.0 * math.pi * (np.sum((boltz - 1.0) * r * r) * dr - 2.0 ** 3 / 3.0)
+        quantum = math.pi / (6.0 * mass * kT ** 3) * np.sum(boltz * np.gradient(v, r) ** 2 * r * r) * dr
+        return float(classical), float(quantum)
+
+    def bound_state(self, mass, r_max=4000.0, step=0.02):
+        """Lowest vibrational level of the pair (hartree) and its mean
+        separation (bohr), from the radial Schroedinger equation on a grid.
+        Needs scipy; returns None without it."""
+        try:
+            from scipy.linalg import eigh_tridiagonal
+        except ImportError:
+            return None
+        mu = mass / 2.0
+        r = np.arange(2.5, r_max, step)
+        diag = 1.0 / (mu * step * step) + self(r)
+        off = -0.5 / (mu * step * step) * np.ones(len(r) - 1)
+        e, vec = eigh_tridiagonal(diag, off, select="i", select_range=(0, 0))
+        u2 = vec[:, 0] ** 2
+        return float(e[0]), float(np.sum(u2 * r) / np.sum(u2))
 
 
 def _average_hf(S, h, eri, ns, occupations):

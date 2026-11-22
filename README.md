@@ -284,17 +284,42 @@ The shielding references are calculations; nobody has measured the shielding of 
 
 ### Forces between neutral atoms: two helium atoms
 
-Two neutral atoms still attract. Each atom's electron cloud fluctuates, the momentary lopsidedness polarises the other atom, and the two induced dipoles attract with an energy `−C₆/r⁶`. The analyzer gets both the polarizability and `C₆` from one full-CI calculation of all excited states of helium:
+Two neutral atoms still attract. Each atom's electron cloud fluctuates, the momentary lopsidedness polarises the other atom, and the two induced dipoles attract with an energy `−C₆/r⁶`. Fluctuations of more complicated shape (quadrupole, octupole) add the shorter-ranged terms `−C₈/r⁸` and `−C₁₀/r¹⁰`. The analyzer gets the polarizabilities and all three coefficients from full-CI calculations of the excited states of one helium atom:
 
 | Quantity | Model | Error |
 |---|---|---|
 | He polarizability | one screening parameter | −20 %, **fails** |
-| He polarizability | full CI, sum over all excited states | −1.1 % (against the measured dielectric constant of helium gas) |
-| He–He `C₆` | London formula `¾ α² I` | −13 %, **fails** |
-| He–He `C₆` | Casimir–Polder sum over all excited states | −1.6 % |
-| He–He attraction at 2.97 Å | `−C₆/r⁶` alone | +33 %, **fails**: the clouds also begin to repel |
+| He polarizability | full CI, sum over all excited states | +0.05 % (against the measured dielectric constant of helium gas) |
+| He–He `C₆` | London formula `¾ α² I` | −11 %, **fails** |
+| He–He `C₆` | Casimir–Polder sum over all excited states | +0.11 % |
+| He–He `C₈`, `C₁₀` | Casimir–Polder sums with quadrupole and octupole | +0.30 %, +0.35 % |
 
-At its strongest the attraction corresponds to 11 K, about 0.001 eV: five thousand times weaker than the bond in H₂. That is why helium only liquefies at 4 K. The full helium–helium curve is not computed here; it needs four electrons on two centres to a precision of 10⁻⁶ hartree.
+**The whole curve.** Hartree–Fock for the pair of atoms gives the repulsion of the overlapping clouds and nothing else: it has no fluctuations, so in Hartree–Fock two helium atoms repel at every distance. The model adds the three attraction terms to that repulsion, each switched off smoothly where the clouds overlap (Tang–Toennies damping, with its range taken from the computed repulsion). Nothing is fitted to the reference curve.
+
+![The helium–helium curve and the pieces it is made of](img/helium.svg)
+
+| Quantity | Model | Error |
+|---|---|---|
+| Energy at the minimum (2.97 Å) | Hartree–Fock alone | wrong sign, **fails** |
+| Energy at the minimum | `−C₆/r⁶` alone | +35 %, **fails** |
+| Well depth (10.996 K) | Hartree–Fock + damped `C₆` | −42 %, **fails** |
+| Well depth | Hartree–Fock + damped `C₆`, `C₈`, `C₁₀` | +2.4 % (11.26 K) |
+| Well depth | same, plus `C₁₂`–`C₁₆` by extrapolation | +14 %, **fails** |
+| Position of the minimum | Hartree–Fock + damped `C₆`, `C₈`, `C₁₀` | −0.6 % |
+| Distance where the energy is zero | same | −0.7 % |
+| Energy at 3.2, 3.7, 4.8, 6.4 Å | same | +0.4 %, −0.5 %, −0.2 %, +0.06 % |
+| Energy on the wall at 1.6 and 2.1 Å | same | −1.4 %, −6.2 % |
+| Second virial coefficient of helium gas, 273.16 K | curve, classical atoms | −4.9 %, **fails** |
+| Second virial coefficient | curve + first quantum correction | −2.2 % (against a measurement) |
+| Binding energy of the He₂ molecule | lowest level in the curve | 450 neV against a measured 152 ± 13 neV, **fails** |
+
+The well is a small difference of large terms: at the minimum 9 K of repulsion against 20 K of attraction. Three things should be said plainly:
+
+- **The 2.4 % is partly a cancellation.** Adding more attraction (the next terms, estimated by extrapolation) makes the well 14 % too deep. What the model lacks is extra repulsion: correlation inside each atom changes how the clouds overlap, and Hartree–Fock does not have that. The same gap shows on the wall at 2.1 Å (−6 %).
+- **Beyond 3 Å the curve is good to half a percent**, because there the well-computed coefficients decide everything.
+- **The helium molecule is the hardest test.** It exists, and the model binds it, but its binding energy is about 1/6000 of the well depth, so a 2 % error in the well triples it. The reference calculations get it right (139 neV) only because their curve is accurate to a few parts in 10⁵.
+
+At its strongest the attraction corresponds to 11 K, about 0.001 eV: five thousand times weaker than the bond in H₂. That is why helium only liquefies at 4 K. The reference curve is itself a calculation (accurate to about 0.002 %), not a measurement; the virial coefficient and the molecule's binding energy are measured.
 
 ### Where do the deviations come from?
 

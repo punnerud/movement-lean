@@ -78,7 +78,8 @@
     "H2 triplet (b 3Sigma_u+) energies: Kolos & Wolniewicz, J. Chem. Phys. 43, 2429 (1965), Table VII; variational upper bounds from 1965, not checked against later work.",
     "Magnetic shielding of H (CODATA 2022) and 3He (Pachucki 2023) are theoretical values; no direct measurement of the neutral-atom shielding exists.",
     "Helium susceptibility: measured -2.02(7)e-6 cm^3/mol (Barter, Meisenheimer, Stevenson 1960, as quoted by Puchalski, Lesiuk, Jeziorski 2023, and tabulated in the CRC Handbook); theory -1.891035(30)e-6 (same 2023 paper). No modern precise measurement was found.",
-    "Helium dispersion: measured molar polarizability 0.5172544(10) cm^3/mol (Gaiser & Fellmuth 2018, as quoted by Puchalski et al. 2020); C6 = 1.4609778 a.u. (Yan, Babb, Dalgarno, Drake 1996, theory); well depth 10.996(4) K at 5.6080(1) bohr (Cencek et al. 2012, theory). The helium dimer itself is measured to be bound by only 151.9(13.3) neV (Zeller et al. 2016)."
+    "Helium dispersion: measured molar polarizability 0.5172544(10) cm^3/mol (Gaiser & Fellmuth 2018, as quoted by Puchalski et al. 2020); C6 = 1.4609778 a.u. (Yan, Babb, Dalgarno, Drake 1996, theory); well depth 10.996(4) K at 5.6080(1) bohr (Cencek et al. 2012, theory). The helium dimer itself is measured to be bound by only 151.9(13.3) neV (Zeller et al. 2016).",
+    "Helium-helium curve: Born-Oppenheimer energies from Przybytek, Cencek, Jeziorski, Szalewicz 2017 (PRL 119, 123401, Table I; the 12 bohr point is the 2012 value from the same table); theory, not measurement. Hartree-Fock limit from Kobus 1993 as tabulated in arXiv:2408.03679 (two decimals in microhartree). C8, C10 and the quadrupole and octupole polarizabilities from Yan, Babb, Dalgarno, Drake 1996 (theory). The zero crossing 4.9905 bohr is not a published number: it was interpolated from the 2017 tabulated points. Second virial coefficient at 273.16 K: measured 11.9257(15) cm^3/mol (Gaiser & Fellmuth 2019, dielectric-constant gas thermometry); theory 11.92811(13) (Czachorowski et al. 2020). Dimer: measured binding 151.9(13.3) neV (Zeller et al. 2016); best theory 138.9(5) neV and mean separation 47.13(8) angstrom (Przybytek et al. 2017). The well depth 10.996 K includes small relativistic and adiabatic corrections (0.005 K), far below the model error here."
   ],
   "vibration_cm1": {
     "H2": [
@@ -182,6 +183,38 @@
     "molar_polarizability_uncertainty": 1e-06,
     "C6_au": 1.4609778,
     "well_depth_K": 10.996,
-    "well_position_bohr": 5.608
+    "well_position_bohr": 5.608,
+    "C8_au": 14.11785734,
+    "C10_au": 183.6910705,
+    "quadrupole_polarizability_au": 2.445083101,
+    "octupole_polarizability_au": 10.6203286,
+    "potential_BO_K": {
+      "3.0": 3767.7341,
+      "4.0": 292.58201,
+      "5.0": -0.47114,
+      "5.6": -11.00072,
+      "6.0": -9.68079,
+      "7.0": -4.6226,
+      "9.0": -0.98971,
+      "12.0": -0.16592
+    },
+    "hartree_fock_limit_microhartree": {
+      "3.0": 13517.08,
+      "3.5": 4335.76,
+      "4.0": 1357.88,
+      "4.5": 416.54,
+      "5.0": 125.55,
+      "5.6": 29.2,
+      "6.0": 10.94,
+      "7.0": 0.92
+    },
+    "zero_crossing_bohr": 4.9905,
+    "second_virial_273.16K_cm3_per_mol": 11.9257,
+    "second_virial_uncertainty": 0.0015,
+    "second_virial_273.16K_theory": 11.92811,
+    "dimer_binding_neV": 151.9,
+    "dimer_binding_uncertainty_neV": 13.3,
+    "dimer_binding_theory_neV": 138.9,
+    "dimer_mean_separation_theory_angstrom": 47.13
   }
 }

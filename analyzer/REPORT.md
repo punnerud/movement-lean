@@ -155,10 +155,31 @@ Each formula's derivation is proved in Lean where a theorem is named; the compar
 | System | Quantity | Model | Lean theorem | Predicted | Reference | Error | Verdict | Error ÷ uncertainty |
 |---|---|---|---|---|---|---|---|---|
 | He | polarizability | one screening parameter, ζ = Z − 5/16 | `helium_variational` | 1.109858 a₀³ | 1.383762 a₀³ | -20 % | fails, as expected (a single exponential is too stiff: the cloud is easier to distort than that) | 102 386× |
-| He | polarizability | full CI, sum over all excited states | `not formalised` | 1.368956 a₀³ | 1.383762 a₀³ | -1.07 % | matches (reference: measured dielectric constant of helium gas; the missing 1 % needs d orbitals) | 5 534× |
-| He–He | van der Waals coefficient C₆ | London formula, ¾ α² I | `not formalised` | 1.269996 a.u. | 1.460978 a.u. | -13 % | fails, as expected (treats the atom as a single oscillator at the ionization energy) | 130 722× |
-| He–He | van der Waals coefficient C₆ | Casimir–Polder sum over all excited states | `not formalised` | 1.437484 a.u. | 1.460978 a.u. | -1.61 % | matches (reference: benchmark calculation, not a measurement) | 16 081× |
-| He–He at 2.97 Å | attraction (as a temperature) | −C₆/r⁶ alone | `not formalised` | 14.5926 K | 10.996 K | +33 % | fails, as expected (leading term only: at this distance the clouds also start to overlap and repel) | 327× |
+| He | polarizability | full CI, sum over all excited states | `not formalised` | 1.384405 a₀³ | 1.383762 a₀³ | +0.0465 % | matches (reference: measured dielectric constant of helium gas) | 241× |
+| He | quadrupole polarizability | full CI, sum over all excited states | `not formalised` | 2.45145 a₀⁵ | 2.445083 a₀⁵ | +0.26 % | matches (reference: benchmark calculation, not a measurement) | 2 603 980× |
+| He | octupole polarizability | full CI, sum over all excited states | `not formalised` | 10.65436 a₀⁷ | 10.62033 a₀⁷ | +0.32 % | matches (reference: benchmark calculation, not a measurement) | 320 477× |
+| He–He | van der Waals coefficient C₆ | London formula, ¾ α² I | `not formalised` | 1.298822 a.u. | 1.460978 a.u. | -11 % | fails, as expected (treats the atom as a single oscillator at the ionization energy) | 110 991× |
+| He–He | van der Waals coefficient C₆ | Casimir–Polder sum over all excited states | `not formalised` | 1.462591 a.u. | 1.460978 a.u. | +0.11 % | matches (reference: benchmark calculation, not a measurement) | 1 104× |
+| He–He | van der Waals coefficient C₈ | Casimir–Polder sum, dipole with quadrupole | `not formalised` | 14.16045 a.u. | 14.11786 a.u. | +0.30 % | matches (reference: benchmark calculation, not a measurement) | 3 016 590× |
+| He–He | van der Waals coefficient C₁₀ | Casimir–Polder sum, dipole with octupole and quadrupole with quadrupole | `not formalised` | 184.3288 a.u. | 183.6911 a.u. | +0.35 % | matches (reference: benchmark calculation, not a measurement) | 347 157× |
+| He–He at 2.12 Å | Hartree–Fock repulsion | Hartree–Fock for the pair, s and p functions | `not formalised` | 1359.879 μEh | 1357.88 μEh | +0.15 % | matches (reference: Hartree–Fock solved on a grid, free of basis-set error) | 400× |
+| He–He at 2.96 Å | Hartree–Fock repulsion | Hartree–Fock for the pair, s and p functions | `not formalised` | 29.2461 μEh | 29.2 μEh | +0.16 % | matches (reference: Hartree–Fock solved on a grid, free of basis-set error) | 9.2× |
+| He–He at 2.97 Å | interaction energy at the minimum | Hartree–Fock alone | `not formalised` | 9.109295 K | -10.996 K | -183 % | fails, as expected (wrong sign: Hartree–Fock has no fluctuations, so two helium atoms only repel) | 4 571× |
+| He–He at 2.97 Å | interaction energy at the minimum | −C₆/r⁶ alone | `not formalised` | -14.84748 K | -10.996 K | +35 % | fails, as expected (attraction only: at this distance the clouds also overlap and repel) | 876× |
+| He–He | well depth | Hartree–Fock repulsion + damped C₆ term | `not formalised` | 6.383126 K | 10.996 K | -42 % | fails, as expected (dipole fluctuations alone give little more than half the well) | 1 049× |
+| He–He | well depth | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | `not formalised` | 11.26006 K | 10.996 K | +2.40 % | matches (nothing fitted to the reference; partly a cancellation, see the next row) | 60× |
+| He–He | well depth | same, plus C₁₂ to C₁₆ estimated by extrapolation | `not formalised` | 12.53707 K | 10.996 K | +14 % | fails, as expected (more attraction makes it worse: correlation inside each atom also adds repulsion, which this model leaves out) | 350× |
+| He–He | position of the minimum | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | `not formalised` | 2.949528 Å | 2.967626 Å | -0.61 % | matches | 305× |
+| He–He | distance where the energy is zero | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | `not formalised` | 2.622947 Å | 2.640859 Å | -0.68 % | matches (reference interpolated from the tabulated benchmark points) | 68× |
+| He–He at 1.59 Å | interaction energy | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | `not formalised` | 3714.185 K | 3767.734 K | -1.42 % | matches (on the repulsive wall) | 1 421× |
+| He–He at 2.12 Å | interaction energy | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | `not formalised` | 274.4112 K | 292.582 K | -6.21 % | matches (the weakest region: the model lacks the extra repulsion that correlation inside each atom gives) | 6 210× |
+| He–He at 3.18 Å | interaction energy | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | `not formalised` | -9.722091 K | -9.68079 K | +0.43 % | matches (reference: benchmark calculation, not a measurement) | 427× |
+| He–He at 3.70 Å | interaction energy | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | `not formalised` | -4.601852 K | -4.6226 K | -0.45 % | matches (reference: benchmark calculation, not a measurement) | 449× |
+| He–He at 4.76 Å | interaction energy | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | `not formalised` | -0.9879564 K | -0.98971 K | -0.18 % | matches (reference: benchmark calculation, not a measurement) | 177× |
+| He–He at 6.35 Å | interaction energy | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | `not formalised` | -0.1660115 K | -0.16592 K | +0.0551 % | matches (here only the C₆ term matters) | 55× |
+| He gas, 273.16 K | second virial coefficient | computed curve, atoms as classical particles | `not formalised` | 11.34389 cm³/mol | 11.9257 cm³/mol | -4.88 % | fails, as expected (helium atoms are light enough that their wave nature shows even at 0 °C) | 388× |
+| He gas, 273.16 K | second virial coefficient | computed curve + first quantum correction | `not formalised` | 11.66269 cm³/mol | 11.9257 cm³/mol | -2.21 % | matches (a measurement; the remaining 2 % is the too-soft wall of the model) | 175× |
+| He₂ molecule | binding energy | lowest level in the computed curve | `not formalised` | 450.2379 neV | 151.9 neV | +196 % | fails, as expected (bound, as measured, but the binding is about 1/6000 of the well depth, so a 2 % error in the well changes it severalfold) | 22× |
 
 ## Where do the deviations come from?
 
@@ -264,19 +285,26 @@ Each line follows one quantity from the simplest model to the best one here.
 |  |  | Hylleraas wavefunction, Σ⟨r²⟩ | -6.38 % | the correlated electron cloud |
 | | | **remaining** | 1.8× the reference uncertainty | within the reference uncertainty |
 | He | polarizability | one screening parameter, ζ = Z − 5/16 | -20 % | starting point |
-|  |  | full CI, sum over all excited states | -1.07 % | the field mixes in excited states; correlation included |
-| | | **remaining** | 5 534× the reference uncertainty | model error, far above the reference uncertainty |
-| He–He | van der Waals coefficient C₆ | London formula, ¾ α² I | -13 % | starting point |
-|  |  | Casimir–Polder sum over all excited states | -1.61 % | every excited state contributes with its own frequency |
-| | | **remaining** | 16 081× the reference uncertainty | model error, far above the reference uncertainty |
+|  |  | full CI, sum over all excited states | +0.0465 % | the field mixes in excited states; correlation included |
+| | | **remaining** | 241× the reference uncertainty | model error, far above the reference uncertainty |
+| He–He | van der Waals coefficient C₆ | London formula, ¾ α² I | -11 % | starting point |
+|  |  | Casimir–Polder sum over all excited states | +0.11 % | every excited state contributes with its own frequency |
+| | | **remaining** | 1 104× the reference uncertainty | model error, far above the reference uncertainty |
+| He–He | well depth | Hartree–Fock repulsion + damped C₆ term | -42 % | starting point |
+|  |  | Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms | +2.40 % | quadrupole and octupole fluctuations (C₈, C₁₀) |
+| | | **remaining** | 60× the reference uncertainty | model error, far above the reference uncertainty |
+| He gas, 273.16 K | second virial coefficient | computed curve, atoms as classical particles | -4.88 % | starting point |
+|  |  | computed curve + first quantum correction | -2.21 % | the atoms are waves: they cannot sit still at the wall |
+| | | **remaining** | 175× the reference uncertainty | model error, far above the reference uncertainty |
 
 ## Caveats
 
 - Ionization energies of one-electron ions in the NIST database are high-precision QED calculations, not direct measurements; experiment confirms them where it can reach.
 - NIST-JANAF heat capacities are calculated from measured spectroscopic constants, not measured in a calorimeter. Agreement with the vibration-corrected rows therefore partly compares two versions of the same theory.
 - Helium's diamagnetic susceptibility is the one case here where the measurement is the likely weak link: the only gas-phase value (1960, ±3.5 %) lies 7 % from both this code and the best published calculation, which agree with each other to better than 0.001 %. The cause is not known.
+- The helium–helium curve is a model, not a full calculation for four electrons: Hartree–Fock repulsion plus damped dispersion terms computed for single atoms. Its 2 % agreement at the minimum is partly a cancellation between attraction terms left out (C₁₂ and beyond) and repulsion left out (correlation inside each atom). The reference curve is itself a calculation; only the virial coefficient and the binding energy of He₂ are measurements.
 - The NaCl ionic model takes the bond length and vibration frequency from measurement and uses free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.
 - The uncertainty column uses one representative relative uncertainty per class of data (see relative_uncertainty in reference_data.json), not a separate figure for every value.
-- The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
+- The numerical methods are non-relativistic with fixed nuclei, use small sets of s, p, d and f orbitals, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
 
-**111 comparisons: 90 inside the model's domain and matching, 21 documented limits.**
+**132 comparisons: 106 inside the model's domain and matching, 26 documented limits.**

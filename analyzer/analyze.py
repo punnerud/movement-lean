@@ -539,26 +539,116 @@ u_alpha = DISP["molar_polarizability_uncertainty"] / DISP["molar_polarizability_
 v1 = row(G_VDW, "He", "polarizability", "one screening parameter, ζ = Z − 5/16",
          "helium_variational", 9 / (2 - 5 / 16) ** 4, alpha_meas, "a₀³", "limit", 0.05, u_alpha,
          "a single exponential is too stiff: the cloud is easier to distort than that")
+PAIR = None
+N_A = 6.02214076e23
 if quantum is not None:
-    alpha_he, c6_he, f_sum = quantum.helium_dispersion()
+    disp = quantum.helium_dispersion()
+    alpha_he, c6_he, f_sum = disp["alpha1"], disp["C6"], disp["f_sum"]
     row(G_VDW, "He", "polarizability", "full CI, sum over all excited states", "not formalised",
-        alpha_he, alpha_meas, "a₀³", "ok", 0.02, u_alpha, base=v1,
+        alpha_he, alpha_meas, "a₀³", "ok", 0.005, u_alpha, base=v1,
         fix="the field mixes in excited states; correlation included",
-        note="reference: measured dielectric constant of helium gas; the missing 1 % needs d orbitals")
+        note="reference: measured dielectric constant of helium gas")
+    row(G_VDW, "He", "quadrupole polarizability", "full CI, sum over all excited states",
+        "not formalised", disp["alpha2"], DISP["quadrupole_polarizability_au"], "a₀⁵", "ok", 0.01,
+        1e-9, "reference: benchmark calculation, not a measurement")
+    row(G_VDW, "He", "octupole polarizability", "full CI, sum over all excited states",
+        "not formalised", disp["alpha3"], DISP["octupole_polarizability_au"], "a₀⁷", "ok", 0.01,
+        1e-8, "reference: benchmark calculation, not a measurement")
     i_he = ie["He"] / HARTREE_EV
     v3 = row(G_VDW, "He–He", "van der Waals coefficient C₆", "London formula, ¾ α² I",
              "not formalised", 0.75 * alpha_he ** 2 * i_he, DISP["C6_au"], "a.u.", "limit", 0.05,
              1e-6, "treats the atom as a single oscillator at the ionization energy")
     row(G_VDW, "He–He", "van der Waals coefficient C₆", "Casimir–Polder sum over all excited states",
-        "not formalised", c6_he, DISP["C6_au"], "a.u.", "ok", 0.03, 1e-6, base=v3,
+        "not formalised", c6_he, DISP["C6_au"], "a.u.", "ok", 0.005, 1e-6, base=v3,
         fix="every excited state contributes with its own frequency",
         note="reference: benchmark calculation, not a measurement")
+    row(G_VDW, "He–He", "van der Waals coefficient C₈", "Casimir–Polder sum, dipole with quadrupole",
+        "not formalised", disp["C8"], DISP["C8_au"], "a.u.", "ok", 0.01, 1e-9,
+        "reference: benchmark calculation, not a measurement")
+    row(G_VDW, "He–He", "van der Waals coefficient C₁₀",
+        "Casimir–Polder sum, dipole with octupole and quadrupole with quadrupole",
+        "not formalised", disp["C10"], DISP["C10_au"], "a.u.", "ok", 0.01, 1e-8,
+        "reference: benchmark calculation, not a measurement")
+
+    # The whole curve: Hartree-Fock repulsion plus damped dispersion.
+    PAIR = quantum.HeliumPair(disp)
     r_m = DISP["well_position_bohr"]
-    row(G_VDW, f"He–He at {r_m * BOHR_A:.2f} Å", "attraction (as a temperature)", "−C₆/r⁶ alone",
-        "not formalised", c6_he / r_m ** 6 * HARTREE_K, DISP["well_depth_K"], "K", "limit", 0.05,
-        1e-3, "leading term only: at this distance the clouds also start to overlap and repel")
-    STABILITY += [("He oscillator strengths sum to the number of electrons (within 2 %)",
-                   abs(f_sum - 2.0) < 0.04)]
+    where = lambda R: f"He–He at {R * BOHR_A:.2f} Å"
+    for R in (4.0, 5.6):
+        row(G_VDW, where(R), "Hartree–Fock repulsion", "Hartree–Fock for the pair, s and p functions",
+            "not formalised", float(quantum.helium_pair_hf(R)) * 1e6 if R not in PAIR.R else
+            float(PAIR.hf[list(PAIR.R).index(R)]) * 1e6,
+            DISP["hartree_fock_limit_microhartree"][f"{R:.1f}"], "μEh", "ok", 0.005,
+            0.005 / DISP["hartree_fock_limit_microhartree"][f"{R:.1f}"],
+            "reference: Hartree–Fock solved on a grid, free of basis-set error")
+    row(G_VDW, where(r_m), "interaction energy at the minimum", "Hartree–Fock alone",
+        "not formalised", float(PAIR.repulsion(r_m)) * HARTREE_K, -DISP["well_depth_K"], "K",
+        "limit", 0.05, 4e-4,
+        "wrong sign: Hartree–Fock has no fluctuations, so two helium atoms only repel")
+    row(G_VDW, where(r_m), "interaction energy at the minimum", "−C₆/r⁶ alone",
+        "not formalised", -c6_he / r_m ** 6 * HARTREE_K, -DISP["well_depth_K"], "K", "limit", 0.05,
+        4e-4, "attraction only: at this distance the clouds also overlap and repel")
+    depth6, _, _ = PAIR.well(terms=(6,))
+    depth, r_min, sigma = PAIR.well()
+    depth_x, _, _ = PAIR.well(extrapolate=True)
+    w6 = row(G_VDW, "He–He", "well depth", "Hartree–Fock repulsion + damped C₆ term",
+             "not formalised", depth6 * HARTREE_K, DISP["well_depth_K"], "K", "limit", 0.05, 4e-4,
+             "dipole fluctuations alone give little more than half the well")
+    row(G_VDW, "He–He", "well depth", "Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms",
+        "not formalised", depth * HARTREE_K, DISP["well_depth_K"], "K", "ok", 0.04, 4e-4, base=w6,
+        fix="quadrupole and octupole fluctuations (C₈, C₁₀)",
+        note="nothing fitted to the reference; partly a cancellation, see the next row")
+    row(G_VDW, "He–He", "well depth", "same, plus C₁₂ to C₁₆ estimated by extrapolation",
+        "not formalised", depth_x * HARTREE_K, DISP["well_depth_K"], "K", "limit", 0.05, 4e-4,
+        "more attraction makes it worse: correlation inside each atom also adds repulsion, "
+        "which this model leaves out")
+    row(G_VDW, "He–He", "position of the minimum", "Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms",
+        "not formalised", r_min * BOHR_A, r_m * BOHR_A, "Å", "ok", 0.01, 2e-5)
+    row(G_VDW, "He–He", "distance where the energy is zero",
+        "Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms", "not formalised", sigma * BOHR_A,
+        DISP["zero_crossing_bohr"] * BOHR_A, "Å", "ok", 0.01, 1e-4,
+        "reference interpolated from the tabulated benchmark points")
+    for R, tol, note in ((3.0, 0.03, "on the repulsive wall"),
+                         (4.0, 0.08, "the weakest region: the model lacks the extra repulsion "
+                                     "that correlation inside each atom gives"),
+                         (6.0, 0.02, ""), (7.0, 0.01, ""), (9.0, 0.005, ""),
+                         (12.0, 0.005, "here only the C₆ term matters")):
+        row(G_VDW, where(R), "interaction energy", "Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms",
+            "not formalised", float(PAIR(R)) * HARTREE_K, DISP["potential_BO_K"][f"{R:.1f}"], "K",
+            "ok", tol, 1e-5, note or "reference: benchmark calculation, not a measurement")
+
+    # What the curve predicts for helium gas, and for the pair as a molecule.
+    m_he = MASS["4He"] / ME_U
+    t_virial = 273.16
+    b_cl, b_q = (x * N_A * (BOHR_A * 1e-8) ** 3
+                 for x in PAIR.second_virial(t_virial / HARTREE_K, m_he))
+    u_b = DISP["second_virial_uncertainty"] / DISP["second_virial_273.16K_cm3_per_mol"]
+    b1 = row(G_VDW, "He gas, 273.16 K", "second virial coefficient",
+             "computed curve, atoms as classical particles", "not formalised", b_cl,
+             DISP["second_virial_273.16K_cm3_per_mol"], "cm³/mol", "limit", 0.03, u_b,
+             "helium atoms are light enough that their wave nature shows even at 0 °C")
+    row(G_VDW, "He gas, 273.16 K", "second virial coefficient",
+        "computed curve + first quantum correction", "not formalised", b_cl + b_q,
+        DISP["second_virial_273.16K_cm3_per_mol"], "cm³/mol", "ok", 0.03, u_b, base=b1,
+        fix="the atoms are waves: they cannot sit still at the wall",
+        note="a measurement; the remaining 2 % is the too-soft wall of the model")
+    bound = PAIR.bound_state(m_he)
+    if bound is not None:
+        e_dimer = -bound[0] * HARTREE_EV * 1e9
+        row(G_VDW, "He₂ molecule", "binding energy", "lowest level in the computed curve",
+            "not formalised", e_dimer, DISP["dimer_binding_neV"], "neV", "limit", 0.2,
+            DISP["dimer_binding_uncertainty_neV"] / DISP["dimer_binding_neV"],
+            f"bound, as measured, but the binding is about 1/6000 of the well depth, so a "
+            f"{abs(depth * HARTREE_K / DISP['well_depth_K'] - 1) * 100:.0f} % error in the well "
+            "changes it severalfold")
+        STABILITY += [("He₂ is bound in the computed curve, by less than 1/1000 of the well depth",
+                       0 < -bound[0] < depth / 1000)]
+    STABILITY += [("He oscillator strengths sum to the number of electrons (within 1 %)",
+                   abs(f_sum - 2.0) < 0.02),
+                  ("He–He Hartree–Fock repels at every distance computed (1.6 to 3.7 Å)",
+                   bool((PAIR.hf > 0).all())),
+                  ("He–He Hartree–Fock repulsion falls steadily with distance",
+                   bool((PAIR.hf[1:] < PAIR.hf[:-1]).all()))]
 
 
 def bond_figure():
@@ -621,6 +711,75 @@ def bond_figure():
     parts.append(f"<text x='{px(8.3):.1f}' y='{py(0) + 17:.1f}' fill='#dc2626'>crossing at {cross:.1f} Å</text>")
     parts.append(f"<text x='{px(3.6):.1f}' y='{py(-3.6):.1f}' fill='#2563eb'>ionic model: −e²/r</text>")
     parts.append(f"<text x='{px(0.3):.1f}' y='{py(0) - 6:.1f}' fill='#616e7c'>neutral atoms</text>")
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+def helium_figure():
+    """SVG: the helium-helium curve, and the pieces it is made of."""
+    w, hgt, top, bottom = 430, 300, 40, 44
+    parts = [f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 {hgt + 20}' "
+             "font-family='Helvetica,Arial,sans-serif' font-size='13'>",
+             f"<rect width='900' height='{hgt + 20}' fill='#ffffff'/>"]
+    xmin, xmax = 2.0, 6.5
+
+    def panel(x0, title, ymin, ymax, yticks):
+        left = x0 + 52
+
+        def px(x):
+            return left + (w - 70) * (x - xmin) / (xmax - xmin)
+
+        def py(y):
+            return top + (hgt - top - bottom) * (ymax - y) / (ymax - ymin)
+        parts.append(f"<text x='{left}' y='22' font-size='15' font-weight='bold' fill='#1f2933'>{title}</text>")
+        for t in (2, 3, 4, 5, 6):
+            parts.append(f"<line x1='{px(t):.1f}' y1='{py(ymin):.1f}' x2='{px(t):.1f}' y2='{py(ymin) + 5:.1f}' stroke='#616e7c'/>"
+                         f"<text x='{px(t):.1f}' y='{py(ymin) + 19:.1f}' text-anchor='middle' fill='#616e7c'>{t:g}</text>")
+        for t in yticks:
+            parts.append(f"<line x1='{left}' y1='{py(t):.1f}' x2='{px(xmax):.1f}' y2='{py(t):.1f}' stroke='#e4e7eb'/>"
+                         f"<text x='{left - 6}' y='{py(t) + 4:.1f}' text-anchor='end' fill='#616e7c'>{t:g}</text>")
+        parts.append(f"<line x1='{left}' y1='{py(0):.1f}' x2='{px(xmax):.1f}' y2='{py(0):.1f}' stroke='#616e7c'/>")
+        parts.append(f"<text x='{px((xmin + xmax) / 2):.1f}' y='{hgt + 12}' text-anchor='middle' fill='#616e7c'>distance between the nuclei (Å)</text>")
+        parts.append(f"<text transform='translate({x0 + 13},{py((ymin + ymax) / 2):.1f}) rotate(-90)' text-anchor='middle' fill='#616e7c'>energy (kelvin)</text>")
+
+        def path(pts, color, dash=""):
+            pts = [(x, y) for x, y in pts if ymin <= y <= ymax]
+            d = " ".join(f"{'M' if i == 0 else 'L'}{px(x):.1f},{py(y):.1f}" for i, (x, y) in enumerate(pts))
+            extra = f" stroke-dasharray='{dash}'" if dash else ""
+            parts.append(f"<path d='{d}' fill='none' stroke='{color}' stroke-width='2.2'{extra}/>")
+
+        def text(x, y, label, color):
+            parts.append(f"<text x='{px(x):.1f}' y='{py(y):.1f}' fill='{color}'>{label}</text>")
+        return px, py, path, text
+
+    if PAIR is None:
+        return "\n".join(parts + ["</svg>"])
+    rs = [xmin / BOHR_A + i * (xmax - xmin) / BOHR_A / 400 for i in range(401)]
+    xs = [R * BOHR_A for R in rs]
+    kelvin = lambda values: [float(v) * HARTREE_K for v in values]
+
+    px, py, path, text = panel(0, "He–He: the whole curve", -15, 30, [-10, 0, 10, 20, 30])
+    path(zip(xs, kelvin(PAIR.repulsion(rs))), "#dc2626", "6 4")
+    path(zip(xs, kelvin(PAIR(rs, terms=(6,)))), "#059669")
+    path(zip(xs, kelvin(PAIR(rs))), "#2563eb")
+    for key, val in DISP["potential_BO_K"].items():
+        if xmin <= float(key) * BOHR_A <= xmax and -15 <= val <= 30:
+            parts.append(f"<circle cx='{px(float(key) * BOHR_A):.1f}' cy='{py(val):.1f}' r='3.5' fill='#1f2933'/>")
+    text(3.25, 24, "Hartree–Fock: only repulsion", "#dc2626")
+    text(3.75, 12, "+ C₆ term: half the well", "#059669")
+    text(3.75, -11.5, "+ C₈ and C₁₀: the model", "#2563eb")
+    text(4.9, 4.5, "● benchmark values", "#1f2933")
+
+    px, py, path, text = panel(450, "The pieces: a small difference of large terms", -30, 45,
+                               [-30, -15, 0, 15, 30, 45])
+    path(zip(xs, kelvin(PAIR.repulsion(rs))), "#dc2626", "6 4")
+    path(zip(xs, kelvin(PAIR(rs, terms=(6,)) - PAIR.repulsion(rs))), "#059669")
+    path(zip(xs, kelvin(PAIR(rs, terms=(8, 10)) - PAIR.repulsion(rs))), "#d97706")
+    path(zip(xs, kelvin(PAIR(rs))), "#2563eb")
+    text(3.05, 36, "repulsion of the overlapping clouds", "#dc2626")
+    text(3.9, -19, "dipole attraction, −C₆/r⁶", "#059669")
+    text(3.9, -26, "C₈ and C₁₀ terms", "#d97706")
+    text(4.4, 8, "sum: the well, 11 K deep", "#2563eb")
     parts.append("</svg>")
     return "\n".join(parts)
 
@@ -697,11 +856,16 @@ CAVEATS = [
     "Helium's diamagnetic susceptibility is the one case here where the measurement is the likely "
     "weak link: the only gas-phase value (1960, ±3.5 %) lies 7 % from both this code and the best "
     "published calculation, which agree with each other to better than 0.001 %. The cause is not known.",
+    "The helium–helium curve is a model, not a full calculation for four electrons: Hartree–Fock "
+    "repulsion plus damped dispersion terms computed for single atoms. Its 2 % agreement at the "
+    "minimum is partly a cancellation between attraction terms left out (C₁₂ and beyond) and "
+    "repulsion left out (correlation inside each atom). The reference curve is itself a calculation; "
+    "only the virial coefficient and the binding energy of He₂ are measurements.",
     "The NaCl ionic model takes the bond length and vibration frequency from measurement and uses "
     "free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.",
     "The uncertainty column uses one representative relative uncertainty per class of data "
     "(see relative_uncertainty in reference_data.json), not a separate figure for every value.",
-    "The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are "
+    "The numerical methods are non-relativistic with fixed nuclei, use small sets of s, p, d and f orbitals, and are "
     "not formalised in Lean. "
     "Lean covers only the principle that makes their energies upper bounds.",
 ]
@@ -801,6 +965,7 @@ def main():
         (ROOT / "docs" / "analyzer.html").write_text(html())
         for folder in ("img", "docs/img"):
             (ROOT / folder / "bond.svg").write_text(bond_figure())
+            (ROOT / folder / "helium.svg").write_text(helium_figure())
     if "--check" not in sys.argv or bad:
         for r in ROWS:
             print(f"{verdict(r)[0]:19} {r['system'][:18]:18} {r['quantity'][:26]:26} {r['model'][:40]:40} "
