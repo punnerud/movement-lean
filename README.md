@@ -305,6 +305,8 @@ Two neutral atoms still attract. Each atom's electron cloud fluctuates, the mome
 | Well depth (10.996 K) | Hartree–Fock + damped `C₆` | −42 %, **fails** |
 | Well depth | Hartree–Fock + damped `C₆`, `C₈`, `C₁₀` | +2.4 % (11.26 K) |
 | Well depth | same, plus `C₁₂`–`C₁₆` by extrapolation | +14 %, **fails** |
+| Well depth | full-CI repulsion + damped `C₆`–`C₁₆` | −3.3 % (10.64 K) |
+| Energy at the minimum | four-electron full CI alone, s and p functions | −58 %, **fails**: bound, but the basis holds under half the attraction |
 | Position of the minimum | Hartree–Fock + damped `C₆`, `C₈`, `C₁₀` | −0.6 % |
 | Distance where the energy is zero | same | −0.7 % |
 | Energy at 3.2, 3.7, 4.8, 6.4 Å | same | +0.4 %, −0.5 %, −0.2 %, +0.06 % |
@@ -313,9 +315,10 @@ Two neutral atoms still attract. Each atom's electron cloud fluctuates, the mome
 | Second virial coefficient | curve + first quantum correction | −2.2 % (against a measurement) |
 | Binding energy of the He₂ molecule | lowest level in the curve | 450 neV against a measured 152 ± 13 neV, **fails** |
 
-The well is a small difference of large terms: at the minimum 9 K of repulsion against 20 K of attraction. Three things should be said plainly:
+The well is a small difference of large terms: at the minimum 9 K of repulsion against 20 K of attraction. Four things should be said plainly:
 
 - **The 2.4 % is partly a cancellation.** Adding more attraction (the next terms, estimated by extrapolation) makes the well 14 % too deep. What the model lacks is extra repulsion: correlation inside each atom changes how the clouds overlap, and Hartree–Fock does not have that. The same gap shows on the wall at 2.1 Å (−6 %).
+- **Putting the missing repulsion in does not make the well right.** A four-electron full CI for the pair (246 016 determinants per distance, run on a larger machine and stored) gives the repulsion with correlation included: 1.6 K more than Hartree–Fock at the minimum, 51 K more on the wall at 2.1 Å. With that repulsion and all attraction terms the well is 10.64 K, 3.3 % too shallow, and the wall is 6.5 % too hard. The error changes sign instead of closing. The cancellation is gone, and what is left is the attraction itself: a series in powers of 1/r, cut off after six terms and switched off at short range by an assumed damping function. One check with d functions in the full CI (at the minimum only) gave 1.9 K of extra repulsion instead of 1.6 K, which would make the well another 2 % shallower, so the 3.3 % is not converged either.
 - **Beyond 3 Å the curve is good to half a percent**, because there the well-computed coefficients decide everything.
 - **The helium molecule is the hardest test.** It exists, and the model binds it, but its binding energy is about 1/6000 of the well depth, so a 2 % error in the well triples it. The reference calculations get it right (139 neV) only because their curve is accurate to a few parts in 10⁵.
 

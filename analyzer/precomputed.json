@@ -57,5 +57,107 @@
       0.35
     ],
     "seconds": 1597
+  },
+  "He2_full_ci": {
+    "s_keep": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "p_exponents": [
+      0.15,
+      0.5,
+      1.8
+    ],
+    "d_exponents": [],
+    "points": [
+      {
+        "R": 3.0,
+        "orbitals": 32,
+        "full_ci": 0.01278868238811981,
+        "dispersion": -0.0019657497574159925,
+        "hartree_fock": 0.013542368132662297,
+        "seconds": 63
+      },
+      {
+        "R": 3.5,
+        "orbitals": 32,
+        "full_ci": 0.003941609056600903,
+        "dispersion": -0.0008543006943843114,
+        "hartree_fock": 0.004343512795184523,
+        "seconds": 63
+      },
+      {
+        "R": 4.0,
+        "orbitals": 32,
+        "full_ci": 0.0011339168513488929,
+        "dispersion": -0.000388449893597933,
+        "hartree_fock": 0.0013601320306655396,
+        "seconds": 61
+      },
+      {
+        "R": 4.5,
+        "orbitals": 32,
+        "full_ci": 0.0002850098516340438,
+        "dispersion": -0.00018843526313721848,
+        "hartree_fock": 0.0004171629849469838,
+        "seconds": 60
+      },
+      {
+        "R": 5.0,
+        "orbitals": 32,
+        "full_ci": 4.6513289911231936e-05,
+        "dispersion": -9.832168038544323e-05,
+        "hartree_fock": 0.00012572983183201103,
+        "seconds": 58
+      },
+      {
+        "R": 5.6,
+        "orbitals": 32,
+        "full_ci": -1.459945406789842e-05,
+        "dispersion": -4.8980242644556224e-05,
+        "hartree_fock": 2.924941644710799e-05,
+        "seconds": 58
+      },
+      {
+        "R": 6.2,
+        "orbitals": 32,
+        "full_ci": -1.8164394366415593e-05,
+        "dispersion": -2.62055341587547e-05,
+        "hartree_fock": 6.6862124956657e-06,
+        "seconds": 58
+      },
+      {
+        "R": 7.0,
+        "orbitals": 32,
+        "full_ci": -1.1315981028658939e-05,
+        "dispersion": -1.245175414226474e-05,
+        "hartree_fock": 9.127413473919432e-07,
+        "seconds": 59
+      },
+      {
+        "R": 9.0,
+        "orbitals": 32,
+        "full_ci": -2.7101135611218297e-06,
+        "dispersion": -2.7184128280780025e-06,
+        "hartree_fock": 5.7826747834610615e-09,
+        "seconds": 55
+      }
+    ],
+    "check_with_d_at_5.6_bohr": {
+      "d_exponents": [
+        0.5
+      ],
+      "orbitals": 42,
+      "full_ci_K": -8.1271,
+      "dispersion_K": -19.2236,
+      "hartree_fock_K": 9.2229,
+      "extra_repulsion_K": 1.8736,
+      "seconds": 1113,
+      "note": "values as printed, four decimals in kelvin"
+    }
   }
 }

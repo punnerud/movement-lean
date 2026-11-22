@@ -582,18 +582,30 @@ class HeliumPair:
         self.hf = np.array([helium_pair_hf(R) for R in self.R])
         self.fit = np.polyfit(self.R, np.log(self.hf), 2)
         self.C = {6: coefficients["C6"], 8: coefficients["C8"], 10: coefficients["C10"]}
+        self.full_fit = None
 
-    def repulsion(self, R):
-        return np.exp(np.polyval(self.fit, np.asarray(R, float)))
+    def add_correlation(self, distances, extra):
+        """Extra repulsion from a four-electron full CI (see he2_full_ci.py):
+        full CI interaction minus Hartree-Fock minus the dispersion that the
+        full CI basis holds, at the given distances (hartree). The corrected
+        repulsion is again interpolated as exp(quadratic in R)."""
+        distances = np.asarray(distances, float)
+        total = self.repulsion(distances) + np.asarray(extra, float)
+        self.full_fit = np.polyfit(distances, np.log(total), 2)
 
-    def __call__(self, R, terms=(6, 8, 10), extrapolate=False):
+    def repulsion(self, R, correlated=False):
+        fit = self.full_fit if correlated else self.fit
+        return np.exp(np.polyval(fit, np.asarray(R, float)))
+
+    def __call__(self, R, terms=(6, 8, 10), extrapolate=False, correlated=False):
         R = np.asarray(R, float)
         C = {n: self.C[n] for n in terms}
         if extrapolate:                      # Tang-Toennies guess for the next three terms
             for n in (12, 14, 16):
                 C[n] = (C[n - 2] / C[n - 4]) ** 3 * C[n - 6]
-        x = -(2.0 * self.fit[0] * R + self.fit[1]) * R
-        v = self.repulsion(R)
+        fit = self.full_fit if correlated else self.fit
+        x = -(2.0 * fit[0] * R + fit[1]) * R
+        v = self.repulsion(R, correlated)
         for n, c in C.items():
             series = sum(x ** k / math.factorial(k) for k in range(n + 1))
             v = v - (1.0 - np.exp(-x) * series) * c / R ** n
@@ -608,21 +620,21 @@ class HeliumPair:
         sigma = grid[j - 1] + (grid[j] - grid[j - 1]) * v[j - 1] / (v[j - 1] - v[j])
         return float(-v[i]), float(grid[i]), float(sigma)
 
-    def second_virial(self, kT, mass):
+    def second_virial(self, kT, mass, **kw):
         """Second virial coefficient in bohr^3 per atom pair: (classical part,
         first quantum correction). kT in hartree, mass of one atom in electron masses.
 
           B_cl = -2 pi  int (exp(-V/kT) - 1) r^2 dr
           B_q  = pi / (6 m kT^3)  int exp(-V/kT) V'(r)^2 r^2 dr"""
         r = np.linspace(2.0, 80.0, 780001)
-        v = self(r)
+        v = self(r, **kw)
         boltz = np.exp(-v / kT)
         dr = r[1] - r[0]
         classical = -2.0 * math.pi * (np.sum((boltz - 1.0) * r * r) * dr - 2.0 ** 3 / 3.0)
         quantum = math.pi / (6.0 * mass * kT ** 3) * np.sum(boltz * np.gradient(v, r) ** 2 * r * r) * dr
         return float(classical), float(quantum)
 
-    def bound_state(self, mass, r_max=4000.0, step=0.02):
+    def bound_state(self, mass, r_max=4000.0, step=0.02, **kw):
         """Lowest vibrational level of the pair (hartree) and its mean
         separation (bohr), from the radial Schroedinger equation on a grid.
         Needs scipy; returns None without it."""
@@ -632,7 +644,7 @@ class HeliumPair:
             return None
         mu = mass / 2.0
         r = np.arange(2.5, r_max, step)
-        diag = 1.0 / (mu * step * step) + self(r)
+        diag = 1.0 / (mu * step * step) + self(r, **kw)
         off = -0.5 / (mu * step * step) * np.ones(len(r) - 1)
         e, vec = eigh_tridiagonal(diag, off, select="i", select_range=(0, 0))
         u2 = vec[:, 0] ** 2

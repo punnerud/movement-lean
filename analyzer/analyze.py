@@ -594,14 +594,14 @@ if quantum is not None:
     w6 = row(G_VDW, "He–He", "well depth", "Hartree–Fock repulsion + damped C₆ term",
              "not formalised", depth6 * HARTREE_K, DISP["well_depth_K"], "K", "limit", 0.05, 4e-4,
              "dipole fluctuations alone give little more than half the well")
-    row(G_VDW, "He–He", "well depth", "Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms",
-        "not formalised", depth * HARTREE_K, DISP["well_depth_K"], "K", "ok", 0.04, 4e-4, base=w6,
-        fix="quadrupole and octupole fluctuations (C₈, C₁₀)",
-        note="nothing fitted to the reference; partly a cancellation, see the next row")
-    row(G_VDW, "He–He", "well depth", "same, plus C₁₂ to C₁₆ estimated by extrapolation",
-        "not formalised", depth_x * HARTREE_K, DISP["well_depth_K"], "K", "limit", 0.05, 4e-4,
-        "more attraction makes it worse: correlation inside each atom also adds repulsion, "
-        "which this model leaves out")
+    wd = row(G_VDW, "He–He", "well depth", "Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms",
+             "not formalised", depth * HARTREE_K, DISP["well_depth_K"], "K", "ok", 0.04, 4e-4, base=w6,
+             fix="quadrupole and octupole fluctuations (C₈, C₁₀)",
+             note="nothing fitted to the reference; partly a cancellation, see the next rows")
+    wx = row(G_VDW, "He–He", "well depth", "same, plus C₁₂ to C₁₆ estimated by extrapolation",
+             "not formalised", depth_x * HARTREE_K, DISP["well_depth_K"], "K", "limit", 0.05, 4e-4,
+             "more attraction makes it worse: correlation inside each atom also adds repulsion, "
+             "which this model leaves out", base=wd, fix="the next three attraction terms, estimated")
     row(G_VDW, "He–He", "position of the minimum", "Hartree–Fock repulsion + damped C₆, C₈, C₁₀ terms",
         "not formalised", r_min * BOHR_A, r_m * BOHR_A, "Å", "ok", 0.01, 2e-5)
     row(G_VDW, "He–He", "distance where the energy is zero",
@@ -643,6 +643,39 @@ if quantum is not None:
             "changes it severalfold")
         STABILITY += [("He₂ is bound in the computed curve, by less than 1/1000 of the well depth",
                        0 < -bound[0] < depth / 1000)]
+    # The repulsion Hartree-Fock misses, from a four-electron full CI (precomputed).
+    he2 = PRECOMPUTED.get("He2_full_ci")
+    if he2:
+        pts = [p for p in he2["points"] if p["R"] <= 7.0]
+        PAIR.add_correlation([p["R"] for p in pts],
+                             [p["full_ci"] - p["dispersion"] - p["hartree_fock"] for p in pts])
+        full = dict(correlated=True, extrapolate=True)
+        label = "full-CI repulsion + damped C₆ to C₁₆ terms"
+        at_min = next(p for p in pts if p["R"] == 5.6)
+        STABILITY += [("He–He: correlation adds repulsion at every distance computed",
+                       all(p["full_ci"] - p["dispersion"] - p["hartree_fock"] > 0 for p in pts)),
+                      ("He–He four-electron full CI is itself bound at 2.96 Å", at_min["full_ci"] < 0)]
+        VARIATIONAL += [("He–He at 2.96 Å: Hartree–Fock ≥ full CI interaction (same basis)",
+                         at_min["hartree_fock"], at_min["full_ci"])]
+        row(G_VDW, where(5.6), "interaction energy", "four-electron full CI alone, s and p functions",
+            "not formalised", at_min["full_ci"] * HARTREE_K, DISP["potential_BO_K"]["5.6"], "K",
+            "limit", 0.05, 2e-5,
+            f"precomputed, {at_min['orbitals']} orbitals: bound, but a basis this small holds less "
+            "than half of the attraction")
+        depth_c, r_min_c, _ = PAIR.well(**full)
+        row(G_VDW, "He–He", "well depth", label, "not formalised", depth_c * HARTREE_K,
+            DISP["well_depth_K"], "K", "ok", 0.05, 4e-4, base=wx,
+            fix="repulsion from correlation, taken from a four-electron full CI",
+            note="no cancellation left, but no closer: the damped series is now the weak part")
+        row(G_VDW, "He–He", "position of the minimum", label, "not formalised", r_min_c * BOHR_A,
+            r_m * BOHR_A, "Å", "ok", 0.01, 2e-5)
+        row(G_VDW, where(4.0), "interaction energy", label, "not formalised",
+            float(PAIR(4.0, **full)) * HARTREE_K, DISP["potential_BO_K"]["4.0"], "K", "ok", 0.08, 1e-5,
+            "now too repulsive on the wall instead of too soft")
+        b_c = sum(PAIR.second_virial(t_virial / HARTREE_K, m_he, **full)) * N_A * (BOHR_A * 1e-8) ** 3
+        row(G_VDW, "He gas, 273.16 K", "second virial coefficient",
+            "full-CI repulsion + damped C₆ to C₁₆ terms, with quantum correction", "not formalised",
+            b_c, DISP["second_virial_273.16K_cm3_per_mol"], "cm³/mol", "ok", 0.03, u_b)
     STABILITY += [("He oscillator strengths sum to the number of electrons (within 1 %)",
                    abs(f_sum - 2.0) < 0.02),
                   ("He–He Hartree–Fock repels at every distance computed (1.6 to 3.7 Å)",
@@ -856,11 +889,13 @@ CAVEATS = [
     "Helium's diamagnetic susceptibility is the one case here where the measurement is the likely "
     "weak link: the only gas-phase value (1960, ±3.5 %) lies 7 % from both this code and the best "
     "published calculation, which agree with each other to better than 0.001 %. The cause is not known.",
-    "The helium–helium curve is a model, not a full calculation for four electrons: Hartree–Fock "
-    "repulsion plus damped dispersion terms computed for single atoms. Its 2 % agreement at the "
-    "minimum is partly a cancellation between attraction terms left out (C₁₂ and beyond) and "
-    "repulsion left out (correlation inside each atom). The reference curve is itself a calculation; "
-    "only the virial coefficient and the binding energy of He₂ are measurements.",
+    "The helium–helium curve is a model: repulsion plus damped dispersion terms computed for single "
+    "atoms. With Hartree–Fock repulsion and terms up to C₁₀ the well is 2 % too deep, partly by "
+    "cancellation. With the repulsion from a four-electron full CI (precomputed; s and p functions, "
+    "its own dispersion subtracted) and terms up to C₁₆ it is 3 % too shallow, and one check with d "
+    "functions suggests 5 %. The limiting part is the truncated, damped dispersion series. The "
+    "reference curve is itself a calculation; only the virial coefficient and the binding energy of "
+    "He₂ are measurements.",
     "The NaCl ionic model takes the bond length and vibration frequency from measurement and uses "
     "free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.",
     "The uncertainty column uses one representative relative uncertainty per class of data "
