@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""Selected CI on a free list of determinants: a mesh that is fine only where
+the wavefunction needs it.
+
+The earlier solvers work on a grid: every chosen arrangement of the spin-up
+electrons paired with every chosen arrangement of the spin-down electrons.
+Here any determinant can be in the list on its own, so an important spin-up
+arrangement can have thousands of partners and an unimportant one a handful.
+
+The loop is the one a route planner uses: solve with what is known, ask which
+missing pieces the current answer pulls on hardest, add those, and solve again
+starting from the previous answer.
+
+    grow:   candidates ranked by (sum_i H_ji c_i)^2 / (E - H_jj)
+    solve:  Davidson iteration, the Hamiltonian applied on the fly
+
+The inner loops are in Rust (analyzer/cikernel, built with cargo on first use)
+and called through ctypes.
+"""
+import ctypes
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+
+KERNEL = Path(__file__).resolve().parent / "cikernel"
+_lib = None
+
+
+def kernel():
+    """The compiled kernel, built on first use (needs cargo)."""
+    global _lib
+    if _lib is None:
+        name = "libcikernel.dylib" if sys.platform == "darwin" else "libcikernel.so"
+        path = KERNEL / "target" / "release" / name
+        source = max(p.stat().st_mtime for p in [KERNEL / "Cargo.toml", KERNEL / "src" / "lib.rs"])
+        if not path.exists() or path.stat().st_mtime < source:
+            subprocess.run(["cargo", "build", "--release", "--target-dir", "target"], cwd=KERNEL, check=True)
+        lib = ctypes.CDLL(str(path))
+        ptr, u64, dbl, size = ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64), ctypes.POINTER(ctypes.c_double), ctypes.c_size_t
+        lib.ci_new.restype = ptr
+        lib.ci_new.argtypes = [size, dbl, dbl, size, u64, u64]
+        lib.ci_free.argtypes = [ptr]
+        lib.ci_diag.argtypes = [ptr, dbl]
+        lib.ci_sigma.argtypes = [ptr, dbl, dbl]
+        lib.ci_plan.restype = size
+        lib.ci_plan.argtypes = [ptr, size, dbl]
+        lib.ci_candidates.restype = size
+        lib.ci_candidates.argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, size, u64, u64, dbl, dbl,
+                                      ctypes.POINTER(size)]
+        _lib = lib
+    return _lib
+
+
+def _d(x):
+    return x.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+
+
+def _u(x):
+    return x.ctypes.data_as(ctypes.POINTER(ctypes.c_uint64))
+
+
+class Mesh:
+    """A list of determinants with the Hamiltonian acting on it."""
+
+    def __init__(self, h, eri, alpha, beta):
+        self.lib = kernel()
+        self.n = h.shape[0]
+        if self.n > 63:
+            raise ValueError("at most 63 orbitals")
+        self.h = np.ascontiguousarray(h, dtype=np.float64)
+        self.g = np.ascontiguousarray(eri, dtype=np.float64)
+        self.alpha = np.ascontiguousarray(alpha, dtype=np.uint64)
+        self.beta = np.ascontiguousarray(beta, dtype=np.uint64)
+        self.handle = self.lib.ci_new(self.n, _d(self.h), _d(self.g), len(self.alpha), _u(self.alpha), _u(self.beta))
+        self.diag = np.zeros(len(self.alpha))
+        self.lib.ci_diag(self.handle, _d(self.diag))
+        self.cached, self.work_saved = 0, 0.0
+
+    def plan(self, budget_bytes=2_000_000_000):
+        """Measure, for every determinant, what it costs to find its partners,
+        and remember the partner lists where that pays, within the memory
+        budget. Returns (determinants cached, share of the search work removed)."""
+        saved = ctypes.c_double(0.0)
+        self.cached = self.lib.ci_plan(self.handle, int(budget_bytes), ctypes.byref(saved))
+        self.work_saved = saved.value
+        return self.cached, self.work_saved
+
+    def __del__(self):
+        if getattr(self, "handle", None):
+            self.lib.ci_free(self.handle)
+            self.handle = None
+
+    def sigma(self, c):
+        out = np.empty_like(c)
+        self.lib.ci_sigma(self.handle, _d(c), _d(out))
+        return out
+
+    def candidates(self, c, energy, eps, count):
+        """Up to `count` determinants outside the list, best first, with the
+        energy each is estimated to bring, and the estimate summed over all
+        that were found."""
+        a, b, gain = np.zeros(count, np.uint64), np.zeros(count, np.uint64), np.zeros(count)
+        total, written = ctypes.c_double(0.0), ctypes.c_size_t(0)
+        found = self.lib.ci_candidates(self.handle, _d(c), energy, eps, count, _u(a), _u(b), _d(gain),
+                                       ctypes.byref(total), ctypes.byref(written))
+        k = written.value
+        return a[:k], b[:k], gain[:k], total.value, found
+
+    def solve(self, start=None, tol=1e-6, max_vectors=8, max_iter=400):
+        """Lowest energy and its vector (Davidson)."""
+        if start is None:
+            start = np.zeros(len(self.alpha))
+            start[np.argmin(self.diag)] = 1.0
+        x = start / np.linalg.norm(start)
+        vectors, sigmas = [x], [self.sigma(x)]
+        for _ in range(max_iter):
+            m = len(vectors)
+            G = np.array([[vectors[i] @ sigmas[j] for j in range(m)] for i in range(m)])
+            w, y = np.linalg.eigh(0.5 * (G + G.T))
+            energy, y = w[0], y[:, 0]
+            x = sum(c * v for c, v in zip(y, vectors))
+            residual = sum(c * s for c, s in zip(y, sigmas)) - energy * x
+            if np.linalg.norm(residual) < tol:
+                return float(energy), x
+            if m >= max_vectors:
+                x /= np.linalg.norm(x)
+                vectors, sigmas = [x], [residual + energy * x]
+            denom = energy - self.diag
+            denom[np.abs(denom) < 1e-3] = -1e-3
+            new = residual / denom
+            for _twice in range(2):
+                for v in vectors:
+                    new -= (v @ new) * v
+            new /= np.linalg.norm(new)
+            vectors.append(new); sigmas.append(self.sigma(new))
+        raise RuntimeError("mesh CI did not converge")
+
+
+def save_state(path, alpha, beta, c, history):
+    """Determinants in the order they were added, coefficients in single
+    precision. A starting point for a later run, not a result."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, alpha=alpha, beta=beta, c=c.astype(np.float32), history=np.array(history, dtype=float))
+
+
+def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, growth=2.0, eps=1e-4, tol=0.0,
+            report=None, store=None, plan_bytes=2_000_000_000):
+    """Grow a list of determinants from the reference until it holds
+    `max_determinants`, or until a step lowers the energy by less than `tol`,
+    or until nothing more is found (then the result is full CI).
+
+    Returns (energy, estimate of what is missing, history). Each history
+    entry is (determinants, energy, estimate); the energy is an upper bound,
+    the estimate (second-order perturbation theory over the candidates that
+    were looked at) is not."""
+    alpha = np.array([(1 << n_alpha) - 1], dtype=np.uint64)
+    beta = np.array([(1 << n_beta) - 1], dtype=np.uint64)
+    c, history = np.ones(1), []
+    if store and Path(store).exists():
+        with np.load(store) as f:
+            k = min(len(f["alpha"]), max_determinants)
+            if k and bin(int(f["alpha"][0])).count("1") == n_alpha and bin(int(f["beta"][0])).count("1") == n_beta:
+                alpha, beta, c = f["alpha"][:k].copy(), f["beta"][:k].copy(), f["c"][:k].astype(float)
+    while True:
+        mesh = Mesh(h, eri, alpha, beta)
+        if plan_bytes:
+            mesh.plan(plan_bytes)
+        energy, c = mesh.solve(start=c)
+        room = min(max(int(len(alpha) * (growth - 1.0)), 200), max_determinants - len(alpha))
+        rest, step_eps = 0.0, eps
+        new_a = new_b = np.zeros(0, np.uint64)
+        for _ in range(12):                                # look further out until enough candidates turn up
+            new_a, new_b, gain, rest, found = mesh.candidates(c, energy, step_eps, max(room, 1))
+            if found >= 3 * room or step_eps < 1e-9:
+                break
+            step_eps *= 0.3
+        history.append((len(alpha), energy + e_nuc, rest))
+        if store:
+            save_state(store, alpha, beta, c, history)
+        if report:
+            report(*history[-1])
+        if room <= 0 or len(new_a) == 0 or (len(history) > 1 and history[-2][1] - history[-1][1] < tol):
+            break
+        alpha = np.concatenate([alpha, new_a[:room]])
+        beta = np.concatenate([beta, new_b[:room]])
+        c = np.concatenate([c, np.zeros(min(room, len(new_a)))])
+        del mesh
+    return energy + e_nuc, rest, history

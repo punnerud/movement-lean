@@ -1,0 +1,511 @@
+//! Selected configuration interaction on a free list of determinants.
+//!
+//! A determinant is a pair of bit strings (alpha, beta): bit p set means
+//! orbital p is occupied by an electron of that spin. The Hamiltonian is
+//! never stored. `ci_sigma` applies it to a vector by walking, for every
+//! determinant, only the partners that are actually in the list; and
+//! `ci_candidates` proposes the determinants outside the list that the
+//! current wavefunction couples to most strongly.
+//!
+//! Integrals: h[p*n+q] one-electron, g[((p*n+q)*n+r)*n+s] = (pq|rs).
+
+use rayon::prelude::*;
+use std::collections::HashMap;
+
+pub struct Ci {
+    n: usize,
+    h: Vec<f64>,
+    g: Vec<f64>,
+    da: Vec<u64>,
+    db: Vec<u64>,
+    aid: Vec<u32>,
+    bid: Vec<u32>,
+    diag: Vec<f64>,
+    /// for each alpha string: (beta string, determinant index), sorted by beta
+    rows: Vec<Vec<(u64, u32)>>,
+    /// for each beta string: (alpha string, determinant index), sorted by alpha
+    cols: Vec<Vec<(u64, u32)>>,
+    /// for each alpha string: the listed alpha strings one excitation away (id, hole, particle, sign)
+    alpha_singles: Vec<Vec<(u32, u8, u8, f64)>>,
+    g_max: f64,
+    /// partners remembered for the determinants where finding them is costly: see `ci_plan`
+    cache_start: Vec<u64>,
+    cache_len: Vec<u32>,
+    cache_j: Vec<u32>,
+    cache_v: Vec<f64>,
+}
+
+const NOT_CACHED: u64 = u64::MAX;
+
+#[inline]
+fn phase(bits: u64, i: usize, a: usize) -> f64 {
+    let (lo, hi) = if i < a { (i, a) } else { (a, i) };
+    let mask = ((1u64 << hi) - 1) & !((1u64 << (lo + 1)) - 1);
+    if (bits & mask).count_ones() & 1 == 1 { -1.0 } else { 1.0 }
+}
+
+#[inline]
+fn bits_of(mut x: u64, out: &mut [usize; 64]) -> usize {
+    let mut k = 0;
+    while x != 0 {
+        out[k] = x.trailing_zeros() as usize;
+        k += 1;
+        x &= x - 1;
+    }
+    k
+}
+
+impl Ci {
+    #[inline]
+    fn g(&self, p: usize, q: usize, r: usize, s: usize) -> f64 {
+        let n = self.n;
+        unsafe { *self.g.get_unchecked(((p * n + q) * n + r) * n + s) }
+    }
+
+    fn diag_of(&self, a: u64, b: u64) -> f64 {
+        let (mut oa, mut ob) = ([0usize; 64], [0usize; 64]);
+        let (ka, kb) = (bits_of(a, &mut oa), bits_of(b, &mut ob));
+        let n = self.n;
+        let mut e = 0.0;
+        for &p in &oa[..ka] {
+            e += self.h[p * n + p];
+            for &q in &oa[..ka] {
+                e += 0.5 * (self.g(p, p, q, q) - self.g(p, q, q, p));
+            }
+            for &q in &ob[..kb] {
+                e += self.g(p, p, q, q);
+            }
+        }
+        for &p in &ob[..kb] {
+            e += self.h[p * n + p];
+            for &q in &ob[..kb] {
+                e += 0.5 * (self.g(p, p, q, q) - self.g(p, q, q, p));
+            }
+        }
+        e
+    }
+
+    /// <D| H |D with i -> a in `same`>, without the sign.
+    #[inline]
+    fn single(&self, same: u64, other: u64, i: usize, a: usize) -> f64 {
+        let mut v = self.h[i * self.n + a];
+        let mut x = same;
+        while x != 0 {
+            let j = x.trailing_zeros() as usize;
+            v += self.g(i, a, j, j) - self.g(i, j, j, a);
+            x &= x - 1;
+        }
+        let mut x = other;
+        while x != 0 {
+            let j = x.trailing_zeros() as usize;
+            v += self.g(i, a, j, j);
+            x &= x - 1;
+        }
+        v
+    }
+
+    /// Matrix element between two determinants that differ only in one spin
+    /// (strings x and x2; `other` is the common string of the other spin).
+    #[inline]
+    fn elem_same(&self, x: u64, x2: u64, other: u64) -> f64 {
+        let d = x ^ x2;
+        let (holes, parts) = (x & d, x2 & d);
+        match holes.count_ones() {
+            1 => {
+                let (i, a) = (holes.trailing_zeros() as usize, parts.trailing_zeros() as usize);
+                phase(x, i, a) * self.single(x, other, i, a)
+            }
+            2 => {
+                let (i, j) = (holes.trailing_zeros() as usize, 63 - holes.leading_zeros() as usize);
+                let (a, b) = (parts.trailing_zeros() as usize, 63 - parts.leading_zeros() as usize);
+                let p1 = phase(x, i, a);
+                let x1 = x ^ (1u64 << i) ^ (1u64 << a);
+                p1 * phase(x1, j, b) * (self.g(i, a, j, b) - self.g(i, b, j, a))
+            }
+            _ => 0.0,
+        }
+    }
+
+    #[inline]
+    fn find(list: &[(u64, u32)], key: u64) -> Option<u32> {
+        list.binary_search_by_key(&key, |e| e.0).ok().map(|k| list[k].1)
+    }
+
+    /// Visit the listed partners that differ from (x, other) in string x only.
+    /// Returns how many entries were looked at.
+    fn same_spin<F: FnMut(u32, f64)>(&self, x: u64, other: u64, partners: &[(u64, u32)], visit: &mut F) -> u64 {
+        let (mut occ, mut vir) = ([0usize; 64], [0usize; 64]);
+        let ko = bits_of(x, &mut occ);
+        let kv = bits_of(!x & ((1u64 << self.n) - 1), &mut vir);
+        let generated = ko * kv + ko * (ko.saturating_sub(1)) / 2 * kv * (kv.saturating_sub(1)) / 2;
+        if partners.len() <= 8 * generated {
+            for &(x2, j) in partners {
+                let d = (x ^ x2).count_ones();
+                if d == 2 || d == 4 {
+                    visit(j, self.elem_same(x, x2, other));
+                }
+            }
+            partners.len() as u64
+        } else {
+            for ii in 0..ko {
+                for aa in 0..kv {
+                    let x1 = x ^ (1u64 << occ[ii]) ^ (1u64 << vir[aa]);
+                    if let Some(j) = Self::find(partners, x1) {
+                        visit(j, self.elem_same(x, x1, other));
+                    }
+                    for jj in ii + 1..ko {
+                        for bb in aa + 1..kv {
+                            let x2 = x1 ^ (1u64 << occ[jj]) ^ (1u64 << vir[bb]);
+                            if let Some(j) = Self::find(partners, x2) {
+                                visit(j, self.elem_same(x, x2, other));
+                            }
+                        }
+                    }
+                }
+            }
+            4 * generated as u64 // a lookup costs several steps
+        }
+    }
+
+    /// Visit every listed partner of determinant `idx` with its matrix
+    /// element (the diagonal excluded). Returns the work done, in entries
+    /// looked at.
+    fn partners<F: FnMut(u32, f64)>(&self, idx: usize, visit: &mut F) -> u64 {
+        let (a, b) = (self.da[idx], self.db[idx]);
+        let mut work = self.same_spin(a, b, &self.cols[self.bid[idx] as usize], visit);
+        work += self.same_spin(b, a, &self.rows[self.aid[idx] as usize], visit);
+        // one electron of each spin moves
+        let (mut occ, mut vir) = ([0usize; 64], [0usize; 64]);
+        let ko = bits_of(b, &mut occ);
+        let kv = bits_of(!b & ((1u64 << self.n) - 1), &mut vir);
+        for &(aid2, i, p, sign_a) in &self.alpha_singles[self.aid[idx] as usize] {
+            let row = &self.rows[aid2 as usize];
+            let (i, p) = (i as usize, p as usize);
+            if row.len() <= 4 * ko * kv {
+                for &(b2, j) in row {
+                    let d = b ^ b2;
+                    if d.count_ones() == 2 {
+                        let (q, r) = ((b & d).trailing_zeros() as usize, (b2 & d).trailing_zeros() as usize);
+                        visit(j, sign_a * phase(b, q, r) * self.g(i, p, q, r));
+                    }
+                }
+                work += row.len() as u64;
+            } else {
+                for &q in &occ[..ko] {
+                    for &r in &vir[..kv] {
+                        if let Some(j) = Self::find(row, b ^ (1u64 << q) ^ (1u64 << r)) {
+                            visit(j, sign_a * phase(b, q, r) * self.g(i, p, q, r));
+                        }
+                    }
+                }
+                work += 4 * (ko * kv) as u64;
+            }
+        }
+        work
+    }
+
+    fn sigma_one(&self, idx: usize, c: &[f64]) -> f64 {
+        let mut acc = self.diag[idx] * c[idx];
+        let start = self.cache_start[idx];
+        if start != NOT_CACHED {
+            for k in start as usize..start as usize + self.cache_len[idx] as usize {
+                acc += self.cache_v[k] * c[self.cache_j[k] as usize];
+            }
+        } else {
+            self.partners(idx, &mut |j, v| acc += v * c[j as usize]);
+        }
+        acc
+    }
+
+    fn contains(&self, amap: &HashMap<u64, u32>, a: u64, b: u64) -> bool {
+        match amap.get(&a) {
+            Some(&id) => Self::find(&self.rows[id as usize], b).is_some(),
+            None => false,
+        }
+    }
+}
+
+fn build(n: usize, h: &[f64], g: &[f64], da: &[u64], db: &[u64]) -> (Ci, HashMap<u64, u32>) {
+    let mut amap: HashMap<u64, u32> = HashMap::new();
+    let mut bmap: HashMap<u64, u32> = HashMap::new();
+    let (mut aid, mut bid) = (Vec::with_capacity(da.len()), Vec::with_capacity(da.len()));
+    let (mut rows, mut cols): (Vec<Vec<(u64, u32)>>, Vec<Vec<(u64, u32)>>) = (Vec::new(), Vec::new());
+    let mut alpha_strings = Vec::new();
+    for k in 0..da.len() {
+        let ia = *amap.entry(da[k]).or_insert_with(|| {
+            rows.push(Vec::new());
+            alpha_strings.push(da[k]);
+            (rows.len() - 1) as u32
+        });
+        let ib = *bmap.entry(db[k]).or_insert_with(|| {
+            cols.push(Vec::new());
+            (cols.len() - 1) as u32
+        });
+        rows[ia as usize].push((db[k], k as u32));
+        cols[ib as usize].push((da[k], k as u32));
+        aid.push(ia);
+        bid.push(ib);
+    }
+    rows.par_iter_mut().for_each(|r| r.sort_unstable());
+    cols.par_iter_mut().for_each(|r| r.sort_unstable());
+    let full = (1u64 << n) - 1;
+    let alpha_singles: Vec<Vec<(u32, u8, u8, f64)>> = alpha_strings
+        .par_iter()
+        .map(|&a| {
+            let (mut occ, mut vir) = ([0usize; 64], [0usize; 64]);
+            let ko = bits_of(a, &mut occ);
+            let kv = bits_of(!a & full, &mut vir);
+            let mut out = Vec::new();
+            for &i in &occ[..ko] {
+                for &p in &vir[..kv] {
+                    if let Some(&id) = amap.get(&(a ^ (1u64 << i) ^ (1u64 << p))) {
+                        out.push((id, i as u8, p as u8, phase(a, i, p)));
+                    }
+                }
+            }
+            out
+        })
+        .collect();
+    let g_max = g.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+    let mut ci = Ci {
+        n, h: h.to_vec(), g: g.to_vec(), da: da.to_vec(), db: db.to_vec(), aid, bid,
+        diag: Vec::new(), rows, cols, alpha_singles, g_max,
+        cache_start: vec![NOT_CACHED; da.len()], cache_len: vec![0; da.len()], cache_j: Vec::new(), cache_v: Vec::new(),
+    };
+    ci.diag = (0..da.len()).into_par_iter().map(|k| ci.diag_of(ci.da[k], ci.db[k])).collect();
+    (ci, amap)
+}
+
+pub struct Handle {
+    ci: Ci,
+    amap: HashMap<u64, u32>,
+}
+
+/// # Safety
+/// Pointers must reference arrays of the stated sizes.
+#[no_mangle]
+pub unsafe extern "C" fn ci_new(n: usize, h: *const f64, g: *const f64, nd: usize, da: *const u64, db: *const u64) -> *mut Handle {
+    let h = std::slice::from_raw_parts(h, n * n);
+    let g = std::slice::from_raw_parts(g, n * n * n * n);
+    let (ci, amap) = build(n, h, g, std::slice::from_raw_parts(da, nd), std::slice::from_raw_parts(db, nd));
+    Box::into_raw(Box::new(Handle { ci, amap }))
+}
+
+/// # Safety
+/// `handle` must come from `ci_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn ci_free(handle: *mut Handle) {
+    if !handle.is_null() {
+        drop(Box::from_raw(handle));
+    }
+}
+
+/// # Safety
+/// `out` must hold one value per determinant.
+#[no_mangle]
+pub unsafe extern "C" fn ci_diag(handle: *const Handle, out: *mut f64) {
+    let ci = &(*handle).ci;
+    std::slice::from_raw_parts_mut(out, ci.da.len()).copy_from_slice(&ci.diag);
+}
+
+/// out = H c, restricted to the listed determinants.
+/// # Safety
+/// `c` and `out` must hold one value per determinant.
+#[no_mangle]
+pub unsafe extern "C" fn ci_sigma(handle: *const Handle, c: *const f64, out: *mut f64) {
+    let ci = &(*handle).ci;
+    let c = std::slice::from_raw_parts(c, ci.da.len());
+    let out = std::slice::from_raw_parts_mut(out, ci.da.len());
+    out.par_iter_mut().enumerate().for_each(|(k, o)| *o = ci.sigma_one(k, c));
+}
+
+/// Decide from measurement where remembering pays. One pass visits every
+/// determinant and records the work it took to find its partners and how
+/// many were found. The partner lists are then stored for the determinants
+/// with the most work per stored entry, until `budget_bytes` is used; later
+/// applications of H read those lists instead of searching again.
+/// Returns the number of determinants cached; `saved` gets the share of the
+/// measured work that the cache removes.
+/// # Safety
+/// `handle` must come from `ci_new`.
+#[no_mangle]
+pub unsafe extern "C" fn ci_plan(handle: *mut Handle, budget_bytes: usize, saved: *mut f64) -> usize {
+    let ci = &mut (*handle).ci;
+    let nd = ci.da.len();
+    ci.cache_start = vec![NOT_CACHED; nd];
+    ci.cache_len = vec![0; nd];
+    ci.cache_j = Vec::new();
+    ci.cache_v = Vec::new();
+    let measured: Vec<(u64, u32)> = {
+        let ci = &*ci;
+        (0..nd)
+            .into_par_iter()
+            .map(|k| {
+                let mut hits = 0u32;
+                let work = ci.partners(k, &mut |_, _| hits += 1);
+                (work, hits)
+            })
+            .collect()
+    };
+    let mut order: Vec<usize> = (0..nd).collect();
+    order.sort_unstable_by(|&x, &y| {
+        let (rx, ry) = (measured[x].0 as f64 / (measured[x].1 as f64 + 1.0), measured[y].0 as f64 / (measured[y].1 as f64 + 1.0));
+        ry.partial_cmp(&rx).unwrap()
+    });
+    let (mut bytes, mut chosen, mut work_saved, mut work_all) = (0usize, vec![false; nd], 0u64, 0u64);
+    for &(w, _) in &measured {
+        work_all += w;
+    }
+    for &k in &order {
+        let need = 12 * measured[k].1 as usize;
+        if bytes + need > budget_bytes {
+            break;
+        }
+        // reading a stored entry is work too
+        if measured[k].0 <= measured[k].1 as u64 {
+            break;
+        }
+        bytes += need;
+        chosen[k] = true;
+        work_saved += measured[k].0 - measured[k].1 as u64;
+    }
+    let lists: Vec<Option<(Vec<u32>, Vec<f64>)>> = {
+        let ci = &*ci;
+        (0..nd)
+            .into_par_iter()
+            .map(|k| {
+                if !chosen[k] {
+                    return None;
+                }
+                let (mut js, mut vs) = (Vec::with_capacity(measured[k].1 as usize), Vec::with_capacity(measured[k].1 as usize));
+                ci.partners(k, &mut |j, v| {
+                    js.push(j);
+                    vs.push(v);
+                });
+                Some((js, vs))
+            })
+            .collect()
+    };
+    let mut count = 0;
+    for (k, l) in lists.into_iter().enumerate() {
+        if let Some((js, vs)) = l {
+            ci.cache_start[k] = ci.cache_j.len() as u64;
+            ci.cache_len[k] = js.len() as u32;
+            ci.cache_j.extend(js);
+            ci.cache_v.extend(vs);
+            count += 1;
+        }
+    }
+    *saved = if work_all > 0 { work_saved as f64 / work_all as f64 } else { 0.0 };
+    count
+}
+
+/// Determinants outside the list, ranked by the energy each would bring:
+/// (sum_i H_ji c_i)^2 / (E - H_jj). Only couplings |H_ji c_i| > eps are
+/// followed. Writes at most `max_out` of the best, and the sum over all
+/// found (second-order estimate of what is missing) to `total`. Returns the
+/// number of distinct determinants found.
+/// # Safety
+/// Output arrays must hold `max_out` values.
+#[no_mangle]
+pub unsafe extern "C" fn ci_candidates(
+    handle: *const Handle, c: *const f64, energy: f64, eps: f64, max_out: usize,
+    out_a: *mut u64, out_b: *mut u64, out_gain: *mut f64, total: *mut f64, written: *mut usize,
+) -> usize {
+    let hd = &*handle;
+    let ci = &hd.ci;
+    let n = ci.n;
+    let full = (1u64 << n) - 1;
+    let c = std::slice::from_raw_parts(c, ci.da.len());
+    let mut found: Vec<(u64, u64, f64)> = (0..ci.da.len())
+        .into_par_iter()
+        .fold(Vec::new, |mut acc, k| {
+            let ck = c[k];
+            if ck.abs() * 4.0 * ci.g_max.max(1.0) < eps {
+                return acc;
+            }
+            let (a, b) = (ci.da[k], ci.db[k]);
+            let (mut oa, mut va, mut ob, mut vb) = ([0usize; 64], [0usize; 64], [0usize; 64], [0usize; 64]);
+            let (koa, kva) = (bits_of(a, &mut oa), bits_of(!a & full, &mut va));
+            let (kob, kvb) = (bits_of(b, &mut ob), bits_of(!b & full, &mut vb));
+            let mut push = |a2: u64, b2: u64, v: f64| {
+                if v.abs() > eps && !ci.contains(&hd.amap, a2, b2) {
+                    acc.push((a2, b2, v));
+                }
+            };
+            // one spin changes: singles and doubles
+            for spin in 0..2 {
+                let (x, other, occ, ko, vir, kv) =
+                    if spin == 0 { (a, b, &oa, koa, &va, kva) } else { (b, a, &ob, kob, &vb, kvb) };
+                for ii in 0..ko {
+                    for aa in 0..kv {
+                        let (i, p) = (occ[ii], vir[aa]);
+                        let x1 = x ^ (1u64 << i) ^ (1u64 << p);
+                        let s1 = phase(x, i, p);
+                        let v = s1 * ci.single(x, other, i, p) * ck;
+                        if spin == 0 { push(x1, other, v) } else { push(other, x1, v) }
+                        for jj in ii + 1..ko {
+                            for bb in aa + 1..kv {
+                                let (j, q) = (occ[jj], vir[bb]);
+                                let v = s1 * phase(x1, j, q) * (ci.g(i, p, j, q) - ci.g(i, q, j, p)) * ck;
+                                if v.abs() > eps {
+                                    let x2 = x1 ^ (1u64 << j) ^ (1u64 << q);
+                                    if spin == 0 { push(x2, other, v) } else { push(other, x2, v) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // one electron of each spin moves
+            for &i in &oa[..koa] {
+                for &p in &va[..kva] {
+                    let sa = phase(a, i, p) * ck;
+                    let a2 = a ^ (1u64 << i) ^ (1u64 << p);
+                    for &j in &ob[..kob] {
+                        for &q in &vb[..kvb] {
+                            let v = sa * ci.g(i, p, j, q);
+                            if v.abs() > eps {
+                                push(a2, b ^ (1u64 << j) ^ (1u64 << q), v * phase(b, j, q));
+                            }
+                        }
+                    }
+                }
+            }
+            acc
+        })
+        .reduce(Vec::new, |mut x, mut y| {
+            if x.len() < y.len() {
+                std::mem::swap(&mut x, &mut y);
+            }
+            x.append(&mut y);
+            x
+        });
+    found.par_sort_unstable_by(|x, y| (x.0, x.1).cmp(&(y.0, y.1)));
+    let mut merged: Vec<(u64, u64, f64)> = Vec::new();
+    for e in found {
+        match merged.last_mut() {
+            Some(last) if last.0 == e.0 && last.1 == e.1 => last.2 += e.2,
+            _ => merged.push(e),
+        }
+    }
+    let mut gains: Vec<(f64, u64, u64)> = merged
+        .par_iter()
+        .map(|&(a, b, v)| (v * v / (energy - ci.diag_of(a, b)).min(-1e-6), a, b))
+        .collect();
+    *total = gains.par_iter().map(|e| e.0).sum();
+    let count = gains.len();
+    let keep = max_out.min(count);
+    if keep > 0 && keep < count {
+        gains.select_nth_unstable_by(keep - 1, |x, y| x.0.partial_cmp(&y.0).unwrap());
+    }
+    gains.truncate(keep);
+    gains.par_sort_unstable_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
+    for (k, e) in gains.iter().enumerate() {
+        *out_gain.add(k) = e.0;
+        *out_a.add(k) = e.1;
+        *out_b.add(k) = e.2;
+    }
+    *written = keep;
+    count
+}

@@ -87,7 +87,15 @@ def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=
     A = A @ U
     m = A.shape[1]
     ha, ga = A.T @ h_eff @ A, quantum._transform(eri, A)
-    if level and level > 9:
+    if level and level < 0:
+        # free mesh of determinants (Rust kernel), at most -level of them
+        import mesh_ci
+        label = "_".join(",".join(f"{x:g}" for x in t) or "-" for t in (extra_s, extra_p, extra_d, extra_f))
+        store = Path(__file__).resolve().parent / "ci_cache" / f"Cl_mesh_{n_alpha}{n_beta}_{label}.npz"
+        e_ci, rest, _ = mesh_ci.mesh_ci(
+            ha, ga, n_alpha, n_beta, e_nuc=e_core, max_determinants=-level, store=store,
+            report=lambda nd, e, r: print(f"    {nd:9d} determinants  {e:.6f}   with estimate of the rest {e + r:.6f}", flush=True))
+    elif level and level > 9:
         # iterative selected CI: grow the set of strings up to `level` per spin
         label = "_".join(",".join(f"{x:g}" for x in t) or "-" for t in (extra_s, extra_p, extra_d, extra_f))
         store = Path(__file__).resolve().parent / "ci_cache" / f"Cl_{n_alpha}{n_beta}_{label}.npz"

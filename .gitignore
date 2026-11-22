@@ -4,3 +4,4 @@
 .venv/
 __pycache__/
 analyzer/ci_cache/
+analyzer/cikernel/target/

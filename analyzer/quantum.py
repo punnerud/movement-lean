@@ -947,14 +947,20 @@ def _prepare_strings(n, strings, kf, g2):
 
 
 def selected_ci(h, eri, strings_a, strings_b, e_nuc=0.0, tol=1e-6, max_iter=300, start=None, tables=False,
-                max_vectors=6):
+                max_vectors=6, mask=None):
     """Configuration interaction in a chosen subset of determinants: every
     determinant whose alpha string is in `strings_a` and whose beta string is
     in `strings_b`. The Hamiltonian is projected exactly onto that subset
     (excitations that pass through strings outside the selection are included
     where they lead back in), so the energy is an upper bound, and with all
     strings selected it equals full CI. `start` is an initial guess, for
-    example the solution in a smaller selection. Needs scipy."""
+    example the solution in a smaller selection. Needs scipy.
+
+    With `mask` (a boolean array, alpha strings x beta strings) only the
+    marked determinants take part; the energy is still an upper bound. The
+    return value then also holds, for every determinant of the grid, the
+    coupling <det|H|psi> - E c and the energy H_dd of that determinant, from
+    which the unmarked ones can be ranked."""
     from scipy import sparse
     n = h.shape[0]
     k = h - 0.5 * np.einsum("prrq->pq", eri)
@@ -972,23 +978,27 @@ def selected_ci(h, eri, strings_a, strings_b, e_nuc=0.0, tol=1e-6, max_iter=300,
         M = sparse.csr_matrix((b_sign_sorted * g2[pq, b_pq_sorted], b["cols"], b["indptr"]), shape=(Nb, Nb))
         return lo, hi, (M @ (a["s"][lo:hi, None] * C[a["J"][lo:hi]]).T).T
 
-    def sigma(C):
+    def sigma(C, project=True):
         out = a["H"] @ C + C @ b["H"].T
         pairs = [pq for pq in range(n * n) if cuts[pq] < cuts[pq + 1]]
         # for one orbital pair each selected string has at most one image, so rows are distinct
         for lo, hi, block in pool.map(lambda pq: one_pair(pq, C), pairs):
             out[a["I"][lo:hi]] += block
+        if mask is not None and project:
+            out *= mask
         return out
 
     import os
     from concurrent.futures import ThreadPoolExecutor
-    pool = ThreadPoolExecutor(max(1, min(8, (os.cpu_count() or 2) - 1)))   # the sparse products run in parallel
+    # the sparse products run in parallel; CI_THREADS limits how many cores are used
+    pool = ThreadPoolExecutor(int(os.environ.get("CI_THREADS", max(1, min(8, (os.cpu_count() or 2) - 1)))))
     Jm = np.einsum("iijj->ij", eri)
     diag = np.diag(a["H"])[:, None] + np.diag(b["H"])[None, :] + a["occ"] @ Jm @ b["occ"].T
     if start is None:
         start = np.zeros((Na, Nb))
-        start.flat[np.argmin(diag)] = 1.0
+        start.flat[np.argmin(np.where(mask, diag, np.inf) if mask is not None else diag)] = 1.0
     else:
+        start = start * mask if mask is not None else start
         start = start / np.linalg.norm(start)
     vectors, sigmas = [start], [sigma(start)]
     for _ in range(max_iter):
@@ -999,6 +1009,8 @@ def selected_ci(h, eri, strings_a, strings_b, e_nuc=0.0, tol=1e-6, max_iter=300,
         x = sum(c * v for c, v in zip(y, vectors))
         residual = sum(c * sg for c, sg in zip(y, sigmas)) - energy * x
         if np.linalg.norm(residual) < tol:
+            if mask is not None:
+                return float(energy) + e_nuc, x, sigma(x, project=False) - energy * x, diag + e_nuc
             return (float(energy) + e_nuc, x, a, b) if tables else (float(energy) + e_nuc, x)
         if m >= max_vectors:
             x /= np.linalg.norm(x)
@@ -1081,7 +1093,7 @@ def _excite(k, I, J):
     return None if hit is None else (hit[0], hit[1] * raw(range(k))[1])
 
 
-def _cluster_product(X, Y, strings_a, strings_b, index_a, index_b, n_alpha, n_beta, shape):
+def _cluster_product(X, Y, strings_a, strings_b, index_a, index_b, n_alpha, n_beta, shape, floor=0.0):
     """Product of two excitation operators given as coefficient arrays (as
     they act on the reference); results outside the selection are dropped."""
     out = np.zeros(shape[0] * shape[1])
@@ -1090,6 +1102,10 @@ def _cluster_product(X, Y, strings_a, strings_b, index_a, index_b, n_alpha, n_be
     if len(xa) == 0 or len(ya) == 0:
         return out.reshape(shape)
     xv, yv = X[xa, xb], Y[ya, yb]
+    # largest first, so that pairs whose product is below `floor` can be skipped wholesale
+    ox, oy = np.argsort(-np.abs(xv), kind="stable"), np.argsort(-np.abs(yv), kind="stable")
+    xa, xb, xv, ya, yb, yv = xa[ox], xb[ox], xv[ox], ya[oy], yb[oy], yv[oy]
+    ax = np.abs(xv)
 
     def table(xs, ys, strings, index, k):
         ux, px = np.unique(xs, return_inverse=True)
@@ -1105,13 +1121,17 @@ def _cluster_product(X, Y, strings_a, strings_b, index_a, index_b, n_alpha, n_be
 
     Ka, Sa, pxa, pya = table(xa, ya, strings_a, index_a, n_alpha)
     Kb, Sb, pxb, pyb = table(xb, yb, strings_b, index_b, n_beta)
-    step = max(1, 4_000_000 // len(xa))
-    for lo in range(0, len(ya), step):
-        sl = slice(lo, lo + step)
-        ka, kb = Ka[pxa[:, None], pya[None, sl]], Kb[pxb[:, None], pyb[None, sl]]
-        w = Sa[pxa[:, None], pya[None, sl]] * Sb[pxb[:, None], pyb[None, sl]] * xv[:, None] * yv[None, sl]
+    lo = 0
+    while lo < len(ya):
+        m = int(np.searchsorted(-ax, -floor / abs(yv[lo]), side="right")) if floor > 0 else len(xa)
+        if m == 0:
+            break                                  # every remaining product is below the floor
+        sl = slice(lo, lo + max(1, 4_000_000 // m))
+        ka, kb = Ka[pxa[:m, None], pya[None, sl]], Kb[pxb[:m, None], pyb[None, sl]]
         ok = (ka >= 0) & (kb >= 0)
-        out += np.bincount(ka[ok] * shape[1] + kb[ok], weights=w[ok], minlength=len(out))
+        w = (Sa[pxa[:m, None], pya[None, sl]] * Sb[pxb[:m, None], pyb[None, sl]] * xv[:m, None] * yv[None, sl])[ok]
+        out += np.bincount(ka[ok] * shape[1] + kb[ok], weights=w, minlength=len(out))
+        lo = sl.stop
     return out.reshape(shape)
 
 
@@ -1136,7 +1156,7 @@ def cluster_base(Z, strings_a, strings_b, n_alpha, n_beta, order=4, keep=1e-4, k
     T[np.abs(T) < keep] = 0.0
     term, base = T, np.zeros(Z.shape)
     for k in range(2, order + 1):
-        term = _cluster_product(term, T, *args) / k
+        term = _cluster_product(term, T, *args, floor=0.3 * keep_products) / k
         term[np.abs(term) < keep_products] = 0.0
         base += term
     return np.where(level >= 3, base, 0.0)
@@ -1297,6 +1317,50 @@ def iterative_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_strings=6000, growth=2.
             break
         (sa, sb), C = new_sets, new_C
     return energy, history
+
+
+def adaptive_ci(h, eri, strings_a, strings_b, n_alpha, n_beta, e_nuc=0.0, max_determinants=None, growth=2.0,
+                tol=0.0, report=None, mask=None):
+    """Selected CI on a mesh that is fine only where it needs to be.
+
+    The grid is every pair (alpha string, beta string) from the two lists,
+    but only marked determinants take part. Start coarse: the reference and
+    its single and double excitations. Then repeat: solve, look at every
+    unmarked determinant of the grid, and mark those the current wavefunction
+    pulls on hardest, measured by the energy each would bring,
+    |<det|H|psi>|^2 / (E - H_dd). Important strings end up paired with very
+    many partners and unimportant ones with few.
+
+    Each step returns the energy of the marked determinants (an upper bound)
+    and the sum of the estimated contributions of all unmarked ones in the
+    grid (second-order perturbation theory; an estimate, not a bound).
+    Returns (energy, estimate of the rest, mask, wavefunction, history)."""
+    level_a = np.array([sum(1 for x in t if x >= n_alpha) for t in strings_a])
+    level_b = np.array([sum(1 for x in t if x >= n_beta) for t in strings_b])
+    if mask is None:
+        mask = level_a[:, None] + level_b[None, :] <= 2
+    limit = min(max_determinants or mask.size, mask.size)
+    C, history = None, []
+    while True:
+        energy, C, pull, h_dd = selected_ci(h, eri, strings_a, strings_b, e_nuc=e_nuc, start=C, mask=mask)
+        outside = ~mask
+        gain = np.zeros(mask.shape)
+        gain[outside] = pull[outside] ** 2 / np.minimum(energy - h_dd[outside], -1e-6)
+        rest = float(gain.sum())
+        history.append((int(mask.sum()), energy, rest))
+        if report:
+            report(*history[-1])
+        room = min(int(mask.sum() * (growth - 1.0)), limit - int(mask.sum()), int(outside.sum()))
+        if room <= 0 or (len(history) > 1 and history[-2][1] - energy < tol):
+            break
+        flat = gain.ravel()
+        best = np.argpartition(flat, room - 1)[:room]          # most negative = largest lowering
+        best = best[flat[best] < 0]
+        if len(best) == 0:
+            break
+        mask = mask.copy()
+        mask.flat[best] = True
+    return energy, rest, mask, C, history
 
 
 def helium_fci_s_general():
