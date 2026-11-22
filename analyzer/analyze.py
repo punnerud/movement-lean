@@ -444,6 +444,90 @@ row(G_BOND, "NaCl", "electric dipole moment", "+ polarization of the ions (Rittn
     0.15, UNC["NaCl_dipole"], base=n4, fix="induced dipoles point against the main one",
     note="overcorrects: Cl⁻ is less polarizable when squeezed against Na⁺ than when free")
 
+# NaCl with nothing borrowed from measurement: Hartree-Fock for all 28 electrons
+# (precomputed by analyzer/nacl_hf.py). Everything below comes from the curve E(R).
+NACL_HF = PRECOMPUTED.get("NaCl_hartree_fock")
+NACL_CURVE = None
+if NACL_HF and quantum is not None:
+    np_ = quantum.np
+    pts = sorted(NACL_HF["points"], key=lambda p: p["R_angstrom"])
+    xs = np_.array([p["R_angstrom"] for p in pts])
+    fit = np_.polyfit(xs - 2.4, [p["molecule"] for p in pts], 4)
+    fine = np_.linspace(xs[0], xs[-1], 40001)
+    r_hf = float(fine[np_.polyval(fit, fine - 2.4).argmin()])
+    e_min = float(np_.polyval(fit, r_hf - 2.4))
+    k_hf = float(np_.polyval(np_.polyder(fit, 2), r_hf - 2.4))               # hartree / Å²
+    mu_kg = reduced(MASS["23Na"], MASS["35Cl"]) * U
+    w_hf = math.sqrt(k_hf * HARTREE_EV * E_CH * 1e20 / mu_kg) / (2 * math.pi * C * 100)
+    dip_fit = np_.polyfit(xs - 2.4, [abs(p["field_plus"] - p["field_minus"]) / (2 * NACL_HF["field_au"])
+                                     * 2.541746473 for p in pts], 2)
+    dip_hf = float(np_.polyval(dip_fit, r_hf - 2.4))
+    dip_at_measured = float(np_.polyval(dip_fit, r_nacl - 2.4))
+    ions = float(np_.polyval(np_.polyfit(xs - 2.4, [p["Na_plus"] + p["Cl_minus"] for p in pts], 2),
+                             r_hf - 2.4))
+    at = next(p for p in pts if "Na" in p)
+    de_ions = (ions - e_min) * HARTREE_EV
+    de_atoms = (at["Na"] + at["Cl"] - e_min) * HARTREE_EV
+    ie_na, ea_cl = (at["Na_plus"] - at["Na"]) * HARTREE_EV, (at["Cl"] - at["Cl_minus"]) * HARTREE_EV
+    NACL_CURVE = (pts, e_min, ions)
+    HFR, HFL = NACL["hartree_fock_reference"], NACL["hartree_fock_limit_hartree"]
+    hf = "Hartree–Fock, all 28 electrons, nothing measured"
+    row(G_BOND, "NaCl", "bond length", hf, "rayleigh_ritz_bound", r_hf, r_nacl, "Å", "ok", 0.02, 1e-6,
+        "precomputed; the minimum of the computed energy curve")
+    row(G_BOND, "NaCl", "vibration wavenumber ω_e", hf, "rayleigh_ritz_bound", w_hf,
+        NACL["omega_e_cm1"], "cm⁻¹", "ok", 0.04, 1e-5, "curvature of the computed energy curve")
+    row(G_BOND, "NaCl", "electric dipole moment", hf + ", at its own bond length",
+        "rayleigh_ritz_bound", dip_hf, NACL["dipole_debye"], "D", "ok", 0.08, UNC["NaCl_dipole"],
+        "from the energy change in a weak electric field")
+    row(G_BOND, "NaCl", "electric dipole moment", "Hartree–Fock, at the measured bond length",
+        "rayleigh_ritz_bound", dip_at_measured, NACL["dipole_debye"], "D", "ok", 0.06,
+        UNC["NaCl_dipole"], "shows how much of the dipole error is just the too-long bond")
+    row(G_BOND, "NaCl", "energy to separate into ions Na⁺ + Cl⁻", hf, "rayleigh_ritz_bound",
+        de_ions, de_nacl + gap_nacl, "eV", "ok", 0.05, UNC["NaCl_De"],
+        "reference: measured binding energy + ionization energy − electron affinity")
+    h1 = row(G_BOND, "NaCl", "binding energy D_e", hf, "rayleigh_ritz_bound", de_atoms, de_nacl,
+             "eV", "limit", 0.05, UNC["NaCl_De"],
+             "to neutral atoms: fails because Hartree–Fock gets the electron affinity of Cl wrong")
+    CL_CI = PRECOMPUTED.get("Cl_affinity")
+    if CL_CI:
+        ea_ci = (CL_CI["E_Cl_hartree"] - CL_CI["E_Cl_minus_hartree"]) * HARTREE_EV
+        h1 = row(G_BOND, "NaCl", "binding energy D_e", "Hartree–Fock + correlation in Cl and Cl⁻",
+                 "rayleigh_ritz_bound", de_ions - ie_na + ea_ci, de_nacl, "eV", "limit", 0.05,
+                 UNC["NaCl_De"], base=h1, fix="the outer electrons of Cl and Cl⁻ by full CI",
+                 note="still nothing measured; closes over half the gap, limited by the electron affinity below")
+    row(G_BOND, "NaCl", "binding energy D_e", "Hartree–Fock separation into ions + measured cost of the ions",
+        "rayleigh_ritz_bound, coulomb_crossing", de_ions - gap_nacl, de_nacl, "eV", "ok", 0.07,
+        UNC["NaCl_De"], base=h1, fix="measured ionization energy and electron affinity replace the Hartree–Fock ones",
+        note="borrows two measured atomic numbers; nothing about the molecule is borrowed")
+    row(G_BOND, "Na", "first ionization energy", "Hartree–Fock, E(Na⁺) − E(Na)", "rayleigh_ritz_bound",
+        ie_na, NACL["Na_ionization_eV"], "eV", "ok", 0.05, UNC["ionization_neutral"],
+        "the missing 4 % is electron correlation")
+    row(G_BOND, "Cl", "electron affinity", "Hartree–Fock, E(Cl) − E(Cl⁻)", "rayleigh_ritz_bound",
+        ea_cl, NACL["Cl_electron_affinity_eV"], "eV", "limit", 0.05, UNC["electron_affinity"],
+        "the extra electron is held largely by correlation with the other seven outer electrons")
+    if CL_CI:
+        row(G_BOND, "Cl", "electron affinity",
+            f"outer electrons by full CI, inner ten frozen ({CL_CI['active_orbitals']} orbitals)",
+            "rayleigh_ritz_bound", ea_ci, NACL["Cl_electron_affinity_eV"], "eV", "limit", 0.05,
+            UNC["electron_affinity"],
+            "precomputed; over half the gap closed, the rest needs more correlating functions "
+            "(a second d shell, f functions) than fit in memory")
+        VARIATIONAL += [("Cl⁻: Hartree–Fock ≥ valence full CI", CL_CI["E_Cl_minus_hartree_fock"],
+                         CL_CI["E_Cl_minus_hartree"])]
+    # the same numbers against other people's Hartree-Fock: tests the code, not the physics
+    row(G_VAL, "NaCl", "bond length (Hartree–Fock)", "this code vs. large-basis Hartree–Fock",
+        "rayleigh_ritz_bound", r_hf, HFR["r_e_angstrom"], "Å", "ok", 0.005, 1e-4)
+    row(G_VAL, "NaCl", "vibration wavenumber (Hartree–Fock)", "this code vs. large-basis Hartree–Fock",
+        "rayleigh_ritz_bound", w_hf, HFR["omega_e_cm1"], "cm⁻¹", "ok", 0.02, 3e-3)
+    row(G_VAL, "NaCl", "dipole moment (Hartree–Fock)", "this code vs. large-basis Hartree–Fock",
+        "rayleigh_ritz_bound", dip_hf, HFR["dipole_debye"], "D", "ok", 0.03, 1e-4)
+    row(G_VAL, "NaCl", "total energy (Hartree–Fock)", "this code vs. large-basis Hartree–Fock",
+        "rayleigh_ritz_bound", e_min, HFR["energy_hartree"], "Eh", "ok", 1e-4, 1e-9)
+    for key, label in (("Na_plus", "Na⁺"), ("Cl_minus", "Cl⁻")):
+        VARIATIONAL += [(f"{label}: this basis ≥ Hartree–Fock limit", min(p[key] for p in pts), HFL[key])]
+    VARIATIONAL += [("NaCl: this basis ≥ large-basis Hartree–Fock energy", e_min, HFR["energy_hartree"])]
+    STABILITY += [("NaCl Hartree–Fock is bound against separation into ions", de_ions > 0)]
+
 if quantum is not None:
     e_atoms = 2 * e_h
     grid = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 8.0, 10.0]
@@ -540,6 +624,7 @@ v1 = row(G_VDW, "He", "polarizability", "one screening parameter, ζ = Z − 5/1
          "helium_variational", 9 / (2 - 5 / 16) ** 4, alpha_meas, "a₀³", "limit", 0.05, u_alpha,
          "a single exponential is too stiff: the cloud is easier to distort than that")
 PAIR = None
+HAVE_BEST = False
 N_A = 6.02214076e23
 if quantum is not None:
     disp = quantum.helium_dispersion()
@@ -663,7 +748,7 @@ if quantum is not None:
             f"precomputed, {at_min['orbitals']} orbitals: bound, but a basis this small holds less "
             "than half of the attraction")
         depth_c, r_min_c, _ = PAIR.well(**full)
-        row(G_VDW, "He–He", "well depth", label, "not formalised", depth_c * HARTREE_K,
+        wc = row(G_VDW, "He–He", "well depth", label, "not formalised", depth_c * HARTREE_K,
             DISP["well_depth_K"], "K", "ok", 0.05, 4e-4, base=wx,
             fix="repulsion from correlation, taken from a four-electron full CI",
             note="no cancellation left, but no closer: the damped series is now the weak part")
@@ -676,6 +761,51 @@ if quantum is not None:
         row(G_VDW, "He gas, 273.16 K", "second virial coefficient",
             "full-CI repulsion + damped C₆ to C₁₆ terms, with quantum correction", "not formalised",
             b_c, DISP["second_virial_273.16K_cm3_per_mol"], "cm³/mol", "ok", 0.03, u_b)
+    # Best curve: repulsion from the larger full CI, attraction computed directly.
+    he2_d, he2_disp = PRECOMPUTED.get("He2_full_ci_d"), PRECOMPUTED.get("He2_dispersion")
+    if he2_d and he2_disp:
+        series_min = float(PAIR.dispersion(5.6, extrapolate=True)) * HARTREE_K
+        direct_min = next(p for p in he2_disp["points"] if p["R"] == 5.6)["dispersion"] * HARTREE_K
+        d1 = row(G_VDW, where(5.6), "attraction (dispersion energy)", "damped series, C₆ to C₁₆",
+                 "not formalised", series_min, DISP["dispersion_at_5.6_bohr_K"], "K", "limit", 0.02,
+                 1e-4, "the assumed damping switches the attraction off too early")
+        row(G_VDW, where(5.6), "attraction (dispersion energy)",
+            "computed directly with overlapping clouds, large basis", "not formalised", direct_min,
+            DISP["dispersion_at_5.6_bohr_K"], "K", "ok", 0.01, 1e-4, base=d1,
+            fix="no series and no damping function: every excited state of both atoms, full Coulomb coupling",
+            note=f"precomputed, {he2_disp['points'][0]['functions']} functions; reference quoted "
+                 "from a secondary source")
+        pts = sorted((p for p in he2_d["points"] if p["R"] <= 7.0), key=lambda p: p["R"])
+        PAIR.add_correlation([p["R"] for p in pts],
+                             [p["full_ci"] - p["dispersion"] - p["hartree_fock"] for p in pts])
+        PAIR.add_direct_dispersion([p["R"] for p in he2_disp["points"]],
+                                   [p["dispersion"] for p in he2_disp["points"]])
+        HAVE_BEST = True
+        best = "full-CI repulsion + directly computed attraction"
+        depth_b, r_min_b, sigma_b = PAIR.well(best=True)
+        row(G_VDW, "He–He", "well depth", best, "not formalised", depth_b * HARTREE_K,
+            DISP["well_depth_K"], "K", "ok", 0.03, 4e-4, base=wc,
+            fix="attraction computed directly; repulsion from a larger full CI (with d functions)",
+            note="the repulsion is still about 0.3 K short at the minimum: its basis is the limit")
+        row(G_VDW, "He–He", "position of the minimum", best, "not formalised", r_min_b * BOHR_A,
+            r_m * BOHR_A, "Å", "ok", 0.005, 2e-5)
+        row(G_VDW, "He–He", "distance where the energy is zero", best, "not formalised",
+            sigma_b * BOHR_A, DISP["zero_crossing_bohr"] * BOHR_A, "Å", "ok", 0.005, 1e-4,
+            "reference interpolated from the tabulated benchmark points")
+        for R, tol in ((3.0, 0.03), (4.0, 0.02), (6.0, 0.02), (7.0, 0.02), (9.0, 0.01), (12.0, 0.005)):
+            row(G_VDW, where(R), "interaction energy", best, "not formalised",
+                float(PAIR.best(R)) * HARTREE_K, DISP["potential_BO_K"][f"{R:.1f}"], "K", "ok", tol,
+                1e-5, "reference: benchmark calculation, not a measurement")
+        b_b = sum(PAIR.second_virial(t_virial / HARTREE_K, m_he, best=True)) * N_A * (BOHR_A * 1e-8) ** 3
+        row(G_VDW, "He gas, 273.16 K", "second virial coefficient", best + ", with quantum correction",
+            "not formalised", b_b, DISP["second_virial_273.16K_cm3_per_mol"], "cm³/mol", "ok", 0.01,
+            u_b, "a measurement")
+        bound_b = PAIR.bound_state(m_he, best=True)
+        if bound_b is not None:
+            row(G_VDW, "He₂ molecule", "binding energy", "lowest level in the best curve",
+                "not formalised", -bound_b[0] * HARTREE_EV * 1e9, DISP["dimer_binding_neV"], "neV",
+                "limit", 0.2, DISP["dimer_binding_uncertainty_neV"] / DISP["dimer_binding_neV"],
+                "still far off: this number magnifies the remaining error in the well many times")
     STABILITY += [("He oscillator strengths sum to the number of electrons (within 1 %)",
                    abs(f_sum - 2.0) < 0.02),
                   ("He–He Hartree–Fock repels at every distance computed (1.6 to 3.7 Å)",
@@ -748,6 +878,40 @@ def bond_figure():
     return "\n".join(parts)
 
 
+def attach_theorems():
+    """Name the Lean theorem behind each row that rests on a proved principle
+    (Movement/Forces.lean). The numbers themselves are computed, not proved."""
+    rules = [
+        (lambda r: "London" in r["model"], "london_formula"),
+        (lambda r: "Casimir–Polder" in r["model"], "casimir_polder_partial_fraction, casimir_polder_value"),
+        (lambda r: "polarizability" in r["quantity"] and "full CI" in r["model"], "two_level_lowering"),
+        (lambda r: "−C₆/r⁶ alone" in r["model"], "dispersion_nonpos"),
+        (lambda r: "damped" in r["model"], "tang_toennies_bounds, dispersion_nonpos"),
+        (lambda r: "directly" in r["model"] or "best curve" in r["model"],
+         "dispersion_nonpos, two_level_lowering"),
+        (lambda r: "four-electron full CI" in r["model"], "rayleigh_ritz_bound"),
+        (lambda r: r["system"] == "NaCl" and r["model"].startswith("two point charges")
+         and "binding" in r["quantity"], "coulomb_crossing"),
+        (lambda r: r["system"] == "NaCl" and "short-range repulsion" in r["model"], "born_mayer_well"),
+        (lambda r: r["system"] == "NaCl" and "polarization" in r["model"] and "binding" in r["quantity"],
+         "born_mayer_well, rittner_induced_dipoles"),
+        (lambda r: r["system"] == "NaCl" and "Rittner" in r["model"], "rittner_induced_dipoles"),
+        (lambda r: "quantised vibration" in r["model"], "heat_capacity_ratio, einstein_function_le_one"),
+    ]
+    for r in ROWS:
+        if "equal spins" in r["system"] and "antisymmetric" not in r["lean"]:
+            r["lean"] = (r["lean"] + ", " if r["lean"] != "not formalised" else "") + "antisymmetric_vanishes_at_contact"
+        if r["lean"] != "not formalised":
+            continue
+        for test, name in rules:
+            if test(r):
+                r["lean"] = name
+                break
+
+
+attach_theorems()
+
+
 def helium_figure():
     """SVG: the helium-helium curve, and the pieces it is made of."""
     w, hgt, top, bottom = 430, 300, 40, 44
@@ -794,13 +958,13 @@ def helium_figure():
     px, py, path, text = panel(0, "He–He: the whole curve", -15, 30, [-10, 0, 10, 20, 30])
     path(zip(xs, kelvin(PAIR.repulsion(rs))), "#dc2626", "6 4")
     path(zip(xs, kelvin(PAIR(rs, terms=(6,)))), "#059669")
-    path(zip(xs, kelvin(PAIR(rs))), "#2563eb")
+    path(zip(xs, kelvin(PAIR.best(rs) if HAVE_BEST else PAIR(rs))), "#2563eb")
     for key, val in DISP["potential_BO_K"].items():
         if xmin <= float(key) * BOHR_A <= xmax and -15 <= val <= 30:
             parts.append(f"<circle cx='{px(float(key) * BOHR_A):.1f}' cy='{py(val):.1f}' r='3.5' fill='#1f2933'/>")
     text(3.25, 24, "Hartree–Fock: only repulsion", "#dc2626")
     text(3.75, 12, "+ C₆ term: half the well", "#059669")
-    text(3.75, -11.5, "+ C₈ and C₁₀: the model", "#2563eb")
+    text(3.75, -11.5, "best curve: full CI + direct attraction" if HAVE_BEST else "+ C₈ and C₁₀: the model", "#2563eb")
     text(4.9, 4.5, "● benchmark values", "#1f2933")
 
     px, py, path, text = panel(450, "The pieces: a small difference of large terms", -30, 45,
@@ -889,13 +1053,16 @@ CAVEATS = [
     "Helium's diamagnetic susceptibility is the one case here where the measurement is the likely "
     "weak link: the only gas-phase value (1960, ±3.5 %) lies 7 % from both this code and the best "
     "published calculation, which agree with each other to better than 0.001 %. The cause is not known.",
-    "The helium–helium curve is a model: repulsion plus damped dispersion terms computed for single "
-    "atoms. With Hartree–Fock repulsion and terms up to C₁₀ the well is 2 % too deep, partly by "
-    "cancellation. With the repulsion from a four-electron full CI (precomputed; s and p functions, "
-    "its own dispersion subtracted) and terms up to C₁₆ it is 3 % too shallow, and one check with d "
-    "functions suggests 5 %. The limiting part is the truncated, damped dispersion series. The "
-    "reference curve is itself a calculation; only the virial coefficient and the binding energy of "
-    "He₂ are measurements.",
+    "The helium–helium curve comes in three versions. Hartree–Fock repulsion plus a damped series to "
+    "C₁₀: 2 % too deep, partly by cancellation. Full-CI repulsion plus the damped series to C₁₆: 3 % "
+    "too shallow. Full-CI repulsion (with d functions) plus directly computed dispersion: 1.4 % too "
+    "deep, with the repulsion about 0.3 K short at the minimum. The full CI and the direct dispersion "
+    "are precomputed on a larger machine. The reference curve is itself a calculation; only the virial "
+    "coefficient and the binding energy of He₂ are measurements. Component references at the minimum "
+    "(dispersion 22.395 K) are quoted from a secondary source.",
+    "NaCl from first principles is unrestricted Hartree–Fock in a basis about 26 mEh above the "
+    "large-basis energy, most of it in the inner shells. The chlorine electron affinity with "
+    "correlation freezes the inner ten electrons and uses 15 orbitals; it is not converged.",
     "The NaCl ionic model takes the bond length and vibration frequency from measurement and uses "
     "free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.",
     "The uncertainty column uses one representative relative uncertainty per class of data "

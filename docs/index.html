@@ -131,6 +131,8 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 <tr><td class="thm">orbit_speed</td><td>force balance alone: <code>v² = K/(mr)</code>, every radius allowed</td></tr>
 <tr><td class="thm">bohr_orbit</td><td>with quantisation: <code>v = K/nħ</code>, <code>r = (nħ)²/mK</code>, <code>E = −mK²/2(nħ)²</code></td></tr>
 <tr><td class="thm">bohr_speed_fraction</td><td><code>v = c·α/n</code> with <code>α ≈ 1/137</code>: about 0.7 % of light speed in the ground state</td></tr>
+<tr><td class="thm">ellipse_energy_and_momentum</td><td>ellipses instead of circles: the energy depends only on the length of the ellipse, <code>E = −K/(rp + ra)</code></td></tr>
+<tr><td class="thm">sommerfeld_orbit</td><td>quantise both the angular momentum (<code>k</code>) and the in-and-out motion (<code>nᵣ</code>): same energies as Bohr with <code>n = nᵣ + k</code>, shape <code>1 − ecc² = (k/n)²</code>, so each level holds one circle and <code>n − 1</code> ellipses</td></tr>
 </table>
 <p>The Bohr model is a stepping stone. It gets hydrogen's energies right, but real electrons are standing waves (section 5), not dots on orbits.</p>
 
@@ -185,7 +187,7 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 <p>A massive particle and light trapped in a waveguide therefore obey the same equations. Light slowed in glass is a different effect, caused by interference with waves re-radiated by the material's electrons.</p>
 
 <h2>10. Testing the formulas on real atoms and molecules</h2>
-<p>Lean proves that a formula follows from a model. It cannot say whether the model matches nature. The analyzer does that part: it evaluates the proved formulas, and numerical quantum mechanics for several electrons, and compares the results with reference data. <a href="analyzer.html"><strong>Open the full table of 137 comparisons →</strong></a></p>
+<p>Lean proves that a formula follows from a model. It cannot say whether the model matches nature. The analyzer does that part: it evaluates the proved formulas, and numerical quantum mechanics for several electrons, and compares the results with reference data. <a href="analyzer.html"><strong>Open the full table of 165 comparisons →</strong></a></p>
 <h3>Simple models</h3>
 <table>
 <tr><th>What</th><th>Typical error</th><th></th></tr>
@@ -222,6 +224,7 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 <h3>Magnetism: the electron cloud as a tiny superconductor</h3>
 <p>A magnetic field sets the whole electron cloud circulating, and the induced current opposes the field without resistance, as in a superconductor. An atom is about a hundred times thinner than the layer a superconductor needs to expel a field, so only a fraction of order (v/c)² is shielded: 17.7 millionths at the nucleus of hydrogen (formula α²/3, 0.08 % from the reference) and 60 millionths in helium (0.05 % with the Hylleraas wavefunction).</p>
 <p>Helium's diamagnetic susceptibility, computed from the same wavefunction, agrees with the best published calculation to better than 0.001 % but lies 6.4 % from the only gas-phase measurement, made in 1960. Here the measurement is the likely weak link.</p>
+<p><strong>NaCl with nothing borrowed.</strong> The ionic model above takes the bond length and vibration frequency from measurement. A Hartree–Fock calculation for all 28 electrons needs only the nuclear charges. It gives the bond length to 1.6 %, the vibration frequency to 3.2 %, the dipole moment to 7 % and the energy to pull the molecule apart into ions to 4.2 %. The binding energy to neutral atoms fails (−29 %) for one identifiable reason: Hartree–Fock cannot hold the extra electron on chlorine (2.44 eV against a measured 3.61 eV). Treating chlorine's outer electrons by full CI raises that to 3.16 eV and the binding energy to −12 %. What remains needs more correlating functions than fit in memory.</p>
 <h3>Forces between neutral atoms</h3>
 <p>Two neutral helium atoms still attract. Each electron cloud fluctuates, the momentary lopsidedness polarises the other atom, and the two induced dipoles pull on each other with an energy −C₆/r⁶. Fluctuations of more complicated shape add the shorter-ranged terms −C₈/r⁸ and −C₁₀/r¹⁰. From calculations of the excited states of one helium atom the analyzer gets how easily the atom is distorted (0.05 % from the measured value) and the three strengths (0.1 % to 0.4 % from the benchmarks).</p>
 <p><strong>The whole curve.</strong> Hartree–Fock for the pair gives only the repulsion of the overlapping clouds: it has no fluctuations, so in Hartree–Fock two helium atoms repel at every distance. Adding the three attraction terms, each switched off smoothly where the clouds overlap, gives the full curve. Nothing is fitted to the reference.</p>
@@ -231,13 +234,16 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 <tr><td>Well depth (10.996 K)</td><td>Hartree–Fock + C₆ term</td><td>−42 %, fails</td></tr>
 <tr><td>Well depth</td><td>Hartree–Fock + C₆, C₈, C₁₀ terms</td><td>+2.4 %</td></tr>
 <tr><td>Well depth</td><td>full-CI repulsion + C₆ to C₁₆ terms</td><td>−3.3 %</td></tr>
+<tr><td>Well depth, best curve</td><td>full-CI repulsion + directly computed attraction</td><td>+1.4 %</td></tr>
+<tr><td>Minimum position, zero crossing, wall at 2.1 Å</td><td>best curve</td><td>−0.03 %, −0.07 %, −0.2 %</td></tr>
+<tr><td>Second virial coefficient, 0 °C (measured)</td><td>best curve</td><td>−0.23 %</td></tr>
 <tr><td>Position of the minimum (2.97 Å)</td><td>same</td><td>−0.6 %</td></tr>
 <tr><td>Energy from 3.2 to 6.4 Å</td><td>same</td><td>within 0.5 %</td></tr>
 <tr><td>Energy on the wall at 2.1 Å</td><td>same</td><td>−6.2 %</td></tr>
 <tr><td>Second virial coefficient of helium gas, 0 °C</td><td>curve + quantum correction</td><td>−2.2 % (measured)</td></tr>
 <tr><td>Binding energy of the He₂ molecule</td><td>lowest level in the curve</td><td>450 neV against a measured 152 neV, fails</td></tr>
 </table>
-<p>The well is a small difference of large terms: 9 K of repulsion against 20 K of attraction. The 2.4 % is partly a cancellation: adding the next attraction terms makes the well 14 % too deep, because Hartree–Fock lacks some repulsion that correlation inside each atom provides. A four-electron full CI for the pair supplies that repulsion (1.6 K more at the minimum). With it and all attraction terms the well comes out 3.3 % too shallow: the error changes sign instead of closing. What limits the curve now is the attraction itself, a series cut off after six terms and damped at short range by an assumed function. The helium molecule is the hardest test. It exists, and the model binds it, but its binding energy is about 1/6000 of the well depth, so a 2 % error in the well triples it. At its strongest the attraction corresponds to 11 K, five thousand times weaker than the bond in H₂, which is why helium only liquefies at 4 K.</p>
+<p>The well is a small difference of large terms: 9 K of repulsion against 20 K of attraction. The first model's 2.4 % is partly a cancellation: Hartree–Fock lacks some repulsion, and the damped series lacks some attraction. The best curve replaces both. The repulsion comes from a four-electron full CI for the pair, and the attraction is computed directly, summing over every excited state of both atoms with no series and no damping function. That attraction is 22.35 K at the minimum against a published 22.40 K. The resulting curve is within 0.3 % at the wall, the zero crossing, the minimum position and the measured virial coefficient; the well is 1.4 % too deep because the full-CI repulsion is still slightly short. The helium molecule is the hardest test. It exists, and the curve binds it, but its binding energy is about 1/6000 of the well depth, so a 1.4 % error in the well still doubles it (287 neV against a measured 152 neV). At its strongest the attraction corresponds to 11 K, five thousand times weaker than the bond in H₂, which is why helium only liquefies at 4 K.</p>
 <h3>Are the deviations measurement errors?</h3>
 <p>With the one exception above, no. Each deviation of a simple model is far larger than the uncertainty of the reference value, and each closes when the matching piece of known physics is added:</p>
 <table>
@@ -249,6 +255,18 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 <tr><td>Speed of sound in helium</td><td>0.05 %</td><td>0.0001 %</td><td>atoms repel slightly (real gas)</td></tr>
 </table>
 <p>Two caveats about the reference data: the tabulated ionization energies of one-electron ions are themselves QED calculations rather than direct measurements, and the tabulated heat capacities are computed from measured spectra. Each comparison declares in advance whether it should match, and the build fails if that changes.</p>
+
+<h2>11. Forces between atoms: what can be proved</h2>
+<p>The bonds and the helium–helium curve above are computed numerically. A number from a computer run is not a theorem, but the principles behind it are. Lean proves these:</p>
+<ul>
+<li>Two electrons with equal spin are never at the same point, which is why H₂ with equal spins has no bond.</li>
+<li>Mixing in an excited state always lowers the energy, so the attraction between two neutral atoms (dispersion) can never be a repulsion.</li>
+<li>The algebra behind the Casimir–Polder formula for C₆, and London's formula as its one-state special case.</li>
+<li>The damping factor used for the attraction terms stays between 0 and 1.</li>
+<li>For the ionic bond: where ions and neutral atoms have equal energy, the depth of the well, and the two mutually induced dipoles.</li>
+<li>A quantised vibration holds at most the classical share of heat capacity.</li>
+</ul>
+<p>What stays outside Lean: the integrals, the matrix diagonalisations, the QED formula for the Lamb shift, and every measured value. Those are tested against reference data, not proved.</p>
 
 <h2 id="further">Where this leads: Boltzmann and Navier–Stokes</h2>
 <p>The pieces above are textbook physics. The <em>bridge</em> between them is the deep part: showing that deterministic hard-sphere collisions really produce random-walk behaviour, and that it averages out to fluid equations.</p>

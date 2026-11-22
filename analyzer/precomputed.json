@@ -146,18 +146,314 @@
         "hartree_fock": 5.7826747834610615e-09,
         "seconds": 55
       }
+    ]
+  },
+  "He2_dispersion": {
+    "s_keep": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
     ],
-    "check_with_d_at_5.6_bohr": {
-      "d_exponents": [
-        0.5
-      ],
-      "orbitals": 42,
-      "full_ci_K": -8.1271,
-      "dispersion_K": -19.2236,
-      "hartree_fock_K": 9.2229,
-      "extra_repulsion_K": 1.8736,
-      "seconds": 1113,
-      "note": "values as printed, four decimals in kelvin"
-    }
+    "p_exponents": [
+      0.06,
+      0.18,
+      0.5,
+      1.4,
+      4.0
+    ],
+    "d_exponents": [
+      0.1,
+      0.35,
+      1.1
+    ],
+    "f_exponents": [
+      0.15,
+      0.5
+    ],
+    "midbond_s": [
+      0.1,
+      0.3,
+      0.9
+    ],
+    "midbond_p": [
+      0.2,
+      0.6
+    ],
+    "midbond_d": [
+      0.35
+    ],
+    "points": [
+      {
+        "R": 3.0,
+        "functions": 118,
+        "primitives": 361,
+        "dispersion": -0.0028842466758054667,
+        "seconds": 197
+      },
+      {
+        "R": 3.5,
+        "functions": 118,
+        "primitives": 361,
+        "dispersion": -0.0013151300445404944,
+        "seconds": 195
+      },
+      {
+        "R": 4.0,
+        "functions": 118,
+        "primitives": 361,
+        "dispersion": -0.0006149573426317313,
+        "seconds": 198
+      },
+      {
+        "R": 4.5,
+        "functions": 118,
+        "primitives": 361,
+        "dispersion": -0.0002977811038796827,
+        "seconds": 195
+      },
+      {
+        "R": 5.0,
+        "functions": 118,
+        "primitives": 361,
+        "dispersion": -0.00015053103119188536,
+        "seconds": 200
+      },
+      {
+        "R": 5.6,
+        "functions": 118,
+        "primitives": 361,
+        "dispersion": -7.076796357172913e-05,
+        "seconds": 204
+      },
+      {
+        "R": 6.2,
+        "functions": 118,
+        "primitives": 361,
+        "dispersion": -3.574541549400679e-05,
+        "seconds": 197
+      },
+      {
+        "R": 7.0,
+        "functions": 118,
+        "primitives": 361,
+        "dispersion": -1.5955012581231987e-05,
+        "seconds": 199
+      },
+      {
+        "R": 9.0,
+        "functions": 118,
+        "primitives": 361,
+        "dispersion": -3.1601878931292317e-06,
+        "seconds": 202
+      }
+    ]
+  },
+  "He2_full_ci_d": {
+    "s_keep": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "p_exponents": [
+      0.15,
+      0.5,
+      1.8
+    ],
+    "d_exponents": [
+      0.5
+    ],
+    "determinants": 741321,
+    "points": [
+      {
+        "R": 3.0,
+        "orbitals": 42,
+        "full_ci": 0.012319572294804182,
+        "dispersion": -0.0026015173891399106,
+        "hartree_fock": 0.013529588214915123,
+        "seconds": 795
+      },
+      {
+        "R": 3.5,
+        "orbitals": 42,
+        "full_ci": 0.003685486229816348,
+        "dispersion": -0.0011855254193723064,
+        "hartree_fock": 0.004338785582095106,
+        "seconds": 571
+      },
+      {
+        "R": 4.0,
+        "orbitals": 42,
+        "full_ci": 0.0010054807650350384,
+        "dispersion": -0.0005468213439596769,
+        "hartree_fock": 0.001358621459990772,
+        "seconds": 963
+      },
+      {
+        "R": 4.5,
+        "orbitals": 42,
+        "full_ci": 0.00022467837818673786,
+        "dispersion": -0.00025936283633185947,
+        "hartree_fock": 0.00041671965332312766,
+        "seconds": 535
+      },
+      {
+        "R": 5.0,
+        "orbitals": 42,
+        "full_ci": 1.8972148210671946e-05,
+        "dispersion": -0.0001292015637683063,
+        "hartree_fock": 0.00012558925984418323,
+        "seconds": 733
+      },
+      {
+        "R": 5.6,
+        "orbitals": 42,
+        "full_ci": -2.5736994257691527e-05,
+        "dispersion": -6.087751877202925e-05,
+        "hartree_fock": 2.920718636897087e-05,
+        "seconds": 1113,
+        "note": "from printed values, four decimals in kelvin"
+      },
+      {
+        "R": 6.2,
+        "orbitals": 42,
+        "full_ci": -2.309221847696108e-05,
+        "dispersion": -3.1310968943395994e-05,
+        "hartree_fock": 6.675904897335272e-06,
+        "seconds": 707
+      },
+      {
+        "R": 7.0,
+        "orbitals": 42,
+        "full_ci": -1.3205842705588111e-05,
+        "dispersion": -1.4373765647125998e-05,
+        "hartree_fock": 9.127400497632721e-07,
+        "seconds": 500
+      }
+    ]
+  },
+  "NaCl_hartree_fock": {
+    "Na_s": [
+      0.012,
+      80000.0,
+      19
+    ],
+    "Na_p": [
+      0.05,
+      200.0,
+      8
+    ],
+    "Cl_s": [
+      0.06,
+      200000.0,
+      19
+    ],
+    "Cl_p": [
+      0.04,
+      600.0,
+      10
+    ],
+    "Cl_d": [
+      0.25,
+      0.8
+    ],
+    "field_au": 0.001,
+    "seconds": 502,
+    "points": [
+      {
+        "R_bohr": 4.157397474176695,
+        "functions": 102,
+        "molecule": -621.426755466525,
+        "field_plus": -621.423312148765,
+        "field_minus": -621.4302240583022,
+        "Na_plus": -161.6684477768628,
+        "Cl_minus": -459.5608694828169,
+        "R_angstrom": 2.2
+      },
+      {
+        "R_bohr": 4.346370086639271,
+        "functions": 102,
+        "molecule": -621.4315083084291,
+        "field_plus": -621.4279005626989,
+        "field_minus": -621.4351421710853,
+        "Na_plus": -161.66844395070686,
+        "Cl_minus": -459.56086842772214,
+        "R_angstrom": 2.3
+      },
+      {
+        "R_bohr": 4.459753654116818,
+        "functions": 102,
+        "molecule": -621.4326286869065,
+        "field_plus": -621.4289193254058,
+        "field_minus": -621.4363647179766,
+        "Na_plus": -161.6684421197826,
+        "Cl_minus": -459.56086807924885,
+        "R_angstrom": 2.36
+      },
+      {
+        "R_bohr": 4.535342699101848,
+        "functions": 102,
+        "molecule": -621.432817234206,
+        "field_plus": -621.4290389933989,
+        "field_minus": -621.4366225303049,
+        "Na_plus": -161.66844113502142,
+        "Cl_minus": -459.5608678891381,
+        "Na": -161.85048622820963,
+        "Cl": -459.47126062125034,
+        "R_angstrom": 2.4
+      },
+      {
+        "R_bohr": 4.6298290053331375,
+        "functions": 102,
+        "molecule": -621.4325348239336,
+        "field_plus": -621.4286692796823,
+        "field_minus": -621.4364279234818,
+        "Na_plus": -161.66844015262183,
+        "Cl_minus": -459.5608676201185,
+        "R_angstrom": 2.45
+      },
+      {
+        "R_bohr": 4.724315311564426,
+        "functions": 102,
+        "molecule": -621.4317725088163,
+        "field_plus": -621.4278183925546,
+        "field_minus": -621.4357546987029,
+        "Na_plus": -161.6684393918898,
+        "Cl_minus": -459.560867249186,
+        "R_angstrom": 2.5
+      },
+      {
+        "R_bohr": 4.913287924027003,
+        "functions": 102,
+        "molecule": -621.4291418408794,
+        "field_plus": -621.4250070471586,
+        "field_minus": -621.4333057936484,
+        "Na_plus": -161.66843823898947,
+        "Cl_minus": -459.5608660844308,
+        "R_angstrom": 2.6
+      }
+    ]
+  },
+  "Cl_affinity": {
+    "extra_s": [],
+    "extra_p": [
+      0.1,
+      0.8
+    ],
+    "extra_d": [
+      0.35
+    ],
+    "active_orbitals": 15,
+    "E_Cl_minus_hartree": -459.679537,
+    "E_Cl_hartree": -459.563442,
+    "E_Cl_minus_hartree_fock": -459.560857,
+    "seconds": 87,
+    "note": "values as printed, six decimals; with one more s function (16 orbitals) the affinity changes from 3.159 to 3.161 eV"
   }
 }

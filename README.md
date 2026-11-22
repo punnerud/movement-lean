@@ -9,7 +9,7 @@ This repository starts from a sailor's rule of thumb:
 
 It then follows the idea down to the molecular scale (billiard-ball collisions, spinning molecules, diffusion), on to the heat equation, and across to quantum mechanics (the Schrödinger equation, Bohr's electron orbits, and a test of whether spin can be a circulation at light speed). Each step is proved formally in [Lean 4](https://lean-lang.org/) with [Mathlib](https://github.com/leanprover-community/mathlib4).
 
-The proofs are in [`Movement/`](Movement): [`Basic.lean`](Movement/Basic.lean) (sections 1–3), [`Heat.lean`](Movement/Heat.lean) (4), [`Quantum.lean`](Movement/Quantum.lean) (5) [`Bohr.lean`](Movement/Bohr.lean) (6), [`Spin.lean`](Movement/Spin.lean) (7), [`Rotation4D.lean`](Movement/Rotation4D.lean) (8), [`Waveguide.lean`](Movement/Waveguide.lean) (9) and [`Atoms.lean`](Movement/Atoms.lean) (10). There is no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
+The proofs are in [`Movement/`](Movement): [`Basic.lean`](Movement/Basic.lean) (sections 1–3), [`Heat.lean`](Movement/Heat.lean) (4), [`Quantum.lean`](Movement/Quantum.lean) (5) [`Bohr.lean`](Movement/Bohr.lean) (6), [`Spin.lean`](Movement/Spin.lean) (7), [`Rotation4D.lean`](Movement/Rotation4D.lean) (8), [`Waveguide.lean`](Movement/Waveguide.lean) (9) [`Atoms.lean`](Movement/Atoms.lean) (10) and [`Forces.lean`](Movement/Forces.lean) (11). There is no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
 
 ---
 
@@ -106,6 +106,11 @@ So the same equation describes both, and the single factor `i` is the difference
 | `bohr_orbit` | Add `m v r = nħ` and the orbit is fixed: `v = K/nħ`, `r = (nħ)²/(mK)`, `E = −mK²/(2(nħ)²)`. |
 | `bohr_levels` | `Eₙ = E₁/n²`. |
 | `bohr_speed_fraction` | `v = c·α/n` with `α = K/ħc ≈ 1/137`, so the ground-state electron moves at about 0.7 % of light speed. |
+| `ellipse_energy_and_momentum` | Ellipses instead of circles: from the nearest and farthest points alone, `E = −K/(rp + ra)`. The energy depends only on the length of the ellipse, not on how flat it is. |
+| `sommerfeld_orbit` | Sommerfeld's rule: quantise the angular momentum (`L = kħ`) and the in-and-out motion (`nᵣ`). With `n = nᵣ + k` the energy is Bohr's `Eₙ`, and the shape is `1 − ecc² = (k/n)²`. Level `n` holds one circle and `n − 1` ellipses of the same energy. |
+| `sommerfeld_axis_ratio` | The short and long half-axes are in the ratio `k/n`. |
+
+`sommerfeld_orbit` takes the radial action integral of a Kepler ellipse, `∮ p_r dr = 2π(√(mKa) − L)`, as given and proves what follows from it.
 
 The Bohr model is a historical stepping stone. It gives the correct hydrogen energies, but real electrons are standing waves described by the Schrödinger equation, not dots on orbits.
 
@@ -265,7 +270,25 @@ The methods themselves are not formalised. Lean covers the principle behind them
 | Dipole moment | two point charges | +26 %, **fails** |
 | Dipole moment | + polarization of the ions | −13 % |
 
-The first row is closer than the second only because two omissions cancel. The ionic curve crosses the energy of two neutral atoms at about 9.4 Å: further out it is cheaper for the electron to jump back. Unlike the H₂ rows, the NaCl model is not a first-principles calculation: it takes the bond length and vibration frequency from measurement. This is also the one place where measurement uncertainty matters: the binding energy of NaCl is only known to about 2 % (4.23 ± 0.09 eV), so the final 3.9 % is within twice that uncertainty.
+The first row is closer than the second only because two omissions cancel. The ionic curve crosses the energy of two neutral atoms at about 9.4 Å: further out it is cheaper for the electron to jump back. The ionic model above is partly empirical: it takes the bond length and vibration frequency from measurement.
+
+**NaCl with nothing borrowed.** `nacl_hf.py` solves Hartree–Fock for all 28 electrons at seven distances; the only inputs are the nuclear charges. Bond length, vibration frequency, dipole moment and binding energy are read off the computed curve:
+
+| Quantity | Hartree–Fock, nothing measured | Error |
+|---|---|---|
+| Bond length | 2.399 Å | +1.6 % |
+| Vibration wavenumber | 353 cm⁻¹ | −3.2 % |
+| Dipole moment | 9.63 D (9.47 D at the measured bond length) | +7.4 % (+5.5 %) |
+| Energy to separate into ions Na⁺ + Cl⁻ | 5.54 eV | −4.2 % |
+| Binding energy to neutral atoms | 3.02 eV | −29 %, **fails** |
+| Electron affinity of Cl | 2.44 eV (measured 3.61) | −33 %, **fails** |
+| Electron affinity of Cl, outer electrons by full CI | 3.16 eV | −13 %, **fails** |
+| Binding energy with that correlation in Cl and Cl⁻ | 3.74 eV | −12 %, **fails** |
+| Binding energy with measured ionization energy and affinity | 4.01 eV | −5.7 % |
+
+The molecule itself comes out well: geometry, stiffness and charge distribution within a few percent, and the code agrees with published large-basis Hartree–Fock to 0.14 % in bond length. The binding energy to neutral atoms fails for one identifiable reason: Hartree–Fock cannot hold the extra electron on chlorine. `cl_affinity.py` treats the seven or eight outer electrons of Cl and Cl⁻ by full CI with the inner ten frozen (1.9 million determinants), which closes over half the gap. The rest needs more correlating functions (a second d shell, f functions) than fit in memory. The last row shows what the molecule part alone achieves when the two atomic numbers are taken from measurement.
+
+This is also the one place where measurement uncertainty matters: the binding energy of NaCl is only known to about 2 % (4.23 ± 0.09 eV), so the final 3.9 % is within twice that uncertainty.
 
 ### Magnetism: the electron cloud as a tiny superconductor
 
@@ -306,6 +329,12 @@ Two neutral atoms still attract. Each atom's electron cloud fluctuates, the mome
 | Well depth | Hartree–Fock + damped `C₆`, `C₈`, `C₁₀` | +2.4 % (11.26 K) |
 | Well depth | same, plus `C₁₂`–`C₁₆` by extrapolation | +14 %, **fails** |
 | Well depth | full-CI repulsion + damped `C₆`–`C₁₆` | −3.3 % (10.64 K) |
+| Attraction at the minimum (22.40 K) | damped series / computed directly | −3.2 % / −0.2 % |
+| **Best curve**: well depth | full-CI repulsion + directly computed attraction | +1.4 % (11.15 K) |
+| Best curve: position of the minimum, zero crossing | same | −0.03 %, −0.07 % |
+| Best curve: wall at 2.1 Å and 1.6 Å | same | −0.2 %, +2.2 % |
+| Best curve: second virial coefficient (measured) | same, with quantum correction | −0.23 % |
+| Best curve: binding energy of He₂ (measured 152 ± 13 neV) | lowest level | 287 neV, **fails** |
 | Energy at the minimum | four-electron full CI alone, s and p functions | −58 %, **fails**: bound, but the basis holds under half the attraction |
 | Position of the minimum | Hartree–Fock + damped `C₆`, `C₈`, `C₁₀` | −0.6 % |
 | Distance where the energy is zero | same | −0.7 % |
@@ -315,12 +344,13 @@ Two neutral atoms still attract. Each atom's electron cloud fluctuates, the mome
 | Second virial coefficient | curve + first quantum correction | −2.2 % (against a measurement) |
 | Binding energy of the He₂ molecule | lowest level in the curve | 450 neV against a measured 152 ± 13 neV, **fails** |
 
-The well is a small difference of large terms: at the minimum 9 K of repulsion against 20 K of attraction. Four things should be said plainly:
+The well is a small difference of large terms: at the minimum 9 K of repulsion against 20 K of attraction. Five things should be said plainly:
 
 - **The 2.4 % is partly a cancellation.** Adding more attraction (the next terms, estimated by extrapolation) makes the well 14 % too deep. What the model lacks is extra repulsion: correlation inside each atom changes how the clouds overlap, and Hartree–Fock does not have that. The same gap shows on the wall at 2.1 Å (−6 %).
-- **Putting the missing repulsion in does not make the well right.** A four-electron full CI for the pair (246 016 determinants per distance, run on a larger machine and stored) gives the repulsion with correlation included: 1.6 K more than Hartree–Fock at the minimum, 51 K more on the wall at 2.1 Å. With that repulsion and all attraction terms the well is 10.64 K, 3.3 % too shallow, and the wall is 6.5 % too hard. The error changes sign instead of closing. The cancellation is gone, and what is left is the attraction itself: a series in powers of 1/r, cut off after six terms and switched off at short range by an assumed damping function. One check with d functions in the full CI (at the minimum only) gave 1.9 K of extra repulsion instead of 1.6 K, which would make the well another 2 % shallower, so the 3.3 % is not converged either.
+- **Putting the missing repulsion in does not, alone, make the well right.** A four-electron full CI for the pair (run on a larger machine and stored) gives the repulsion with correlation included. With that repulsion and the damped series up to `C₁₆` the well is 3.3 % too shallow: the error changes sign. The damped series itself is then the weak part: at the minimum it gives 21.7 K of attraction where the published value is 22.4 K.
+- **Computing the attraction directly closes most of the gap.** `he2_dispersion.py` sums over every excited state of both atoms with the full Coulomb coupling, in a basis of 118 functions including functions at the midpoint: no series, no damping function. It gives 22.35 K at the minimum (published: 22.40 K). Together with the repulsion from a larger full CI (with d functions, 741 321 determinants) the curve is within 0.3 % at the wall, the zero crossing, the minimum position and the second virial coefficient. The well is 1.4 % too deep (11.15 K): the repulsion from the full CI is still about 0.3 K short, limited by the basis that fits in 36 GB.
 - **Beyond 3 Å the curve is good to half a percent**, because there the well-computed coefficients decide everything.
-- **The helium molecule is the hardest test.** It exists, and the model binds it, but its binding energy is about 1/6000 of the well depth, so a 2 % error in the well triples it. The reference calculations get it right (139 neV) only because their curve is accurate to a few parts in 10⁵.
+- **The helium molecule is the hardest test.** It exists, and every version of the curve binds it, but its binding energy is about 1/6000 of the well depth. The first model gave 450 neV, the best curve gives 287 neV, the measurement is 152 ± 13 neV: a 1.4 % error in the well still doubles it. The reference calculations get it right (139 neV) only because their curve is accurate to a few parts in 10⁵.
 
 At its strongest the attraction corresponds to 11 K, about 0.001 eV: five thousand times weaker than the bond in H₂. That is why helium only liquefies at 4 K. The reference curve is itself a calculation (accurate to about 0.002 %), not a measurement; the virial coefficient and the molecule's binding energy are measured.
 
@@ -349,6 +379,25 @@ Every row states in advance whether the model should work, and `--check` fails i
 **What this is and is not.** The numerical part handles two electrons accurately, and three or four electrons by full configuration interaction with s, p, d and f orbitals (built as first, second and third differences of shifted s-Gaussians). For Be the d-orbital step is a composite: its effect is computed with the 1s² core frozen and added to the all-electron result, so that row is an estimate rather than a strict upper bound. The full four-electron calculation with d orbitals needs about 15 GB of memory, so it is run separately (`python3 analyzer/be_full_ci.py`, three minutes on a 36 GB Apple M3) and its result is stored in `analyzer/precomputed.json`. It confirms the composite estimate and improves on it (0.25 % → 0.18 %). Adding one shell of f orbitals (third differences of shifted s-Gaussians) gives 0.15 %, at the cost of 27 minutes and about 20 GB. The returns are diminishing: what is left needs larger orbital sets of every kind, not one more angular type. It is a demonstration that the same variational principle carries from the Lean theorems to real numbers, not a replacement for a quantum chemistry package.
 
 ---
+
+## 11. Forces between atoms: what can be proved
+
+The bonds and the helium–helium curve in section 10 are computed numerically. A number from a computer run is not a theorem, but the principles the numbers rest on are, and [`Forces.lean`](Movement/Forces.lean) proves them:
+
+| Theorem | What it says |
+|---|---|
+| `antisymmetric_vanishes_at_contact` | Two electrons with equal spin are never at the same point (why H₂ with equal spins has no bond) |
+| `two_level_lowering` | Mixing in an excited state lowers the energy, by at most `c²/(E₁ − E₀)` |
+| `dispersion_nonpos` | The second-order energy `−Σ c²/gap` is never positive: dispersion always attracts |
+| `casimir_polder_partial_fraction`, `casimir_polder_value` | The algebra that turns two response functions into `π/(2ab(a + b))`, the origin of the `1/(wₘ + wₙ)` in `C₆` |
+| `london_formula` | With a single excited state the pair sum reduces to `¾ α² w` |
+| `tang_toennies_bounds` | The damping factor stays between 0 and 1 |
+| `coulomb_crossing` | Ions and neutral atoms have equal energy exactly at `r = K/gap` |
+| `born_mayer_well` | At the equilibrium of `−K/r + A e^(−r/ρ)` the depth is `(K/r)(1 − ρ/r)` |
+| `rittner_induced_dipoles` | The two mutually induced dipoles of an ion pair, solved in closed form |
+| `einstein_function_le_one` | A quantised vibration holds at most the classical share `R` of heat capacity |
+
+What stays outside Lean: the integrals over Gaussian functions, the matrix diagonalisations, the QED formula for the Lamb shift, and every measured or benchmark value. Those are tested by the comparison with reference data, not proved. `casimir_polder_value` takes the integral `∫ dx/(a² + x²) = π/(2a)` as given and proves the algebra around it.
 
 ## What is *not* proved here
 

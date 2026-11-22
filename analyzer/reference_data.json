@@ -79,7 +79,9 @@
     "Magnetic shielding of H (CODATA 2022) and 3He (Pachucki 2023) are theoretical values; no direct measurement of the neutral-atom shielding exists.",
     "Helium susceptibility: measured -2.02(7)e-6 cm^3/mol (Barter, Meisenheimer, Stevenson 1960, as quoted by Puchalski, Lesiuk, Jeziorski 2023, and tabulated in the CRC Handbook); theory -1.891035(30)e-6 (same 2023 paper). No modern precise measurement was found.",
     "Helium dispersion: measured molar polarizability 0.5172544(10) cm^3/mol (Gaiser & Fellmuth 2018, as quoted by Puchalski et al. 2020); C6 = 1.4609778 a.u. (Yan, Babb, Dalgarno, Drake 1996, theory); well depth 10.996(4) K at 5.6080(1) bohr (Cencek et al. 2012, theory). The helium dimer itself is measured to be bound by only 151.9(13.3) neV (Zeller et al. 2016).",
-    "Helium-helium curve: Born-Oppenheimer energies from Przybytek, Cencek, Jeziorski, Szalewicz 2017 (PRL 119, 123401, Table I; the 12 bohr point is the 2012 value from the same table); theory, not measurement. Hartree-Fock limit from Kobus 1993 as tabulated in arXiv:2408.03679 (two decimals in microhartree). C8, C10 and the quadrupole and octupole polarizabilities from Yan, Babb, Dalgarno, Drake 1996 (theory). The zero crossing 4.9905 bohr is not a published number: it was interpolated from the 2017 tabulated points. Second virial coefficient at 273.16 K: measured 11.9257(15) cm^3/mol (Gaiser & Fellmuth 2019, dielectric-constant gas thermometry); theory 11.92811(13) (Czachorowski et al. 2020). Dimer: measured binding 151.9(13.3) neV (Zeller et al. 2016); best theory 138.9(5) neV and mean separation 47.13(8) angstrom (Przybytek et al. 2017). The well depth 10.996 K includes small relativistic and adiabatic corrections (0.005 K), far below the model error here."
+    "Helium-helium curve: Born-Oppenheimer energies from Przybytek, Cencek, Jeziorski, Szalewicz 2017 (PRL 119, 123401, Table I; the 12 bohr point is the 2012 value from the same table); theory, not measurement. Hartree-Fock limit from Kobus 1993 as tabulated in arXiv:2408.03679 (two decimals in microhartree). C8, C10 and the quadrupole and octupole polarizabilities from Yan, Babb, Dalgarno, Drake 1996 (theory). The zero crossing 4.9905 bohr is not a published number: it was interpolated from the 2017 tabulated points. Second virial coefficient at 273.16 K: measured 11.9257(15) cm^3/mol (Gaiser & Fellmuth 2019, dielectric-constant gas thermometry); theory 11.92811(13) (Czachorowski et al. 2020). Dimer: measured binding 151.9(13.3) neV (Zeller et al. 2016); best theory 138.9(5) neV and mean separation 47.13(8) angstrom (Przybytek et al. 2017). The well depth 10.996 K includes small relativistic and adiabatic corrections (0.005 K), far below the model error here.",
+    "Helium-helium components at 5.6 bohr: second-order dispersion with charge overlap -15.565 cm^-1 = -22.395 K, and the sum through second order -7.716 cm^-1; reference values from Gaussian-geminal calculations (Cencek & Szalewicz 2013) as quoted in Hapka et al., J. Mol. Model. 26, 102 (2020), Table 1. Secondary source: the primary paper was not seen.",
+    "NaCl Hartree-Fock references: molecule from NIST CCCBDB, HF/aug-cc-pVQZ (r_e 2.3958 angstrom, omega_e 356 cm^-1, dipole 9.456 D at that r_e, energy -621.458927 hartree; a large basis, not the exact Hartree-Fock limit). Atoms and ions: numerical restricted Hartree-Fock from Partridge 1987 (NASA TM 89449), ions cross-checked with Lehtola 2019; this analyzer uses unrestricted Hartree-Fock for the open-shell atoms, which can lie slightly lower. The NaCl D0 of 4.23(9) eV could not be re-verified in a source during the latest check; JANAF/CODATA enthalpies give 4.222(23) eV, consistent with it."
   ],
   "vibration_cm1": {
     "H2": [
@@ -163,7 +165,19 @@
     "Na_ionization_eV": 5.13907696,
     "Cl_electron_affinity_eV": 3.612725,
     "alpha_Na_plus_A3": 0.179,
-    "alpha_Cl_minus_A3": 3.66
+    "alpha_Cl_minus_A3": 3.66,
+    "hartree_fock_reference": {
+      "r_e_angstrom": 2.3958,
+      "omega_e_cm1": 356,
+      "dipole_debye": 9.456,
+      "energy_hartree": -621.458927
+    },
+    "hartree_fock_limit_hartree": {
+      "Na": -161.858912,
+      "Na_plus": -161.676963,
+      "Cl": -459.482072,
+      "Cl_minus": -459.576925
+    }
   },
   "H2_triplet_benchmark_hartree": {
     "1.4": -0.7841501,
@@ -215,6 +229,8 @@
     "dimer_binding_neV": 151.9,
     "dimer_binding_uncertainty_neV": 13.3,
     "dimer_binding_theory_neV": 138.9,
-    "dimer_mean_separation_theory_angstrom": 47.13
+    "dimer_mean_separation_theory_angstrom": 47.13,
+    "dispersion_at_5.6_bohr_K": -22.395,
+    "first_and_second_order_sum_at_5.6_bohr_K": -11.102
   }
 }

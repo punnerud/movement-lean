@@ -593,6 +593,31 @@ class HeliumPair:
         total = self.repulsion(distances) + np.asarray(extra, float)
         self.full_fit = np.polyfit(distances, np.log(total), 2)
 
+    def add_direct_dispersion(self, distances, values):
+        """Dispersion computed directly with overlapping clouds (see
+        he2_dispersion.py) at the given distances (hartree). Stored as its
+        ratio to the damped series, which is close to 1 and smooth; beyond the
+        last computed distance the ratio relaxes to 1."""
+        self.direct_R = np.asarray(distances, float)
+        series = self(self.direct_R, extrapolate=True) - self.repulsion(self.direct_R)
+        ratio = np.asarray(values, float) / series
+        self.direct_fit = np.polyfit(self.direct_R, ratio, 4)
+        self.direct_residual = float(np.abs(np.polyval(self.direct_fit, self.direct_R) - ratio).max())
+
+    def dispersion(self, R, direct=False, **kw):
+        R = np.asarray(R, float)
+        series = self(R, **kw) - self.repulsion(R)
+        if not direct:
+            return series
+        lo, hi = self.direct_R[0], self.direct_R[-1]
+        ratio = np.polyval(self.direct_fit, np.clip(R, lo, hi))
+        ratio = np.where(R > hi, 1.0 + (ratio - 1.0) * np.exp(-(R - hi)), ratio)
+        return ratio * series
+
+    def best(self, R):
+        """Repulsion with correlation plus directly computed dispersion."""
+        return self.repulsion(R, correlated=True) + self.dispersion(R, direct=True, extrapolate=True)
+
     def repulsion(self, R, correlated=False):
         fit = self.full_fit if correlated else self.fit
         return np.exp(np.polyval(fit, np.asarray(R, float)))
@@ -614,7 +639,7 @@ class HeliumPair:
     def well(self, **kw):
         """(depth, position of the minimum, distance where V = 0), atomic units."""
         grid = np.linspace(4.0, 9.0, 50001)
-        v = self(grid, **kw)
+        v = self.best(grid) if kw.pop("best", False) else self(grid, **kw)
         i = int(v.argmin())
         j = int(np.where(v < 0)[0][0])
         sigma = grid[j - 1] + (grid[j] - grid[j - 1]) * v[j - 1] / (v[j - 1] - v[j])
@@ -627,7 +652,7 @@ class HeliumPair:
           B_cl = -2 pi  int (exp(-V/kT) - 1) r^2 dr
           B_q  = pi / (6 m kT^3)  int exp(-V/kT) V'(r)^2 r^2 dr"""
         r = np.linspace(2.0, 80.0, 780001)
-        v = self(r, **kw)
+        v = self.best(r) if kw.pop("best", False) else self(r, **kw)
         boltz = np.exp(-v / kT)
         dr = r[1] - r[0]
         classical = -2.0 * math.pi * (np.sum((boltz - 1.0) * r * r) * dr - 2.0 ** 3 / 3.0)
@@ -644,7 +669,7 @@ class HeliumPair:
             return None
         mu = mass / 2.0
         r = np.arange(2.5, r_max, step)
-        diag = 1.0 / (mu * step * step) + self(r, **kw)
+        diag = 1.0 / (mu * step * step) + (self.best(r) if kw.pop("best", False) else self(r, **kw))
         off = -0.5 / (mu * step * step) * np.ones(len(r) - 1)
         e, vec = eigh_tridiagonal(diag, off, select="i", select_range=(0, 0))
         u2 = vec[:, 0] ** 2

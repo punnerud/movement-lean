@@ -59,4 +59,85 @@ theorem bohr_speed_fraction {K ħ c : ℝ} (hħ : ħ ≠ 0) (hc : c ≠ 0) (n : 
   have : (n : ℝ) ≠ 0 := by exact_mod_cast hn
   field_simp
 
+/-! ### Elliptical orbits (Sommerfeld)
+
+Bohr's circles are a special case. Sommerfeld allowed ellipses, with one
+quantum number for the angular momentum and one for the in-and-out motion. -/
+
+/-- **An ellipse's energy depends only on its length.** At the nearest
+point `rp` and the farthest point `ra` the electron moves purely sideways,
+so there `E = L²/(2 m r²) − K/r`. These two equations alone give
+`E = −K/(rp + ra)`: the energy depends on the major axis `rp + ra` and not
+on how flattened the ellipse is. They also fix the angular momentum. -/
+theorem ellipse_energy_and_momentum {m K L E rp ra : ℝ} (hm : 0 < m) (hp : 0 < rp)
+    (ha : 0 < ra) (hne : rp ≠ ra)
+    (h1 : E = L ^ 2 / (2 * m * rp ^ 2) - K / rp)
+    (h2 : E = L ^ 2 / (2 * m * ra ^ 2) - K / ra) :
+    E = -K / (rp + ra) ∧ L ^ 2 = 2 * m * K * rp * ra / (rp + ra) := by
+  have e1 : 2 * m * rp ^ 2 * E = L ^ 2 - 2 * m * K * rp := by
+    rw [h1]; field_simp
+  have e2 : 2 * m * ra ^ 2 * E = L ^ 2 - 2 * m * K * ra := by
+    rw [h2]; field_simp
+  have key : E * (rp + ra) = -K := by
+    have h : (2 * m * (rp - ra)) * (E * (rp + ra) + K) = 0 := by linear_combination e1 - e2
+    rcases mul_eq_zero.mp h with h | h
+    · exact absurd h (mul_ne_zero (by positivity) (sub_ne_zero.mpr hne))
+    · linarith
+  have hsum : 0 < rp + ra := by linarith
+  refine ⟨by rw [eq_div_iff hsum.ne']; exact key, ?_⟩
+  rw [eq_div_iff hsum.ne']
+  linear_combination (-(rp + ra)) * e1 + (2 * m * rp ^ 2) * key
+
+/-- **Sommerfeld's quantised ellipses.** An ellipse with half-length `a`
+and eccentricity `ecc` has `E = −K/(2a)` and `L² = m K a (1 − ecc²)`.
+Quantise the angular momentum, `L = k ħ`, and the in-and-out motion,
+`√(m K a) − L = nᵣ ħ` (the radial action integral, taken as given; `s`
+stands for the square root). Then with `n = nᵣ + k`:
+
+* the energy is Bohr's `−m K²/(2 n² ħ²)`, whatever the shape;
+* the half-length is Bohr's radius for level `n`;
+* the shape is fixed by `1 − ecc² = (k/n)²`.
+
+So level `n` holds one circle (`k = n`) and `n − 1` ellipses, all with the
+same energy. -/
+theorem sommerfeld_orbit {m K ħ a s L E ecc : ℝ} {k nr : ℕ} (hm : 0 < m) (hK : 0 < K)
+    (hħ : 0 < ħ) (ha : 0 < a) (hk : k ≠ 0)
+    (hs : s ^ 2 = m * K * a) (energy : E = -K / (2 * a))
+    (shape : L ^ 2 = m * K * a * (1 - ecc ^ 2))
+    (angular : L = k * ħ) (radial : s - L = nr * ħ) :
+    E = -(m * K ^ 2) / (2 * ((nr + k) * ħ) ^ 2) ∧ a = ((nr + k) * ħ) ^ 2 / (m * K) ∧
+      1 - ecc ^ 2 = (k / (nr + k)) ^ 2 := by
+  have hkpos : (0 : ℝ) < k := by exact_mod_cast Nat.pos_of_ne_zero hk
+  have hn : (0 : ℝ) < nr + k := by
+    have : (0 : ℝ) ≤ nr := Nat.cast_nonneg _
+    linarith
+  have hs' : s = (nr + k) * ħ := by rw [angular] at radial; linarith
+  have hX : 0 < ((nr + k) * ħ) ^ 2 := pow_pos (mul_pos hn hħ) 2
+  have haeq : m * K * a = ((nr + k) * ħ) ^ 2 := by rw [← hs, hs']
+  have hmK : 0 < m * K := mul_pos hm hK
+  refine ⟨?_, ?_, ?_⟩
+  · rw [energy, div_eq_div_iff (by positivity) (mul_pos two_pos hX).ne']
+    linear_combination (2 * K) * haeq
+  · rw [eq_div_iff hmK.ne']
+    linear_combination haeq
+  · have h := shape
+    rw [angular, haeq] at h
+    have h0 : ħ ^ 2 * ((1 - ecc ^ 2) * (nr + k) ^ 2 - k ^ 2) = 0 := by linear_combination -h
+    rcases mul_eq_zero.mp h0 with h' | h'
+    · exact absurd h' (pow_ne_zero 2 hħ.ne')
+    · rw [div_pow, eq_div_iff (pow_ne_zero 2 hn.ne')]
+      linarith
+
+/-- **How flat the ellipses are.** The short half-axis `b` of an ellipse
+satisfies `b² = a² (1 − ecc²)`, so for a Sommerfeld orbit `b/a = k/n`:
+the circle has `k = n`, and the smallest `k` gives the most stretched orbit. -/
+theorem sommerfeld_axis_ratio {a b k n : ℝ} (ha : 0 < a) (hb : 0 < b) (hk : 0 < k) (hn : 0 < n)
+    (h : b ^ 2 = a ^ 2 * (k / n) ^ 2) : b / a = k / n := by
+  have h4 : (b - a * (k / n)) * (b + a * (k / n)) = 0 := by linear_combination h
+  rcases mul_eq_zero.mp h4 with h5 | h5
+  · rw [div_eq_iff ha.ne']
+    linear_combination h5
+  · have : 0 < b + a * (k / n) := by positivity
+    linarith
+
 end Movement

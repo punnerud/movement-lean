@@ -141,6 +141,7 @@ def point(R, funcs):
     print(f"R = {R:4.1f}  {m} orbitals  full CI {out['full_ci'] * k:10.4f} K   dispersion {e_disp * k:9.4f} K   "
           f"HF {hf * k:10.4f} K   extra repulsion {(out['full_ci'] - e_disp - hf) * k:8.4f} K   "
           f"({out['seconds']} s)", flush=True)
+    print("JSON", json.dumps(out), flush=True)
     return out
 
 
