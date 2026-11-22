@@ -1,0 +1,30 @@
+{
+  "Be_full_ci_spd": {
+    "E_Be_hartree": -14.660273055915418,
+    "E_BePlus_hartree": -14.31827865638781,
+    "orbitals": 39,
+    "determinants": 549081,
+    "s_keep": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      7,
+      9
+    ],
+    "p_exponents": [
+      0.06,
+      0.2,
+      0.7,
+      2.5,
+      8.0
+    ],
+    "d_exponents": [
+      0.2,
+      0.7,
+      2.5
+    ],
+    "seconds": 173
+  }
+}

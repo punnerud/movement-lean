@@ -231,6 +231,7 @@ Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](http
 | Be, ionization energy | Hartree–Fock | 14 %, **fails**: strong 2s–2p correlation |
 | Be, ionization energy | full configuration interaction with s and p orbitals | 0.43 % |
 | Be, ionization energy | + d orbitals for the two outer electrons (composite) | 0.25 % |
+| Be, ionization energy | full configuration interaction, all four electrons, s, p and d (549 081 determinants, precomputed) | 0.18 % |
 | H⁻, electron affinity | Hartree–Fock | negative, **fails**: predicts that the ion does not exist |
 | H⁻, electron affinity | full configuration interaction, spherical orbitals only | 48 %, **fails**: bound, but only half the binding |
 | H⁻, electron affinity | Hylleraas | 0.07 % |
@@ -302,7 +303,7 @@ Two things in the reference data are worth knowing:
 
 Every row states in advance whether the model should work, and `--check` fails if a row that should match misses, or one that should fail starts matching.
 
-**What this is and is not.** The numerical part handles two electrons accurately, and three or four electrons by full configuration interaction with s, p and d orbitals (p and d orbitals are built as first and second differences of shifted s-Gaussians). For Be the d-orbital step is a composite: its effect is computed with the 1s² core frozen and added to the all-electron result, so that row is an estimate rather than a strict upper bound. What is left for Be (0.25 %) is mostly correlation between the core and the outer electrons. It is a demonstration that the same variational principle carries from the Lean theorems to real numbers, not a replacement for a quantum chemistry package.
+**What this is and is not.** The numerical part handles two electrons accurately, and three or four electrons by full configuration interaction with s, p and d orbitals (p and d orbitals are built as first and second differences of shifted s-Gaussians). For Be the d-orbital step is a composite: its effect is computed with the 1s² core frozen and added to the all-electron result, so that row is an estimate rather than a strict upper bound. The full four-electron calculation with d orbitals needs about 15 GB of memory, so it is run separately (`python3 analyzer/be_full_ci.py`, three minutes on a 36 GB Apple M3) and its result is stored in `analyzer/precomputed.json`. It confirms the composite estimate and improves on it (0.25 % → 0.18 %); what is left needs f orbitals and larger sets. It is a demonstration that the same variational principle carries from the Lean theorems to real numbers, not a replacement for a quantum chemistry package.
 
 ---
 

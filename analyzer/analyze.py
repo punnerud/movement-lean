@@ -22,6 +22,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "analyzer"))
 DATA = json.loads((ROOT / "analyzer" / "reference_data.json").read_text())
 
+_pre = ROOT / "analyzer" / "precomputed.json"
+PRECOMPUTED = json.loads(_pre.read_text()) if _pre.exists() else {}
+
 try:
     import quantum
 except ImportError:                      # numpy missing
@@ -292,12 +295,23 @@ if quantum is not None:
         fix="the two outer electrons spend part of the time in 2p instead of 2s",
         )
     be_d = quantum.beryllium_d_correction()
-    row(G_NUM, "Be", "first ionization energy", "+ d orbitals for the two outer electrons",
+    be_comp_row = row(G_NUM, "Be", "first ionization energy", "+ d orbitals for the two outer electrons",
         "not formalised", (be_ion_ci - be_ci + be_d) * HARTREE_EV * recoil("9Be", 4), ie["Be"], "eV",
         "ok", 4e-3, u_n, base=be_sp_row,
         fix="d orbitals let the outer pair avoid each other at an angle",
         note="composite: the d-orbital change is computed with the 1s² core frozen and added; "
              "the remaining 0.25 % is mostly correlation between core and outer electrons")
+    pre = PRECOMPUTED.get("Be_full_ci_spd")
+    if pre:
+        row(G_NUM, "Be", "first ionization energy",
+            "full CI, all four electrons, s, p and d ("
+            + f"{pre['determinants']:,}".replace(",", " ") + " determinants)",
+            "rayleigh_ritz_bound",
+            (pre["E_BePlus_hartree"] - pre["E_Be_hartree"]) * HARTREE_EV * recoil("9Be", 4), ie["Be"],
+            "eV", "ok", 3e-3, u_n, base=be_comp_row,
+            fix="core and outer electrons correlated together, no frozen core",
+            note="precomputed with analyzer/be_full_ci.py (needs about 15 GB of memory); "
+                 "the remaining 0.2 % needs f orbitals and larger sets")
 
     # H-: a proton with two electrons. Bound only because the electrons avoid each other.
     hm_hf = quantum.atom_hf(1, 1, 1)
@@ -350,6 +364,9 @@ if quantum is not None:
                    ("Li⁺: full CI ≥ exact", li_ion_ci, bench["LiPlus_exact"]),
                    ("Be: HF ≥ full CI (s, p)", be, be_ci),
                    ("Be: full CI ≥ exact", be_ci, bench["Be_exact"]),
+                   *([("Be: more orbitals lower the energy (s,p ≥ s,p,d)", be_ci, pre["E_Be_hartree"]),
+                      ("Be: full CI (s, p, d) ≥ exact", pre["E_Be_hartree"], bench["Be_exact"])]
+                     if pre else []),
                    ("H⁻: HF ≥ s-only CI", hm_hf, hm_s),
                    ("H⁻: s-only CI ≥ Hylleraas", hm_s, hm_hyl),
                    ("H⁻: Hylleraas ≥ exact", hm_hyl, bench["HMinus_exact"])]
