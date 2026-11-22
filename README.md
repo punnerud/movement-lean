@@ -249,6 +249,8 @@ The methods themselves are not formalised. Lean covers the principle behind them
 
 **H₂ (shared electrons).** The computed curve has a minimum at the bond length, rises steeply when the nuclei are pushed together, and levels off when they are pulled apart: beyond about 3 Å the molecule is two free atoms. It follows published benchmark energies to 1.3 % to 4.3 % between 0.5 Å and 2.1 Å. Forcing both electrons to stay in one shared orbital (Hartree–Fock) gives a curve that keeps rising, 6 eV too high at large distance, because half of the time it puts both electrons on the same atom.
 
+**H₂ with equal spins.** The bond exists only when the two spins are opposite. With equal spins the pair function is antisymmetric, so the electrons are never at the same point and cannot gather between the nuclei. The same code then gives a curve that repels at every distance: 5.9 eV above two free atoms at the bond length, which is 10.6 eV above the bonded state. The difference is electrostatic energy selected by the Pauli principle; the direct magnetic force between the two spins is about 10⁵ times smaller. It follows the Kołos–Wolniewicz benchmark to 0.4 % to 2.8 % between 0.74 Å and 1.6 Å. `--check` asserts that this curve stays above two free atoms from 0.64 Å to 3.2 Å; at shorter distances other equal-spin states come close and are not tracked.
+
 **NaCl (transferred electron).** Here the picture of two opposite charges works, as in a capacitor, but with point charges the energy follows `−e²/r` rather than growing linearly:
 
 | NaCl | Model | Error |

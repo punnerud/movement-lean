@@ -94,8 +94,12 @@ def uhf(S, h, eri, n_alpha, n_beta, e_nuc=0.0, iterations=400, tol=1e-11):
     return energy
 
 
-def fci_two_electrons(S, h, eri, e_nuc=0.0):
-    """Exact singlet ground state of two electrons in the given basis."""
+def fci_two_electrons(S, h, eri, e_nuc=0.0, triplet=False):
+    """Exact lowest state of two electrons in the given basis.
+
+    Singlet (opposite spins): the spatial pair function is symmetric.
+    Triplet (equal spins): it is antisymmetric, so the two electrons are never
+    at the same point."""
     X = orthogonalizer(S, 1e-8)
     m = X.shape[1]
     ho = X.T @ h @ X
@@ -107,13 +111,14 @@ def fci_two_electrons(S, h, eri, e_nuc=0.0):
     H = (np.einsum("ik,jl->ijkl", ho, eye) + np.einsum("ik,jl->ijkl", eye, ho)
          + g.transpose(0, 2, 1, 3))
     # restrict to spatially symmetric (singlet) pair functions
-    pairs = [(i, j) for i in range(m) for j in range(i, m)]
+    pairs = [(i, j) for i in range(m) for j in range(i + (1 if triplet else 0), m)]
     B = np.zeros((m * m, len(pairs)))
     for col, (i, j) in enumerate(pairs):
         if i == j:
             B[i * m + j, col] = 1.0
         else:
-            B[i * m + j, col] = B[j * m + i, col] = math.sqrt(0.5)
+            B[i * m + j, col] = math.sqrt(0.5)
+            B[j * m + i, col] = -math.sqrt(0.5) if triplet else math.sqrt(0.5)
     Hs = B.T @ H.reshape(m * m, m * m) @ B
     return float(np.linalg.eigvalsh(Hs)[0]) + e_nuc
 
@@ -252,14 +257,15 @@ def h2_energy(R):
 
 
 def h2_point(R):
-    """(full CI energy, Hartree-Fock energy) of H2 at distance R, same basis.
+    """(full CI singlet, Hartree-Fock, full CI triplet) energies of H2 at distance R.
 
     With one alpha and one beta electron started from the same density, the
     Hartree-Fock solution keeps both electrons in one shared orbital."""
     exps, cen = h2_basis(R)
     nuclei = [(1, (0, 0, -R / 2)), (1, (0, 0, R / 2))]
     S, h, eri = integrals(exps, cen, nuclei)
-    return (fci_two_electrons(S, h, eri, e_nuc=1.0 / R), uhf(S, h, eri, 1, 1, e_nuc=1.0 / R))
+    return (fci_two_electrons(S, h, eri, e_nuc=1.0 / R), uhf(S, h, eri, 1, 1, e_nuc=1.0 / R),
+            fci_two_electrons(S, h, eri, e_nuc=1.0 / R, triplet=True))
 
 
 def hydrogen_atom_energy():

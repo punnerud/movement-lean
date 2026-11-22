@@ -1,6 +1,6 @@
 <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 320' font-family='Helvetica,Arial,sans-serif' font-size='13'>
 <rect width='900' height='320' fill='#ffffff'/>
-<text x='52' y='22' font-size='15' font-weight='bold' fill='#1f2933'>H₂: two shared electrons</text>
+<text x='52' y='22' font-size='15' font-weight='bold' fill='#1f2933'>H₂: two shared electrons, by spin</text>
 <line x1='117.5' y1='256.0' x2='117.5' y2='261.0' stroke='#616e7c'/><text x='117.5' y='275.0' text-anchor='middle' fill='#616e7c'>1</text>
 <line x1='182.9' y1='256.0' x2='182.9' y2='261.0' stroke='#616e7c'/><text x='182.9' y='275.0' text-anchor='middle' fill='#616e7c'>2</text>
 <line x1='248.4' y1='256.0' x2='248.4' y2='261.0' stroke='#616e7c'/><text x='248.4' y='275.0' text-anchor='middle' fill='#616e7c'>3</text>
@@ -17,13 +17,19 @@
 <text transform='translate(13,148.0) rotate(-90)' text-anchor='middle' fill='#616e7c'>energy (eV)</text>
 <path d='M79.7,155.3 L83.2,182.0 L86.6,199.1 L90.1,209.8 L93.6,215.9 L97.0,218.8 L100.5,219.5 L104.0,218.5 L107.4,216.4 L114.3,209.9 L121.3,201.8 L138.6,179.6 L155.9,158.9 L173.2,141.0 L190.5,126.2 L225.2,104.2 L259.8,89.7 L329.1,73.6 L398.4,66.0' fill='none' stroke='#dc2626' stroke-width='2.2' stroke-dasharray='6 4'/>
 <path d='M79.7,170.9 L83.2,197.7 L86.6,214.9 L90.1,225.6 L93.6,231.9 L97.0,235.0 L100.5,235.9 L104.0,235.2 L107.4,233.4 L114.3,227.8 L121.3,220.7 L138.6,202.2 L155.9,186.9 L173.2,176.4 L190.5,170.0 L225.2,164.9 L259.8,163.7 L329.1,163.4 L398.4,163.4' fill='none' stroke='#2563eb' stroke-width='2.2'/>
+<path d='M93.6,45.2 L97.0,60.0 L100.5,72.5 L104.0,83.1 L107.4,92.4 L114.3,107.7 L121.3,119.8 L138.6,140.1 L155.9,151.4 L173.2,157.3 L190.5,160.4 L225.2,162.8 L259.8,163.3 L329.1,163.4 L398.4,163.4' fill='none' stroke='#059669' stroke-width='2.2'/>
+<circle cx='100.5' cy='72.8' r='3.5' fill='#1f2933'/>
+<circle cx='121.3' cy='120.2' r='3.5' fill='#1f2933'/>
+<circle cx='155.9' cy='151.7' r='3.5' fill='#1f2933'/>
+<circle cx='190.5' cy='160.6' r='3.5' fill='#1f2933'/>
+<text x='241.8' y='149.5' fill='#059669'>equal spins: always repels</text>
 <circle cx='86.6' cy='215.7' r='3.5' fill='#1f2933'/>
 <circle cx='121.3' cy='221.4' r='3.5' fill='#1f2933'/>
 <circle cx='155.9' cy='187.5' r='3.5' fill='#1f2933'/>
 <circle cx='190.5' cy='170.3' r='3.5' fill='#1f2933'/>
 <circle cx='259.8' cy='163.8' r='3.5' fill='#1f2933'/>
 <text x='130.5' y='55.4' fill='#dc2626'>forced sharing (Hartree–Fock)</text>
-<text x='202.5' y='203.5' fill='#2563eb'>full CI: levels off at two free atoms</text>
+<text x='202.5' y='203.5' fill='#2563eb'>opposite spins: a bond</text>
 <text x='202.5' y='225.1' fill='#1f2933'>● benchmark values</text>
 <text x='502' y='22' font-size='15' font-weight='bold' fill='#1f2933'>NaCl: one transferred electron</text>
 <line x1='562.0' y1='256.0' x2='562.0' y2='261.0' stroke='#616e7c'/><text x='562.0' y='275.0' text-anchor='middle' fill='#616e7c'>2</text>

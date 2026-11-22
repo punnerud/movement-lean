@@ -128,6 +128,10 @@ Each formula's derivation is proved in Lean where a theorem is named; the compar
 | H₂ at 2.12 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 0.4266712 eV | 0.4460015 eV | -4.33 % | matches (reference: benchmark calculation, not a measurement) | 433 414× |
 | H₂ at 3.18 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 0.01998315 eV | 0.02274077 eV | -12 % | fails, as expected (the weak long-range attraction needs more diffuse, directional orbitals) | 1 212 634× |
 | H₂ at 3.18 Å | energy below two free atoms | Hartree–Fock: both electrons forced to share one orbital | `rayleigh_ritz_bound` | -4.77748 eV | 0.02274077 eV | -21108 % | fails, as expected (a shared orbital puts both electrons on one atom half the time) | 2 110 843 273× |
+| H₂, equal spins, at 0.74 Å | energy above two free atoms | full CI, antisymmetric pair function | `rayleigh_ritz_bound` | 5.895022 eV | 5.873575 eV | +0.37 % | matches (reference: benchmark calculation, not a measurement) | 365× |
+| H₂, equal spins, at 1.06 Å | energy above two free atoms | full CI, antisymmetric pair function | `rayleigh_ritz_bound` | 2.829369 eV | 2.801042 eV | +1.01 % | matches (reference: benchmark calculation, not a measurement) | 1 011× |
+| H₂, equal spins, at 1.59 Å | energy above two free atoms | full CI, antisymmetric pair function | `rayleigh_ritz_bound` | 0.7828136 eV | 0.7616358 eV | +2.78 % | matches (reference: benchmark calculation, not a measurement) | 2 781× |
+| H₂, equal spins, at 2.12 Å | energy above two free atoms | full CI, antisymmetric pair function | `rayleigh_ritz_bound` | 0.1935267 eV | 0.1801911 eV | +7.40 % | fails, as expected (the weak long-range repulsion needs more diffuse, directional orbitals) | 7 401× |
 
 ## Where do the deviations come from?
 
@@ -229,4 +233,4 @@ Each line follows one quantity from the simplest model to the best one here.
 - The uncertainty column uses one representative relative uncertainty per class of data (see relative_uncertainty in reference_data.json), not a separate figure for every value.
 - The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
 
-**90 comparisons: 77 inside the model's domain and matching, 13 documented limits.**
+**94 comparisons: 80 inside the model's domain and matching, 14 documented limits.**

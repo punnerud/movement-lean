@@ -412,6 +412,24 @@ if quantum is not None:
         "Hartree–Fock: both electrons forced to share one orbital", "rayleigh_ritz_bound",
         (e_atoms - CURVE[6.0][1]) * HARTREE_EV, exact6, "eV", "limit", 0.05, 1e-7,
         "a shared orbital puts both electrons on one atom half the time")
+    for key, bench_t in DATA["H2_triplet_benchmark_hartree"].items():
+        R = float(key)
+        row(G_BOND, f"H₂, equal spins, at {R * BOHR_A:.2f} Å", "energy above two free atoms",
+            "full CI, antisymmetric pair function", "rayleigh_ritz_bound",
+            (CURVE[R][2] - e_atoms) * HARTREE_EV, (bench_t + 1.0) * HARTREE_EV, "eV",
+            "ok" if R < 3.5 else "limit", 0.04 if R < 3.5 else 0.05, 1e-5,
+            "reference: benchmark calculation, not a measurement" if R < 3.5 else
+            "the weak long-range repulsion needs more diffuse, directional orbitals")
+    # below about 0.6 Å other equal-spin states come close in energy, so start at 1.2 bohr
+    rs_t = [R for R in sorted(CURVE) if 1.2 <= R <= 6.0]
+    STABILITY += [("H₂ with equal spins repels at every distance checked (0.64 to 3.2 Å)",
+                   all(CURVE[R][2] > e_atoms for R in rs_t)),
+                  ("H₂ with equal spins: energy falls steadily as the atoms separate",
+                   all(CURVE[a][2] > CURVE[b][2] for a, b in zip(rs_t, rs_t[1:]))),
+                  ("H₂ with equal spins ends as two free atoms",
+                   abs(CURVE[10.0][2] - e_atoms) * HARTREE_EV < 5e-3),
+                  ("at the bond length, equal spins cost more than 10 eV",
+                   (CURVE[1.4][2] - CURVE[1.4][0]) * HARTREE_EV > 10.0)]
     STABILITY += [("H₂ full CI separates into two free atoms",
                    abs(CURVE[10.0][0] - e_atoms) * HARTREE_EV < 1e-3),
                   ("H₂ Hartree–Fock fails to separate (several eV too high)",
@@ -452,16 +470,21 @@ def bond_figure():
         extra = f" stroke-dasharray='{dash}'" if dash else ""
         parts.append(f"<path d='{d}' fill='none' stroke='{color}' stroke-width='2.2'{extra}/>")
 
-    px, py = panel(0, "H₂: two shared electrons", 5.5, -6, 8, [1, 2, 3, 4, 5], [-4, -2, 0, 2, 4, 6])
+    px, py = panel(0, "H₂: two shared electrons, by spin", 5.5, -6, 8, [1, 2, 3, 4, 5], [-4, -2, 0, 2, 4, 6])
     if CURVE:
         e_atoms = 2 * e_h
         rs = sorted(CURVE)
         path(px, py, [(R * BOHR_A, (CURVE[R][1] - e_atoms) * HARTREE_EV) for R in rs], "#dc2626", "6 4")
         path(px, py, [(R * BOHR_A, (CURVE[R][0] - e_atoms) * HARTREE_EV) for R in rs], "#2563eb")
+        path(px, py, [(R * BOHR_A, (CURVE[R][2] - e_atoms) * HARTREE_EV) for R in rs
+                      if R >= 1.2 and (CURVE[R][2] - e_atoms) * HARTREE_EV <= 8], "#059669")
+        for key, val in DATA["H2_triplet_benchmark_hartree"].items():
+            parts.append(f"<circle cx='{px(float(key) * BOHR_A):.1f}' cy='{py((val + 1) * HARTREE_EV):.1f}' r='3.5' fill='#1f2933'/>")
+        parts.append(f"<text x='{px(2.9):.1f}' y='{py(0.9):.1f}' fill='#059669'>equal spins: always repels</text>")
         for key, val in DATA["H2_curve_benchmark_hartree"].items():
             parts.append(f"<circle cx='{px(float(key) * BOHR_A):.1f}' cy='{py((val + 1) * HARTREE_EV):.1f}' r='3.5' fill='#1f2933'/>")
         parts.append(f"<text x='{px(1.2):.1f}' y='{py(7.0):.1f}' fill='#dc2626'>forced sharing (Hartree–Fock)</text>")
-        parts.append(f"<text x='{px(2.3):.1f}' y='{py(-2.6):.1f}' fill='#2563eb'>full CI: levels off at two free atoms</text>")
+        parts.append(f"<text x='{px(2.3):.1f}' y='{py(-2.6):.1f}' fill='#2563eb'>opposite spins: a bond</text>")
         parts.append(f"<text x='{px(2.3):.1f}' y='{py(-4.0):.1f}' fill='#1f2933'>● benchmark values</text>")
 
     px, py = panel(450, "NaCl: one transferred electron", 12, -6, 3, [2, 4, 6, 8, 10, 12], [-4, -2, 0, 2])
@@ -631,6 +654,8 @@ tr.sum td{background:var(--code);font-weight:600}li{margin:6px 0;max-width:820px
                "over a short distance, then the curve levels off: the shared electrons go back to one atom each. "
                "NaCl follows the −e²/r attraction of two ions out to about 9.4 Å, where it becomes cheaper for the "
                "electron to jump back and leave two neutral atoms.</p>"
+               "<p class='lede'>The bond exists only for opposite spins. With equal spins the two electrons can never be at "
+               "the same point, so they cannot gather between the nuclei, and the atoms repel at every distance.</p>"
                "<div class='wrap' style='padding:8px;background:#fff'><img src='img/bond.svg' alt='Energy curves "
                "of H2 and NaCl' style='width:100%;min-width:640px'></div>")
     out.append("</table></div><h2>Caveats</h2><ul>" + "".join(f"<li>{c}</li>" for c in CAVEATS) + "</ul>")

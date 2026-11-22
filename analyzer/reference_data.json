@@ -74,7 +74,8 @@
     "H electron affinity 0.754195(19) eV (Lykke, Murray, Lineberger 1991) and the H- benchmark energies (HF -0.487930, exact -0.527751017 hartree) are quoted from the literature and were not re-verified online.",
     "NaCl: omega_e from Irikura 2007; D_0 = 4.23 +/- 0.09 eV (flame photometry / thermochemistry, 1961); dipole is the equilibrium value 8.971 D (v=0 value is 9.0012 D).",
     "NaCl ion polarizabilities 0.179 and 3.66 A^3 are the handbook values commonly used in Rittner-type models. Modern ab initio free-ion values are 0.148 and about 5.36 A^3, so the Cl- choice matters.",
-    "H2 curve benchmark energies: Pachucki, Phys. Rev. A 82, 032509 (2010)."
+    "H2 curve benchmark energies: Pachucki, Phys. Rev. A 82, 032509 (2010).",
+    "H2 triplet (b 3Sigma_u+) energies: Kolos & Wolniewicz, J. Chem. Phys. 43, 2429 (1965), Table VII; variational upper bounds from 1965, not checked against later work."
   ],
   "vibration_cm1": {
     "H2": [
@@ -158,5 +159,11 @@
     "Cl_electron_affinity_eV": 3.612725,
     "alpha_Na_plus_A3": 0.179,
     "alpha_Cl_minus_A3": 3.66
+  },
+  "H2_triplet_benchmark_hartree": {
+    "1.4": -0.7841501,
+    "2.0": -0.8970636,
+    "3.0": -0.9720104,
+    "4.0": -0.9933781
   }
 }
