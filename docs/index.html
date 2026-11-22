@@ -134,6 +134,28 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 </table>
 <p>The Bohr model is a stepping stone. It gets hydrogen's energies right, but real electrons are standing waves (section 5), not dots on orbits.</p>
 
+<h2>7. Is spin a circulation at the speed of light?</h2>
+<blockquote><strong>This section tests an idea, not established physics.</strong> Lean checks that the algebra is right, not that electrons behave this way.</blockquote>
+<p>Suppose the electron's spin <code>ħ/2</code> is the angular momentum of something going round, and that this circulation combines with the forward motion so the total speed is always <code>c</code>, like a helix.</p>
+<div class="card"><img src="img/spin.svg" alt="Helix model and magnetic moment test" style="width:100%;border-radius:8px"></div>
+<table>
+<tr><td class="thm">spinning_sphere_speed</td><td>a spinning ball of classical electron size would need a surface speed of about <code>171c</code>: ruled out</td></tr>
+<tr><td class="thm">zitter_radius</td><td>circulation at exactly <code>c</code> forces radius <code>ħ/2mc</code> = 1.9 × 10⁻¹³ m, the Zitterbewegung scale of the Dirac equation</td></tr>
+<tr><td class="thm">helix_speed</td><td><code>v² + u² = c²</code> gives <code>u = c·√(1 − v²/c²)</code>, the time-dilation factor</td></tr>
+<tr><td class="thm">classical_g_factor</td><td>any circulating point charge has <code>μ = (e/2m)·L</code>, so spin <code>ħ/2</code> gives half a Bohr magneton</td></tr>
+<tr><td class="thm">no_orbit_gives_both</td><td><strong>no-go:</strong> no radius and no speed give both the measured spin and the measured magnetic moment</td></tr>
+</table>
+<p>Checked against measurements:</p>
+<table>
+<tr><th>Quantity</th><th>Model</th><th>Measured</th><th></th></tr>
+<tr><td>Slow-down when moving</td><td><code>√(1 − v²/c²)</code></td><td>time dilation</td><td class="ok">matches</td></tr>
+<tr><td>Circulation radius</td><td>1.9 × 10⁻¹³ m</td><td>Compton-scale smearing (Darwin term)</td><td class="ok">right scale</td></tr>
+<tr><td>Magnetic moment</td><td>0.500 μ<sub>B</sub></td><td>1.00116 μ<sub>B</sub></td><td class="bad">factor 2 off</td></tr>
+<tr><td>Size in collisions</td><td>~10⁻¹³ m</td><td>point-like below ~10⁻¹⁸ m</td><td class="bad">far too large</td></tr>
+<tr><td>Rotation by 360°</td><td>back to start</td><td>spin-½ needs 720°</td><td class="bad">not reproducible</td></tr>
+</table>
+<p>So a point on a helix cannot be the whole story, and the factor 2 is a theorem rather than a tuning problem. What survives is weaker: spin as a circulation at the Compton scale of the <em>wave field</em>, which reproduces both the spin and g = 2 inside standard Dirac theory (Ohanian, 1986).</p>
+
 <h2 id="further">Where this leads: Boltzmann and Navier–Stokes</h2>
 <p>The pieces above are textbook physics. The <em>bridge</em> between them is the deep part: showing that deterministic hard-sphere collisions really produce random-walk behaviour, and that it averages out to fluid equations.</p>
 <table>

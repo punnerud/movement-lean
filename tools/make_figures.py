@@ -270,9 +270,58 @@ def bohr():
     (OUT / "bohr.svg").write_text(svg(W, H, "\n".join(out)))
 
 
+# ------------------------------------------------------------- 8. spin test
+def spin():
+    W, H = 880, 400
+    out = [text(215, 34, "The model: a helix at total speed c", 17, anchor="middle", weight="bold")]
+    # helix drawn as a projected coil
+    L, R, mid, amp = 40, 400, 190, 55
+    back, front = [], []
+    turns = 6
+    for i in range(601):
+        a = i / 600 * turns * 2 * math.pi
+        x = L + 20 + i / 600 * (R - L - 40) + 30 * math.cos(a)
+        y = mid - amp * math.sin(a)
+        (front if math.cos(a) >= 0 else back).append((i, x, y))
+    def runs(pts):
+        seg, prev = [], None
+        for i, x, y in pts:
+            if prev is not None and i != prev + 1:
+                yield seg; seg = []
+            seg.append((x, y)); prev = i
+        if seg: yield seg
+    for seg in runs(back):
+        out.append(poly(seg, A, 2, opacity=0.3))
+    out.append(f"<line x1='{L}' y1='{mid}' x2='{R+20}' y2='{mid}' stroke='{MUTED}' stroke-width='1.5' stroke-dasharray='5 4' marker-end='url(#av)'/>")
+    for seg in runs(front):
+        out.append(poly(seg, A, 3))
+    out.append("<defs><marker id='av' markerWidth='10' markerHeight='10' refX='8' refY='5' orient='auto'>"
+               f"<path d='M0,0 L10,5 L0,10 z' fill='{MUTED}'/></marker></defs>")
+    out.append(text(R + 22, mid + 20, "v", 15, MUTED, "end", "bold"))
+    out.append(text(L + 6, mid - amp - 14, "u (circulation)", 14, A, weight="bold"))
+    out.append(text(215, 300, "v² + u² = c²", 18, INK, "middle", "bold"))
+    out.append(text(215, 326, "spin ħ/2 at speed c  ⇒  radius ħ/2mc", 14, MUTED, "middle"))
+    out.append(text(215, 346, "= 1.9 × 10⁻¹³ m", 14, MUTED, "middle"))
+    out.append(f"<line x1='440' y1='50' x2='440' y2='380' stroke='{GRID}' stroke-width='2'/>")
+    # right: magnetic moment bars
+    out.append(text(660, 34, "The test: magnetic moment", 17, anchor="middle", weight="bold"))
+    bx, top, base = 520, 80, 310
+    scale = (base - top) / 1.1
+    for i, (lab, val, col, note) in enumerate((
+            ("model", 0.5, B, "0.500 μB"),
+            ("measured", 1.00116, C, "1.00116 μB"))):
+        x = bx + i * 150
+        hgt = val * scale
+        out.append(f"<rect x='{x}' y='{base-hgt:.1f}' width='90' height='{hgt:.1f}' fill='{col}' rx='4'/>")
+        out.append(text(x + 45, base + 22, lab, 14, INK, "middle"))
+        out.append(text(x + 45, base - hgt - 10, note, 14, col, "middle", "bold"))
+    out.append(f"<line x1='{bx-20}' x2='{bx+260}' y1='{base}' y2='{base}' stroke='{MUTED}'/>")
+    out.append(text(660, 362, "Any circulating point charge gives g = 1.", 13, MUTED, "middle"))
+    out.append(text(660, 380, "The electron has g ≈ 2. Proved: no radius fixes this.", 13, MUTED, "middle"))
+    (OUT / "spin.svg").write_text(svg(W, H, "\n".join(out)))
 
 if __name__ == "__main__":
-    cbdr(); elastic(); rotation(); diffusion(); heat(); quantum(); bohr()
+    cbdr(); elastic(); rotation(); diffusion(); heat(); quantum(); bohr(); spin()
     docs = OUT.parent / "docs" / "img"
     docs.mkdir(parents=True, exist_ok=True)
     for f in OUT.glob("*.svg"):
