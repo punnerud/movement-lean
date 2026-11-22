@@ -1,0 +1,62 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 880 420' width='880' height='420' font-family='-apple-system,Segoe UI,Helvetica,Arial,sans-serif'>
+<rect width='880' height='420' fill='#ffffff' rx='12'/>
+<text x='200.0' y='36.0' font-size='18' fill='#1f2933' text-anchor='middle' font-weight='bold' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>Constant bearing → collision</text>
+<polyline points='120.0,360.0 360.0,240.0' fill='none' stroke='#dc2626' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.25'/>
+<circle cx='120.0' cy='360.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='360.0' cy='240.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='108.0' y='364.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t0</text>
+<polyline points='120.0,318.0 320.0,218.0' fill='none' stroke='#dc2626' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.4'/>
+<circle cx='120.0' cy='318.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='320.0' cy='218.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='108.0' y='322.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t1</text>
+<polyline points='120.0,276.0 280.0,196.0' fill='none' stroke='#dc2626' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.55'/>
+<circle cx='120.0' cy='276.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='280.0' cy='196.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='108.0' y='280.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t2</text>
+<polyline points='120.0,234.0 240.0,174.0' fill='none' stroke='#dc2626' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.7'/>
+<circle cx='120.0' cy='234.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='240.0' cy='174.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='108.0' y='238.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t3</text>
+<polyline points='120.0,192.0 200.0,152.0' fill='none' stroke='#dc2626' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.85'/>
+<circle cx='120.0' cy='192.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='200.0' cy='152.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='108.0' y='196.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t4</text>
+<polyline points='120.0,150.0 160.0,130.0' fill='none' stroke='#dc2626' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='1.0'/>
+<circle cx='120.0' cy='150.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='160.0' cy='130.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='108.0' y='154.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t5</text>
+<text x='200.0' y='400.0' font-size='14' fill='#dc2626' text-anchor='middle' font-weight='bold' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>Sight lines stay parallel; range shrinks</text>
+<circle cx='120.0' cy='108.0' r='10' fill='none' stroke='#dc2626' stroke-width='2'/>
+<text x='136.0' y='113.0' font-size='13' fill='#dc2626' text-anchor='start' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>impact</text>
+<text x='640.0' y='36.0' font-size='18' fill='#1f2933' text-anchor='middle' font-weight='bold' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>Drifting bearing → pass</text>
+<polyline points='560.0,360.0 800.0,240.0' fill='none' stroke='#059669' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.25'/>
+<circle cx='560.0' cy='360.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='800.0' cy='240.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='548.0' y='364.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t0</text>
+<polyline points='560.0,318.0 755.0,205.0' fill='none' stroke='#059669' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.4'/>
+<circle cx='560.0' cy='318.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='755.0' cy='205.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='548.0' y='322.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t1</text>
+<polyline points='560.0,276.0 710.0,170.0' fill='none' stroke='#059669' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.55'/>
+<circle cx='560.0' cy='276.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='710.0' cy='170.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='548.0' y='280.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t2</text>
+<polyline points='560.0,234.0 665.0,135.0' fill='none' stroke='#059669' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.7'/>
+<circle cx='560.0' cy='234.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='665.0' cy='135.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='548.0' y='238.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t3</text>
+<polyline points='560.0,192.0 620.0,100.0' fill='none' stroke='#059669' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='0.85'/>
+<circle cx='560.0' cy='192.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='620.0' cy='100.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='548.0' y='196.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t4</text>
+<polyline points='560.0,150.0 575.0,65.0' fill='none' stroke='#059669' stroke-width='1.5' stroke-dasharray='5 4' stroke-linejoin='round' stroke-linecap='round' opacity='1.0'/>
+<circle cx='560.0' cy='150.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<circle cx='575.0' cy='65.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='548.0' y='154.0' font-size='11' fill='#7b8794' text-anchor='end' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>t5</text>
+<text x='640.0' y='400.0' font-size='14' fill='#059669' text-anchor='middle' font-weight='bold' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>Sight lines rotate; the boats miss</text>
+<line x1='440' y1='60' x2='440' y2='380' stroke='#e4e7eb' stroke-width='2'/>
+<circle cx='30.0' cy='70.0' r='6' fill='#2563eb' stroke='none' stroke-width='2'/>
+<text x='42.0' y='75.0' font-size='13' fill='#1f2933' text-anchor='start' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>you</text>
+<circle cx='90.0' cy='70.0' r='6' fill='#dc2626' stroke='none' stroke-width='2'/>
+<text x='102.0' y='75.0' font-size='13' fill='#1f2933' text-anchor='start' font-weight='normal' stroke='#ffffff' stroke-width='4' paint-order='stroke' stroke-linejoin='round'>other vessel</text>
+</svg>

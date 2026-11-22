@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collision Course to Diffusion</title>
+<meta name="description" content="From a sailor's collision rule to molecular diffusion, with every step proved in Lean 4.">
+<style>
+:root{
+  --bg:#fbfbfa; --card:#ffffff; --ink:#1f2933; --muted:#616e7c; --line:#e4e7eb;
+  --a:#2563eb; --b:#dc2626; --c:#059669; --code:#f3f4f6;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0f1115; --card:#171a21; --ink:#e5e7eb; --muted:#9aa5b1; --line:#2a2f3a;
+         --a:#60a5fa; --b:#f87171; --c:#34d399; --code:#1f232c; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:17px/1.6 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+main{max-width:860px;margin:0 auto;padding:32px 16px 80px}
+h1{font-size:clamp(28px,5vw,40px);line-height:1.15;margin:8px 0 12px}
+h2{font-size:24px;margin:56px 0 8px}
+.lede{font-size:19px;color:var(--muted)}
+blockquote{margin:20px 0;padding:12px 18px;border-left:4px solid var(--a);background:var(--card);border-radius:0 8px 8px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:18px 0}
+canvas{width:100%;display:block;border-radius:8px}
+.controls{display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:12px;align-items:center}
+.controls label{font-size:14px;color:var(--muted);display:flex;gap:8px;align-items:center}
+input[type=range]{width:160px;accent-color:var(--a)}
+button{font:inherit;font-size:14px;padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+.readout{font-variant-numeric:tabular-nums;font-size:15px}
+.readout b{color:var(--a)}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:15px}
+td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+.thm{font-family:ui-monospace,Menlo,monospace;font-size:13px;white-space:nowrap}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--code);color:var(--muted)}
+a{color:var(--a)}
+.ok{color:var(--c);font-weight:600}.bad{color:var(--b);font-weight:600}
+footer{margin-top:64px;color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+<span class="tag">Lean 4 · Mathlib · no <code>sorry</code></span>
+<h1>From collision course to diffusion</h1>
+<p class="lede">A sailor's rule of thumb, followed down to molecules, with every step machine-checked in Lean 4.</p>
+<blockquote>If another boat stays still in your windscreen while it grows larger, you are on a collision course.</blockquote>
+<p>Source and proofs: <a href="https://github.com/punnerud/movement-lean">github.com/punnerud/movement-lean</a> (<code>Movement.lean</code>).</p>
+
+<h2>1. Constant bearing, decreasing range</h2>
+<p>You (blue) sail straight up. Change the other vessel's course and speed. The dashed sight lines show the bearing over time. When they stay parallel, the boats meet.</p>
+<div class="card">
+  <canvas id="boats" height="360"></canvas>
+  <div class="controls">
+    <label>Other course <input id="hdg" type="range" min="-180" max="0" value="-120"></label>
+    <label>Other speed <input id="spd" type="range" min="10" max="100" value="45"></label>
+    <button id="snap">Set collision course</button>
+  </div>
+  <p class="readout" id="boatOut"></p>
+</div>
+<p>In Lean, with relative position <code>r(t) = r₀ + t·v</code>:</p>
+<table>
+<tr><td class="thm">cbdr_collision</td><td>velocity pointing straight at you ⇒ same direction throughout, range shrinks, impact at <code>t = 1/c</code></td></tr>
+<tr><td class="thm">collision_implies_cbdr</td><td>impact ⇒ constant bearing and strictly decreasing range beforehand</td></tr>
+<tr><td class="thm">no_collision_of_not_parallel</td><td>bearing drifts ⇒ never collide</td></tr>
+</table>
+
+<h2>2. Billiard balls: equal masses exchange energy best</h2>
+<p>A ball hits another at rest head-on. The fraction of kinetic energy handed over is <code>4m₁m₂/(m₁+m₂)²</code>. Lean proves this is ≤ 1, with equality <em>exactly</em> when the masses are equal (Newton's cradle).</p>
+<div class="card">
+  <canvas id="balls" height="150"></canvas>
+  <div class="controls">
+    <label>m₁ / m₂ <input id="ratio" type="range" min="-200" max="200" value="0"></label>
+    <button id="replay">Replay</button>
+  </div>
+  <p class="readout" id="ballOut"></p>
+</div>
+
+<h2>2b. Spinning molecules feel lighter</h2>
+<p>Real molecules can rotate. Hit one off-centre at lever arm <code>b</code> and part of the impulse spins it. Lean proves that the collision then behaves <em>exactly</em> like a head-on one against a lighter body with effective mass</p>
+<p style="text-align:center;font-size:20px"><code>M = m₂ I / (I + m₂ b²)</code></p>
+<p>Energy transfer is maximal when <code>m₁ = M</code>, so it is the effective mass that has to match, not the real one.</p>
+<div class="card">
+  <canvas id="rot" height="260"></canvas>
+  <div class="controls">
+    <label>lever arm b / k <input id="lever" type="range" min="0" max="300" value="100"></label>
+    <label>m₁ / m₂ <input id="ratio2" type="range" min="5" max="150" value="100"></label>
+  </div>
+  <p class="readout" id="rotOut"></p>
+</div>
+
+<h2>3. Diffusion: collisions make spreading slow</h2>
+<p>Every collision randomises the direction. Model it as a ±1 step at each tick. Lean proves that after <code>n</code> steps the <strong>mean squared displacement is exactly <code>n</code></strong>, so the cloud spreads like <code>√n</code>. Without collisions it would spread like <code>n</code>.</p>
+<div class="card">
+  <canvas id="walk" height="300"></canvas>
+  <div class="controls"><button id="walkReset">Restart</button></div>
+  <p class="readout" id="walkOut"></p>
+</div>
+
+<h2 id="further">Where this leads: Boltzmann and Navier–Stokes</h2>
+<p>The pieces above are textbook physics. The <em>bridge</em> between them is the deep part: showing that deterministic hard-sphere collisions really produce random-walk behaviour, and that it averages out to fluid equations.</p>
+<table>
+<tr><th>Scale</th><th>Description</th><th>Status</th></tr>
+<tr><td>Particles</td><td>Newton's laws plus elastic collisions (sections 1–2b)</td><td class="ok">proved here</td></tr>
+<tr><td>Kinetic</td><td>Boltzmann equation: the statistics of many collisions</td><td>Lanford (1975), short times only</td></tr>
+<tr><td>Fluid</td><td>Navier–Stokes: viscosity is <em>momentum</em> diffusing through collisions, <code>ν ≈ ⅓·v·λ</code>, the same shape as <code>D</code></td><td>Derived rigorously from hard spheres by Deng, Hani &amp; Ma (2025), part of Hilbert's sixth problem; not formalised in Lean</td></tr>
+<tr><td>Regularity</td><td>Do smooth 3D Navier–Stokes solutions exist for all time?</td><td class="bad">open Millennium Prize problem, untouched by this work</td></tr>
+</table>
+<p>Two of the results here have direct fluid-level counterparts:</p>
+<ul>
+<li><strong>Rotation → bulk viscosity.</strong> In polyatomic gases, energy moves between translation and rotation with a delay (the <code>rot_share</code> theorem quantifies one collision). That lag produces <em>bulk viscosity</em>, which vanishes for monatomic gases (Stokes' hypothesis) but not for gases like CO₂.</li>
+<li><strong>Mass mismatch → slow thermal equilibration.</strong> Because <code>4m₁m₂/(m₁+m₂)² ≈ 4mₑ/mᵢ</code> is tiny for electrons and ions, a plasma can sustain two different temperatures for a long time.</li>
+</ul>
+
+<footer>Proofs: Lean 4 + Mathlib. Figures and simulations are illustrations; the theorems are in <code>Movement.lean</code>.</footer>
+</main>
+
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function setup(id){
+  const c = document.getElementById(id), r = devicePixelRatio || 1;
+  const h = +c.getAttribute('height');
+  const fit = () => { c.width = c.clientWidth * r; c.height = h * r; };
+  fit(); addEventListener('resize', fit);
+  const x = c.getContext('2d');
+  return { c, x, w: () => c.width / r, h, r };
+}
+const $ = id => document.getElementById(id);
+
+/* ---------- 1. boats ---------- */
+(() => {
+  const S = setup('boats');
+  const own0 = {x: 0, y: 0}, ownV = {x: 0, y: 40};          // world units, y up
+  const oth0 = {x: 240, y: 120};
+  const T = 6;
+  function otherV(){
+    const a = +$('hdg').value * Math.PI / 180, s = +$('spd').value;
+    return {x: s * Math.cos(a), y: s * Math.sin(a) * -1};
+  }
+  $('snap').onclick = () => {
+    // aim so both reach (0, 240) at t = 6
+    const vx = (0 - oth0.x) / T, vy = (40 * T - oth0.y) / T;
+    const s = Math.hypot(vx, vy);
+    $('spd').value = Math.round(s);
+    $('hdg').value = Math.round(-Math.atan2(vy, vx) * 180 / Math.PI);
+    draw();
+  };
+  function draw(){
+    const {x, h, r} = S, w = S.w();
+    x.setTransform(r, 0, 0, r, 0, 0); x.clearRect(0, 0, w, h);
+    const sc = Math.min(w / 520, h / 360), ox = w * 0.3, oy = h - 30;
+    const P = p => [ox + p.x * sc, oy - p.y * sc];
+    const v = otherV();
+    const rv = {x: v.x - ownV.x, y: v.y - ownV.y}, r0 = {x: oth0.x - own0.x, y: oth0.y - own0.y};
+    const tc = Math.max(0, -(r0.x * rv.x + r0.y * rv.y) / (rv.x ** 2 + rv.y ** 2 || 1));
+    const cpa = Math.hypot(r0.x + tc * rv.x, r0.y + tc * rv.y);
+    const hit = cpa < 12;
+    let bearings = [];
+    for (let k = 0; k <= T; k++){
+      const o = {x: own0.x + ownV.x * k, y: own0.y + ownV.y * k};
+      const p = {x: oth0.x + v.x * k, y: oth0.y + v.y * k};
+      bearings.push(Math.atan2(p.x - o.x, p.y - o.y) * 180 / Math.PI);
+      x.globalAlpha = .25 + .75 * k / T;
+      x.setLineDash([5, 4]); x.strokeStyle = hit ? css('--b') : css('--c'); x.lineWidth = 1.5;
+      x.beginPath(); x.moveTo(...P(o)); x.lineTo(...P(p)); x.stroke(); x.setLineDash([]);
+      for (const [q, col] of [[o, '--a'], [p, '--b']]){
+        x.fillStyle = css(col); x.beginPath(); x.arc(...P(q), 6, 0, 7); x.fill();
+      }
+      x.globalAlpha = 1;
+    }
+    const drift = Math.abs(bearings[T] - bearings[0]);
+    $('boatOut').innerHTML = `Bearing change over the run: <b>${drift.toFixed(1)}°</b> · closest approach: <b>${cpa.toFixed(0)}</b> units · ` +
+      (hit ? '<span class="bad">collision course</span>' : '<span class="ok">boats pass</span>');
+  }
+  $('hdg').oninput = $('spd').oninput = draw; addEventListener('resize', draw); draw();
+})();
+
+/* ---------- 2. balls ---------- */
+(() => {
+  const S = setup('balls'); let t0 = performance.now();
+  const ratio = () => 10 ** (+$('ratio').value / 100);
+  $('replay').onclick = () => t0 = performance.now();
+  $('ratio').oninput = () => t0 = performance.now();
+  function frame(now){
+    const {x, h, r} = S, w = S.w();
+    x.setTransform(r, 0, 0, r, 0, 0); x.clearRect(0, 0, w, h);
+    const q = ratio(), m1 = q, m2 = 1, u1 = 1;
+    const v1 = (m1 - m2) / (m1 + m2) * u1, v2 = 2 * m1 / (m1 + m2) * u1;
+    const r1 = 10 + 8 * Math.cbrt(m1 / Math.max(m1, m2)) * 2, r2 = 10 + 8 * Math.cbrt(m2 / Math.max(m1, m2)) * 2;
+    const t = ((now - t0) / 1000) % 4, tHit = 1.2, spd = w * 0.22;
+    const xHit = w * 0.45;
+    let x1, x2;
+    if (t < tHit){ x1 = xHit - r1 - r2 - spd * (tHit - t); x2 = xHit; }
+    else { x1 = xHit - r1 - r2 + v1 * spd * (t - tHit); x2 = xHit + v2 * spd * (t - tHit); }
+    const y = h / 2;
+    x.strokeStyle = css('--line'); x.beginPath(); x.moveTo(0, y + 32); x.lineTo(w, y + 32); x.stroke();
+    x.fillStyle = css('--b'); x.beginPath(); x.arc(x1, y, r1, 0, 7); x.fill();
+    x.fillStyle = css('--a'); x.beginPath(); x.arc(x2, y, r2, 0, 7); x.fill();
+    const f = 4 * m1 * m2 / (m1 + m2) ** 2;
+    $('ballOut').innerHTML = `m₁/m₂ = <b>${q < 1 ? '1/' + (1 / q).toFixed(2) : q.toFixed(2)}</b> · energy transferred: <b>${(100 * f).toFixed(1)}%</b>` +
+      (Math.abs(q - 1) < .02 ? ' · <span class="ok">Newton’s cradle: the first ball stops dead</span>' : '');
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ---------- 2b. rotation ---------- */
+(() => {
+  const S = setup('rot');
+  function draw(){
+    const {x, h, r} = S, w = S.w();
+    x.setTransform(r, 0, 0, r, 0, 0); x.clearRect(0, 0, w, h);
+    const b = +$('lever').value / 100, q = +$('ratio2').value / 100;   // I = m2 k^2, k = 1
+    const M = 1 / (1 + b * b), share = b * b / (1 + b * b);
+    const f = 4 * q * M / (q + M) ** 2, f0 = 4 * q / (q + 1) ** 2;
+    // molecule
+    const cx = Math.min(w * 0.28, 170), cy = h / 2, L = 70;
+    x.strokeStyle = css('--ink'); x.lineWidth = 6; x.beginPath(); x.moveTo(cx, cy - L); x.lineTo(cx, cy + L); x.stroke();
+    x.fillStyle = css('--muted');
+    for (const s of [-1, 1]){ x.beginPath(); x.arc(cx, cy + s * L, 20, 0, 7); x.fill(); }
+    const hy = cy - Math.min(b, 1.4) * 50;
+    x.strokeStyle = css('--b'); x.lineWidth = 3; x.beginPath(); x.moveTo(20, hy); x.lineTo(cx - 26, hy); x.stroke();
+    x.fillStyle = css('--b'); x.beginPath(); x.arc(20, hy, 9, 0, 7); x.fill();
+    x.setLineDash([4, 3]); x.strokeStyle = css('--c'); x.lineWidth = 2;
+    x.beginPath(); x.moveTo(cx - 40, hy); x.lineTo(cx - 40, cy); x.stroke(); x.setLineDash([]);
+    x.fillStyle = css('--c'); x.font = 'bold 15px sans-serif'; x.fillText('b', cx - 56, (hy + cy) / 2 + 5);
+    // bars
+    const bx = cx + 110, bw = Math.max(80, w - bx - 20), rows = [
+      ['effective mass M / m₂', M, '--a'],
+      ['energy → rotation', share, '--c'],
+      ['transfer (with spin)', f, '--b'],
+      ['transfer if no spin', f0, '--muted']];
+    x.font = '13px sans-serif';
+    rows.forEach(([lab, v, col], i) => {
+      const y = 30 + i * 55;
+      x.fillStyle = css('--muted'); x.fillText(lab, bx, y);
+      x.fillStyle = css('--line'); x.fillRect(bx, y + 8, bw, 14);
+      x.fillStyle = css(col); x.fillRect(bx, y + 8, bw * v, 14);
+      x.fillStyle = css('--ink'); x.fillText((100 * v).toFixed(0) + '%', bx + Math.min(bw * v + 6, bw - 36), y + 20);
+    });
+    $('rotOut').innerHTML = `Best match now: m₁/m₂ = M/m₂ = <b>${M.toFixed(2)}</b>` +
+      (Math.abs(q - M) < .03 ? ' · <span class="ok">matched: 100% transfer</span>' : '');
+  }
+  $('lever').oninput = $('ratio2').oninput = draw; addEventListener('resize', draw); draw();
+})();
+
+/* ---------- 3. random walk ---------- */
+(() => {
+  const S = setup('walk'), N = 300, MAXN = 400;
+  let pos, n, msd;
+  function reset(){ pos = new Float64Array(N); n = 0; msd = [0]; }
+  $('walkReset').onclick = reset; reset();
+  function frame(){
+    if (n < MAXN){
+      for (let s = 0; s < 2 && n < MAXN; s++){
+        let sum = 0;
+        for (let i = 0; i < N; i++){ pos[i] += Math.random() < .5 ? 1 : -1; sum += pos[i] ** 2; }
+        n++; msd.push(sum / N);
+      }
+    }
+    const {x, h, r} = S, w = S.w();
+    x.setTransform(r, 0, 0, r, 0, 0); x.clearRect(0, 0, w, h);
+    const half = w < 560 ? w : w / 2;
+    // left: the cloud
+    const cy = w < 560 ? h * 0.25 : h / 2, sx = half / 2 / 60;
+    x.fillStyle = css('--a'); x.globalAlpha = .35;
+    for (let i = 0; i < N; i++){ x.beginPath(); x.arc(half / 2 + pos[i] * sx, cy + ((i * 37) % 60 - 30), 2.5, 0, 7); x.fill(); }
+    x.globalAlpha = 1;
+    x.strokeStyle = css('--a'); x.lineWidth = 2;
+    for (const s of [-1, 1]){ x.beginPath(); x.moveTo(half / 2 + s * Math.sqrt(n) * sx, cy - 40); x.lineTo(half / 2 + s * Math.sqrt(n) * sx, cy + 40); x.stroke(); }
+    // right: MSD vs n
+    const L = w < 560 ? 40 : half + 40, R = w - 10, T = w < 560 ? h * 0.5 : 20, B = h - 25;
+    const X = k => L + k / MAXN * (R - L), Y = v => B - v / MAXN * (B - T);
+    x.strokeStyle = css('--line'); x.lineWidth = 1; x.strokeRect(L, T, R - L, B - T);
+    x.strokeStyle = css('--b'); x.setLineDash([5, 4]); x.beginPath(); x.moveTo(X(0), Y(0)); x.lineTo(X(Math.sqrt(MAXN)), Y(MAXN)); x.stroke();
+    x.strokeStyle = css('--muted'); x.beginPath(); x.moveTo(X(0), Y(0)); x.lineTo(X(MAXN), Y(MAXN)); x.stroke(); x.setLineDash([]);
+    x.strokeStyle = css('--a'); x.lineWidth = 2.5; x.beginPath();
+    msd.forEach((v, k) => k ? x.lineTo(X(k), Y(v)) : x.moveTo(X(0), Y(0))); x.stroke();
+    x.font = '12px sans-serif';
+    x.fillStyle = css('--muted'); x.fillText('n (Lean: MSD = n)', X(MAXN) - 110, Y(MAXN) + 16);
+    x.fillStyle = css('--b'); x.fillText('ballistic n²', X(Math.sqrt(MAXN)) + 6, T + 14);
+    x.fillStyle = css('--ink'); x.fillText('mean squared displacement', L + 6, B - 8);
+    $('walkOut').innerHTML = `step n = <b>${n}</b> · measured MSD = <b>${msd[n].toFixed(1)}</b> · predicted (proved) = <b>${n}</b> · RMS spread √n = <b>${Math.sqrt(n).toFixed(1)}</b>`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
