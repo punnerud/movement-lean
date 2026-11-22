@@ -167,6 +167,23 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 </table>
 <p>The 3-sphere is where spin-½ states live, which is why the 720° rule shows up here. The mathematics is standard. Reading it as literal motion of the electron is still an interpretation.</p>
 
+<h2>9. Waveguides and spacetime: slower than c, yet always c</h2>
+<p>Sections 7 and 8 explored "the total speed is always <code>c</code>" as an interpretation. Here are two places where it is established physics. Light between two mirrors zigzags at <code>c</code> and so advances more slowly. Raise the frequency and the zigzag flattens.</p>
+<div class="card">
+  <canvas id="guide" height="210"></canvas>
+  <div class="controls"><label>frequency ω / ω<sub>c</sub> <input id="freq" type="range" min="103" max="500" value="140"></label></div>
+  <p class="readout" id="guideOut"></p>
+</div>
+<div class="card"><img src="img/waveguide.svg" alt="Waveguide zigzag and dispersion relation" style="width:100%;border-radius:8px"></div>
+<table>
+<tr><td class="thm">waveguide_zigzag</td><td>forward speed and sideways speed combine to exactly <code>c</code></td></tr>
+<tr><td class="thm">group_lt_c, phase_gt_c</td><td>a pulse goes slower than <code>c</code>; the crests go faster but carry no signal</td></tr>
+<tr><td class="thm">waveguide_mass</td><td>the dispersion relation is <code>E² = (mc²)² + (pc)²</code> with <code>m = ħω_c/c²</code>: the cutoff acts as mass</td></tr>
+<tr><td class="thm">spacetime_speed</td><td>speed through space and speed through time combine to <code>c</code></td></tr>
+<tr><td class="thm">energy_momentum</td><td><code>E = γmc²</code> and <code>p = γmv</code> give the same relation for a real particle</td></tr>
+</table>
+<p>A massive particle and light trapped in a waveguide therefore obey the same equations. Light slowed in glass is a different effect, caused by interference with waves re-radiated by the material's electrons.</p>
+
 <h2 id="further">Where this leads: Boltzmann and Navier–Stokes</h2>
 <p>The pieces above are textbook physics. The <em>bridge</em> between them is the deep part: showing that deterministic hard-sphere collisions really produce random-walk behaviour, and that it averages out to fluid equations.</p>
 <table>
@@ -382,6 +399,34 @@ const $ = id => document.getElementById(id);
     x.fillStyle = css('--b'); x.fillText('heat: real D', 14, 18);
     x.fillStyle = css('--a'); x.fillText('Schrödinger: D = iħ/2m', half + 14, 18);
     $('modeOut').innerHTML = `heat amplitude: <b>${(100 * decay).toFixed(0)}%</b> (decays as exp(−Dk²t)) · quantum amplitude: <b>100%</b> (proved constant)`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ---------- 9. waveguide ---------- */
+(() => {
+  const S = setup('guide'); let t0 = performance.now();
+  function frame(now){
+    const {x, h, r} = S, w = S.w();
+    x.setTransform(r, 0, 0, r, 0, 0); x.clearRect(0, 0, w, h);
+    const q = +$('freq').value / 100;              // ω / ω_c
+    const sin = 1 / q, cos = Math.sqrt(1 - sin * sin);   // sideways and forward fractions of c
+    const top = 40, bot = h - 60, gap = bot - top, L = 16, R = w - 16;
+    x.strokeStyle = css('--ink'); x.lineWidth = 4;
+    for (const y of [top, bot]){ x.beginPath(); x.moveTo(L, y); x.lineTo(R, y); x.stroke(); }
+    const dx = gap * cos / sin;                     // forward distance per crossing
+    x.strokeStyle = css('--a'); x.lineWidth = 2.5; x.beginPath(); x.moveTo(L, bot);
+    let px = L, up = true;
+    while (px < R){ const nx = Math.min(px + dx, R), f = (nx - px) / dx; x.lineTo(nx, up ? bot - gap * f : top + gap * f); px = nx; up = !up; }
+    x.stroke();
+    // a pulse travelling along the zigzag at constant speed c
+    const path = ((now - t0) / 1000 * 220) % ((R - L) / cos), fx = L + path * cos;
+    const n = Math.floor((fx - L) / dx), fr = ((fx - L) % dx) / dx, fy = n % 2 === 0 ? bot - gap * fr : top + gap * fr;
+    x.fillStyle = css('--b'); x.beginPath(); x.arc(fx, fy, 6, 0, 7); x.fill();
+    x.fillStyle = css('--c'); x.fillRect(L, h - 26, (R - L) * cos, 8);
+    x.fillStyle = css('--line'); x.fillRect(L + (R - L) * cos, h - 26, (R - L) * (1 - cos), 8);
+    $('guideOut').innerHTML = `forward speed: <b>${cos.toFixed(3)} c</b> · sideways: <b>${sin.toFixed(3)} c</b> · crest speed: <b>${(1 / cos).toFixed(2)} c</b> · forward² + sideways² = <b>${(cos * cos + sin * sin).toFixed(3)} c²</b>`;
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

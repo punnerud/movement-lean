@@ -370,9 +370,47 @@ def rotation4d():
     for x in (295, 585):
         out.append(f"<line x1='{x}' y1='50' x2='{x}' y2='370' stroke='{GRID}' stroke-width='2'/>")
     (OUT / "rotation4d.svg").write_text(svg(W, H, "\n".join(out)))
+# ------------------------------------------------------- 10. waveguide
+def waveguide():
+    W, H = 880, 380
+    out = ["<defs><marker id='aw' markerWidth='8' markerHeight='8' refX='6' refY='4' orient='auto'>"
+           f"<path d='M0,0 L8,4 L0,8 z' fill='{C}'/></marker></defs>"]
+    out.append(text(215, 34, "Light zigzags at c between two mirrors", 17, anchor="middle", weight="bold"))
+    L, R, top, bot = 40, 400, 110, 230
+    for y in (top, bot):
+        out.append(f"<line x1='{L}' y1='{y}' x2='{R}' y2='{y}' stroke='{INK}' stroke-width='4'/>")
+    pts, x, up = [], L, False
+    step = 60
+    while x <= R:
+        pts.append((x, bot if not up else top)); up = not up; x += step
+    out.append(poly(pts, A, 3))
+    out.append(text(L + 34, top + 54, "c", 16, A, weight="bold"))
+    out.append(f"<line x1='{L}' y1='{bot+38}' x2='{R}' y2='{bot+38}' stroke='{C}' stroke-width='3' marker-end='url(#aw)'/>")
+    out.append(text((L + R) / 2, bot + 62, "forward speed  v = c²k/ω  &lt;  c", 14, C, "middle", "bold"))
+    out.append(text((L + R) / 2, 330, "forward² + sideways² = c²", 16, INK, "middle", "bold"))
+    out.append(text((L + R) / 2, 352, "the same law as speed through space and time", 13, MUTED, "middle"))
+    out.append(f"<line x1='440' y1='50' x2='440' y2='370' stroke='{GRID}' stroke-width='2'/>")
+    # right: dispersion
+    out.append(text(660, 34, "Cutoff frequency acts as mass", 17, anchor="middle", weight="bold"))
+    L2, R2, T2, B2 = 500, 840, 70, 310
+    def X(k): return L2 + k / 3 * (R2 - L2)
+    def Y(w): return B2 - w / 3.3 * (B2 - T2)
+    out.append(f"<line x1='{L2}' y1='{B2}' x2='{R2}' y2='{B2}' stroke='{MUTED}'/>")
+    out.append(f"<line x1='{L2}' y1='{B2}' x2='{L2}' y2='{T2}' stroke='{MUTED}'/>")
+    ks = [3 * i / 200 for i in range(201)]
+    out.append(poly([(X(k), Y(k)) for k in ks], MUTED, 2, "6 5"))
+    out.append(poly([(X(k), Y(math.sqrt(1 + k * k))) for k in ks], A, 3))
+    out.append(dot(X(0), Y(1), 5, B))
+    out.append(text(X(0) + 10, Y(1) - 10, "ω_c  ↔  mc²/ħ", 14, B, weight="bold"))
+    out.append(text(X(2.2), Y(2.2) + 28, "free light: ω = ck", 13, MUTED))
+    out.append(text(X(1.0), Y(2.45), "ω² = ω_c² + c²k²", 14, A, weight="bold"))
+    out.append(text(X(1.0), Y(2.45) + 18, "E² = (mc²)² + (pc)²", 14, A))
+    out.append(text((L2 + R2) / 2, B2 + 24, "wavenumber k  (momentum)", 13, INK, "middle"))
+    out.append(text(L2 - 8, T2 + 4, "ω", 15, INK, "end"))
+    (OUT / "waveguide.svg").write_text(svg(W, H, "\n".join(out)))
 
 if __name__ == "__main__":
-    cbdr(); elastic(); rotation(); diffusion(); heat(); quantum(); bohr(); spin(); rotation4d()
+    cbdr(); elastic(); rotation(); diffusion(); heat(); quantum(); bohr(); spin(); rotation4d(); waveguide()
     docs = OUT.parent / "docs" / "img"
     docs.mkdir(parents=True, exist_ok=True)
     for f in OUT.glob("*.svg"):
