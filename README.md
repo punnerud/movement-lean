@@ -191,19 +191,21 @@ So a massive particle and light trapped in a waveguide obey the same equations. 
 
 ## 10. Testing the formulas on real atoms and molecules
 
-Lean proves that a formula follows from a model. It cannot say whether the model matches nature. The **analyzer** does that part: it evaluates the proved formulas with measured constants and compares them with measured data.
+Lean proves that a formula follows from a model. It cannot say whether the model matches nature. The **analyzer** does that part: it evaluates the proved formulas, and numerical quantum mechanics for several electrons, and compares the results with reference data.
 
 ```bash
+pip install numpy                      # needed for the numerical part
 python3 analyzer/analyze.py            # print all comparisons
 python3 analyzer/analyze.py --check    # exit 1 if any row leaves its expected band (run in CI)
 ```
 
 Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](https://punnerud.github.io/movement-lean/analyzer.html).
 
+### Simple models (formulas proved in Lean)
+
 | What | Lean theorem | Typical error | Verdict |
 |---|---|---|---|
 | Ionization energy of one-electron ions, H to C⁵⁺ | `bohr_orbit`, `hydrogenlike_energy` | 0.001 % to 0.04 % | matches |
-| Same, with the relativistic ground state | `dirac_binding_ge_bohr` (inequality only) | 0.0003 % to 0.005 % | matches |
 | Balmer lines of hydrogen | `rydberg_formula` | 0.001 % | matches |
 | Helium ground state, screening `ζ = Z − 5/16` | `helium_variational` | 1.9 % | matches roughly |
 | Rotational constant of D₂, HD and DCl from the lighter isotope | `reduced_mass_inertia`, `isotope_rotational_constant` | 0.005 % to 0.02 % | matches |
@@ -211,12 +213,52 @@ Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](http
 | Heat capacity of He, Ar, H₂, N₂, O₂, CO | `heat_capacity_ratio` | below 1 % | matches |
 | Speed of sound in air and helium | `gamma_values` | 0.01 % to 0.05 % | matches |
 | Helium as two independent Bohr electrons | `hydrogenlike_energy` | 38 % | **fails**: no electron repulsion |
-| Lithium's outer electron, with or without screening | `hydrogenlike_energy` | 37 % to 468 % | **fails**: needs real many-electron theory |
+| Lithium's outer electron, with or without screening | `hydrogenlike_energy` | 37 % to 468 % | **fails**: needs many-electron theory |
 | Heat capacity of Cl₂ and CO₂ | `heat_capacity_ratio` | 14 % to 22 % | **fails**: vibrations are active |
 
-Every row states in advance whether the model should work, and `--check` fails if a row that should match misses, or one that should fail starts matching. That is what keeps the analyzer stable as formulas and data change.
+### Numerical quantum mechanics for several electrons
 
-**What this is and is not.** The simple models are accurate for one-electron atoms, isotope shifts, and counting motions in a gas. They are not a general tool for atoms and molecules: anything with several interacting electrons (which is all of chemistry) needs numerical quantum mechanics, which is not formalised here.
+[`analyzer/quantum.py`](analyzer/quantum.py) solves the non-relativistic Schrödinger equation numerically (numpy only, about 6 seconds):
+
+| System | Method | Error against reference |
+|---|---|---|
+| He, total energy | Hartree–Fock (each electron in the average field of the other) | 1.45 % |
+| He, total energy | full configuration interaction, spherical orbitals only | 0.85 % |
+| He, total energy | Hylleraas (the distance between the electrons is in the wavefunction) | 0.002 % |
+| Li, ionization energy | Hartree–Fock, `E(Li⁺) − E(Li)` | 0.9 % |
+| Be, ionization energy | Hartree–Fock | 14 %, **fails**: strong 2s–2p correlation |
+| H₂, bond length | full configuration interaction, minimum of the computed curve | 0.06 % |
+| H₂, vibration frequency | curvature of the computed curve | 0.04 % |
+| H₂, rotational constant | rigid rotor at the computed bond length | 0.12 % |
+| H₂, binding energy | full configuration interaction | 1.1 % |
+
+The H₂ rows use no measured property of the molecule: only the electron and proton masses and charges go in.
+
+The methods themselves are not formalised. Lean covers the principle behind them, `rayleigh_ritz_bound`: the energy of any trial state is at least the true ground-state energy, so every number above is an upper bound. The analyzer checks the resulting ordering (Hartree–Fock ≥ CI ≥ Hylleraas ≥ exact) on every run, and compares the code against published benchmark energies.
+
+### Where do the deviations come from?
+
+For each simple model that misses, the analyzer adds the known physical correction and checks whether the gap closes:
+
+| Quantity | Simple model | With correction | The correction |
+|---|---|---|---|
+| Ionization energy, H to C⁵⁺ | 0.001 % to 0.04 % | at most 0.00005 % | relativity (Dirac), then the Lamb shift |
+| Balmer lines | 0.001 % | 0.00005 % to 0.0006 % | fine structure |
+| CO rotational line | 0.46 % | 0.0001 % | bond lengthened by vibration and stretched by rotation (`rotor_spacing_distortion`) |
+| Heat capacity of H₂ | 0.92 % | 0.01 % | quantised rotation of ortho and para hydrogen, with stretching |
+| Heat capacity of Cl₂, CO₂ | 14 %, 22 % | 0.5 %, 0.05 % | quantised vibration |
+| Speed of sound in helium | 0.05 % | 0.0001 % | real-gas (acoustic virial) correction |
+
+**Could the deviations be measurement errors?** No. Every deviation of a simple model is tens to millions of times larger than the uncertainty of the reference value, and each one closes when the corresponding known physics is added. After correction, the heat capacities, the sound speeds and the Balmer lines agree within the reference uncertainty, except Cl₂ (0.5 % left, because its vibration is treated as perfectly harmonic). The ionization energies and the CO line are known to nine significant figures, and there the corrected models still miss in the seventh or eighth figure because only the leading-order corrections are included.
+
+Two things in the reference data are worth knowing:
+
+- The tabulated ionization energies of one-electron ions are themselves QED calculations, not direct measurements, and the NIST-JANAF heat capacities are computed from measured spectra. Agreement in those rows compares a simple theory with a more complete one.
+- The tabulated Balmer wavelengths are blends of fine-structure components about 0.009 nm apart, so they cannot be compared more finely than that.
+
+Every row states in advance whether the model should work, and `--check` fails if a row that should match misses, or one that should fail starts matching.
+
+**What this is and is not.** The numerical part handles two electrons accurately and three or four at the Hartree–Fock level, with spherical orbitals only. It is a demonstration that the same variational principle carries from the Lean theorems to real numbers, not a replacement for a quantum chemistry package.
 
 ---
 

@@ -79,6 +79,28 @@ theorem isotope_rotational_constant {C μ₁ μ₂ r : ℝ} (hC : C ≠ 0) (h1 :
     (hr : r ≠ 0) : C / (μ₂ * r ^ 2) = C / (μ₁ * r ^ 2) * (μ₁ / μ₂) := by
   field_simp
 
+/-- **Rotor that stretches.** With levels `B·J(J+1) − D·J²(J+1)²` (the
+molecule stretches as it spins), neighbouring levels are
+`2B(J+1) − 4D(J+1)³` apart. -/
+theorem rotor_spacing_distortion (B D : ℝ) (J : ℕ) :
+    (B * ((J : ℝ) + 1) * ((J : ℝ) + 2) - D * (((J : ℝ) + 1) * ((J : ℝ) + 2)) ^ 2) -
+        (B * J * ((J : ℝ) + 1) - D * ((J : ℝ) * ((J : ℝ) + 1)) ^ 2) =
+      2 * B * ((J : ℝ) + 1) - 4 * D * ((J : ℝ) + 1) ^ 3 := by
+  ring
+
+/-! ### Why numerical energies are upper bounds -/
+
+/-- **Rayleigh–Ritz bound.** Write any trial state in the basis of true
+energy states, with amplitudes `c i` and energies `E i`. Its energy
+`Σ Eᵢcᵢ²` is at least the ground-state energy `E₀` times its norm `Σ cᵢ²`.
+So every energy found by minimising over trial states (Hartree–Fock,
+configuration interaction, Hylleraas) lies above the true one. -/
+theorem rayleigh_ritz_bound {ι : Type*} (s : Finset ι) (E c : ι → ℝ) (E₀ : ℝ)
+    (h : ∀ i ∈ s, E₀ ≤ E i) :
+    E₀ * ∑ i ∈ s, c i ^ 2 ≤ ∑ i ∈ s, E i * c i ^ 2 := by
+  rw [Finset.mul_sum]
+  exact Finset.sum_le_sum fun i hi => mul_le_mul_of_nonneg_right (h i hi) (sq_nonneg _)
+
 /-! ### Heat capacity from counting motions -/
 
 /-- **Equipartition.** A gas whose molecules have `f` ways to move
