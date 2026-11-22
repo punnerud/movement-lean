@@ -319,9 +319,60 @@ def spin():
     out.append(text(660, 362, "Any circulating point charge gives g = 1.", 13, MUTED, "middle"))
     out.append(text(660, 380, "The electron has g ≈ 2. Proved: no radius fixes this.", 13, MUTED, "middle"))
     (OUT / "spin.svg").write_text(svg(W, H, "\n".join(out)))
+# ------------------------------------------------------- 9. equal speed
+def rotation4d():
+    W, H = 880, 380
+    out = ["<defs><marker id='ar' markerWidth='8' markerHeight='8' refX='6' refY='4' orient='auto'>"
+           f"<path d='M0,0 L8,4 L0,8 z' fill='{A}'/></marker></defs>"]
+    def arrow(x, y, length):
+        if length < 3:
+            return dot(x, y, 4, B)
+        return (f"<line x1='{x-length/2:.1f}' y1='{y:.1f}' x2='{x+length/2:.1f}' y2='{y:.1f}' "
+                f"stroke='{A}' stroke-width='3' marker-end='url(#ar)'/>")
+    # left: sphere
+    cx, cy, r = 150, 200, 105
+    out.append(text(cx, 34, "Spinning ball (3D)", 17, anchor="middle", weight="bold"))
+    out.append(f"<circle cx='{cx}' cy='{cy}' r='{r}' fill='none' stroke='{MUTED}' stroke-width='1.5'/>")
+    out.append(f"<line x1='{cx}' y1='{cy-r-22}' x2='{cx}' y2='{cy+r+22}' stroke='{MUTED}' stroke-dasharray='4 4'/>")
+    for lat in (-90, -60, -30, 0, 30, 60, 90):
+        a = math.radians(lat)
+        y = cy - r * math.sin(a)
+        w = r * math.cos(a)
+        if lat not in (-90, 90):
+            out.append(f"<ellipse cx='{cx}' cy='{y:.1f}' rx='{w:.1f}' ry='{w*0.18:.1f}' fill='none' stroke='{GRID}'/>")
+        out.append(arrow(cx, y + (w * 0.18 if abs(lat) != 90 else 0), 110 * math.cos(a)))
+    out.append(text(cx, 345, "speed ∝ distance from axis", 13, MUTED, "middle"))
+    out.append(text(cx, 363, "poles stand still", 13, B, "middle", "bold"))
+    # middle: ring
+    cx2 = 440
+    out.append(text(cx2, 34, "Ring", 17, anchor="middle", weight="bold"))
+    out.append(f"<ellipse cx='{cx2}' cy='{cy}' rx='105' ry='38' fill='none' stroke='{MUTED}' stroke-width='1.5'/>")
+    out.append(f"<line x1='{cx2}' y1='{cy-80}' x2='{cx2}' y2='{cy+80}' stroke='{MUTED}' stroke-dasharray='4 4'/>")
+    for k in range(8):
+        a = k * math.pi / 4 + 0.3
+        x, y = cx2 + 105 * math.cos(a), cy + 38 * math.sin(a)
+        dx, dy = -105 * math.sin(a), 38 * math.cos(a)
+        n = math.hypot(dx, dy); dx, dy = dx / n * 22, dy / n * 22
+        out.append(f"<line x1='{x-dx:.1f}' y1='{y-dy:.1f}' x2='{x+dx:.1f}' y2='{y+dy:.1f}' "
+                   f"stroke='{A}' stroke-width='3' marker-end='url(#ar)'/>")
+    out.append(text(cx2, 345, "all points at distance ρ", 13, MUTED, "middle"))
+    out.append(text(cx2, 363, "same speed everywhere", 13, C, "middle", "bold"))
+    # right: 4D
+    cx3 = 730
+    out.append(text(cx3, 34, "Rotation in 4D", 17, anchor="middle", weight="bold"))
+    for i, (rx, ry, rot) in enumerate(((95, 30, 0), (95, 30, 60), (95, 30, 120))):
+        out.append(f"<ellipse cx='{cx3}' cy='{cy}' rx='{rx}' ry='{ry}' fill='none' stroke='{A}' "
+                   f"stroke-width='2' opacity='0.75' transform='rotate({rot} {cx3} {cy})'/>")
+    out.append(f"<circle cx='{cx3}' cy='{cy}' r='97' fill='none' stroke='{MUTED}' stroke-width='1.2' stroke-dasharray='3 4'/>")
+    out.append(text(cx3, 327, "z ↦ e^{iωt}·z on the 3-sphere", 13, MUTED, "middle"))
+    out.append(text(cx3, 345, "every point moves on a circle", 13, MUTED, "middle"))
+    out.append(text(cx3, 363, "speed |ω| everywhere, no poles", 13, C, "middle", "bold"))
+    for x in (295, 585):
+        out.append(f"<line x1='{x}' y1='50' x2='{x}' y2='370' stroke='{GRID}' stroke-width='2'/>")
+    (OUT / "rotation4d.svg").write_text(svg(W, H, "\n".join(out)))
 
 if __name__ == "__main__":
-    cbdr(); elastic(); rotation(); diffusion(); heat(); quantum(); bohr(); spin()
+    cbdr(); elastic(); rotation(); diffusion(); heat(); quantum(); bohr(); spin(); rotation4d()
     docs = OUT.parent / "docs" / "img"
     docs.mkdir(parents=True, exist_ok=True)
     for f in OUT.glob("*.svg"):
