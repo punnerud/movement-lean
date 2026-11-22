@@ -11,7 +11,8 @@
     "13C": 13.0033548,
     "14N": 14.003074,
     "16O": 15.9949146,
-    "35Cl": 34.9688527
+    "35Cl": 34.9688527,
+    "23Na": 22.98976928
   },
   "ionization_energy_eV": {
     "H": 13.598434,
@@ -70,7 +71,10 @@
     "Balmer 'observed' wavelengths are unresolved blends of fine-structure components about 0.009 nm apart; the uncertainty used reflects that.",
     "H2 centrifugal distortion constant (0.0471 cm^-1, Huber & Herzberg) was not re-verified.",
     "Helium acoustic virial coefficient is interpolated between 273.15 K and 300 K.",
-    "H electron affinity 0.754195(19) eV (Lykke, Murray, Lineberger 1991) and the H- benchmark energies (HF -0.487930, exact -0.527751017 hartree) are quoted from the literature and were not re-verified online."
+    "H electron affinity 0.754195(19) eV (Lykke, Murray, Lineberger 1991) and the H- benchmark energies (HF -0.487930, exact -0.527751017 hartree) are quoted from the literature and were not re-verified online.",
+    "NaCl: omega_e from Irikura 2007; D_0 = 4.23 +/- 0.09 eV (flame photometry / thermochemistry, 1961); dipole is the equilibrium value 8.971 D (v=0 value is 9.0012 D).",
+    "NaCl ion polarizabilities 0.179 and 3.66 A^3 are the handbook values commonly used in Rittner-type models. Modern ab initio free-ion values are 0.148 and about 5.36 A^3, so the Cl- choice matters.",
+    "H2 curve benchmark energies: Pachucki, Phys. Rev. A 82, 032509 (2010)."
   ],
   "vibration_cm1": {
     "H2": [
@@ -130,10 +134,29 @@
     "H2_bond": 1e-05,
     "H2_De": 1e-05,
     "H2_vibration": 1e-05,
-    "electron_affinity": 2.5e-05
+    "electron_affinity": 2.5e-05,
+    "NaCl_De": 0.021,
+    "NaCl_dipole": 0.0001
   },
   "H2_B0_cm1": 59.336,
   "H2_centrifugal_D_cm1": 0.0471,
   "He_acoustic_virial_cm3_per_mol": 21.97,
-  "H_electron_affinity_eV": 0.754195
+  "H_electron_affinity_eV": 0.754195,
+  "H2_curve_benchmark_hartree": {
+    "1.0": -1.12453972,
+    "2.0": -1.138132957,
+    "3.0": -1.057326269,
+    "4.0": -1.016390253,
+    "6.0": -1.000835708
+  },
+  "NaCl": {
+    "r_e_angstrom": 2.3608,
+    "omega_e_cm1": 364.684,
+    "D0_eV": 4.23,
+    "dipole_debye": 8.971,
+    "Na_ionization_eV": 5.13907696,
+    "Cl_electron_affinity_eV": 3.612725,
+    "alpha_Na_plus_A3": 0.179,
+    "alpha_Cl_minus_A3": 3.66
+  }
 }

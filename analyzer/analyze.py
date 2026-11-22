@@ -69,6 +69,7 @@ def reduced(m1, m2):
     return m1 * m2 / (m1 + m2)
 
 
+G_BOND = "Chemical bonds: shared electrons (H₂) and transferred electrons (NaCl)"
 G_ONE, G_MANY, G_ROT, G_HEAT, G_NUM, G_VAL = (
     "One-electron atoms", "Atoms with several electrons: simple models", "Rotating molecules",
     "Heat capacity and sound", "Numerical quantum mechanics", "Validation of the numerical methods")
@@ -342,6 +343,142 @@ if quantum is not None:
                   abs(quantum.helium_fci_s_general() - he_s_fci) < 1e-8)]
 
 
+# ---------------------------------------------------------------- chemical bonds
+COULOMB = 14.3996454            # e²/(4πε₀) in eV·Å
+DEBYE_PER_E_ANGSTROM = 4.80320471
+NACL = DATA["NaCl"]
+CURVE = {}                      # filled below; used for the figure
+
+
+def nacl_model(alpha):
+    """Ionic model of NaCl: point charges + exponential repulsion + polarization.
+
+    E(r) = -K/r - K alpha/(2 r^4) + A exp(-r/rho), relative to free ions.
+    A and rho are fixed by the measured bond length and vibration frequency.
+    Returns (rho, A, energy function relative to neutral atoms)."""
+    r = NACL["r_e_angstrom"]
+    mu_kg = reduced(MASS["23Na"], MASS["35Cl"]) * U
+    k = mu_kg * (2 * math.pi * C * 100 * NACL["omega_e_cm1"]) ** 2 / E_CH * 1e-20   # eV/Å²
+    slope = COULOMB / r ** 2 + 2 * COULOMB * alpha / r ** 5
+    rho = slope / (k + 2 * COULOMB / r ** 3 + 10 * COULOMB * alpha / r ** 6)
+    a_rep = rho * slope * math.exp(r / rho)
+    gap = NACL["Na_ionization_eV"] - NACL["Cl_electron_affinity_eV"]
+
+    def energy(x):
+        return -COULOMB / x - COULOMB * alpha / (2 * x ** 4) + a_rep * math.exp(-x / rho) + gap
+    return rho, a_rep, energy
+
+
+r_nacl = NACL["r_e_angstrom"]
+gap_nacl = NACL["Na_ionization_eV"] - NACL["Cl_electron_affinity_eV"]
+de_nacl = NACL["D0_eV"] + NACL["omega_e_cm1"] / 2 / 8065.543937
+alpha_sum = NACL["alpha_Na_plus_A3"] + NACL["alpha_Cl_minus_A3"]
+n1 = row(G_BOND, "NaCl", "binding energy D_e", "two point charges ±e at the bond length",
+         "not formalised", COULOMB / r_nacl - gap_nacl, de_nacl, "eV", "limit", 0.05, UNC["NaCl_De"],
+         "no repulsion and no polarization; the two omissions partly cancel")
+n2 = row(G_BOND, "NaCl", "binding energy D_e", "point charges + short-range repulsion",
+         "not formalised", -nacl_model(0.0)[2](r_nacl), de_nacl, "eV", "limit", 0.05,
+         UNC["NaCl_De"], "repulsion range fitted to the measured vibration frequency", base=n1,
+         fix="the electron clouds resist overlapping (this alone makes it worse)")
+row(G_BOND, "NaCl", "binding energy D_e", "+ polarization of the ions", "not formalised",
+    -nacl_model(alpha_sum)[2](r_nacl), de_nacl, "eV", "ok", 0.06, UNC["NaCl_De"], base=n2,
+    fix="each ion's cloud is pulled towards the other ion",
+    note="uses free-ion polarizabilities; van der Waals attraction is left out")
+dip0 = r_nacl * DEBYE_PER_E_ANGSTROM
+a1, a2 = NACL["alpha_Na_plus_A3"], NACL["alpha_Cl_minus_A3"]
+induced = (r_nacl ** 4 * (a1 + a2) + 4 * r_nacl * a1 * a2) / (r_nacl ** 6 - 4 * a1 * a2)
+n4 = row(G_BOND, "NaCl", "electric dipole moment", "two point charges ±e at the bond length",
+         "not formalised", dip0, NACL["dipole_debye"], "D", "limit", 0.05, UNC["NaCl_dipole"],
+         "a full electron is not cleanly on one side: the ions polarise each other")
+row(G_BOND, "NaCl", "electric dipole moment", "+ polarization of the ions (Rittner)",
+    "not formalised", (r_nacl - induced) * DEBYE_PER_E_ANGSTROM, NACL["dipole_debye"], "D", "ok",
+    0.15, UNC["NaCl_dipole"], base=n4, fix="induced dipoles point against the main one",
+    note="overcorrects: Cl⁻ is less polarizable when squeezed against Na⁺ than when free")
+
+if quantum is not None:
+    e_atoms = 2 * e_h
+    grid = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 8.0, 10.0]
+    CURVE = {R: quantum.h2_point(R) for R in grid}
+    for R, tol in ((1.0, 0.03), (2.0, 0.03), (3.0, 0.04), (4.0, 0.06)):
+        exact = (-1.0 - DATA["H2_curve_benchmark_hartree"][f"{R:.1f}"]) * HARTREE_EV
+        row(G_BOND, f"H₂ at {R * BOHR_A:.2f} Å", "energy below two free atoms", "full CI",
+            "rayleigh_ritz_bound", (e_atoms - CURVE[R][0]) * HARTREE_EV, exact, "eV", "ok", tol, 1e-7,
+            "reference: benchmark calculation, not a measurement")
+    exact6 = (-1.0 - DATA["H2_curve_benchmark_hartree"]["6.0"]) * HARTREE_EV
+    row(G_BOND, f"H₂ at {6 * BOHR_A:.2f} Å", "energy below two free atoms", "full CI",
+        "rayleigh_ritz_bound", (e_atoms - CURVE[6.0][0]) * HARTREE_EV, exact6, "eV", "limit", 0.05,
+        1e-7, "the weak long-range attraction needs more diffuse, directional orbitals")
+    row(G_BOND, f"H₂ at {6 * BOHR_A:.2f} Å", "energy below two free atoms",
+        "Hartree–Fock: both electrons forced to share one orbital", "rayleigh_ritz_bound",
+        (e_atoms - CURVE[6.0][1]) * HARTREE_EV, exact6, "eV", "limit", 0.05, 1e-7,
+        "a shared orbital puts both electrons on one atom half the time")
+    STABILITY += [("H₂ full CI separates into two free atoms",
+                   abs(CURVE[10.0][0] - e_atoms) * HARTREE_EV < 1e-3),
+                  ("H₂ Hartree–Fock fails to separate (several eV too high)",
+                   (CURVE[10.0][1] - e_atoms) * HARTREE_EV > 5.0),
+                  ("H₂ curve has its minimum at the bond length",
+                   min(CURVE, key=lambda R: CURVE[R][0]) == 1.4)]
+
+
+def bond_figure():
+    """SVG: H₂ curve (shared electrons) and NaCl ionic model (transferred electron)."""
+    w, hgt, top, bottom = 430, 300, 40, 44
+    parts = [f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 {hgt + 20}' "
+             "font-family='Helvetica,Arial,sans-serif' font-size='13'>",
+             f"<rect width='900' height='{hgt + 20}' fill='#ffffff'/>"]
+
+    def panel(x0, title, xmax, ymin, ymax, xticks, yticks):
+        left = x0 + 52
+
+        def px(x):
+            return left + (w - 70) * x / xmax
+
+        def py(y):
+            return top + (hgt - top - bottom) * (ymax - y) / (ymax - ymin)
+        parts.append(f"<text x='{left}' y='22' font-size='15' font-weight='bold' fill='#1f2933'>{title}</text>")
+        for t in xticks:
+            parts.append(f"<line x1='{px(t):.1f}' y1='{py(ymin):.1f}' x2='{px(t):.1f}' y2='{py(ymin) + 5:.1f}' stroke='#616e7c'/>"
+                         f"<text x='{px(t):.1f}' y='{py(ymin) + 19:.1f}' text-anchor='middle' fill='#616e7c'>{t:g}</text>")
+        for t in yticks:
+            parts.append(f"<line x1='{left}' y1='{py(t):.1f}' x2='{px(xmax):.1f}' y2='{py(t):.1f}' stroke='#e4e7eb'/>"
+                         f"<text x='{left - 6}' y='{py(t) + 4:.1f}' text-anchor='end' fill='#616e7c'>{t:g}</text>")
+        parts.append(f"<line x1='{left}' y1='{py(0):.1f}' x2='{px(xmax):.1f}' y2='{py(0):.1f}' stroke='#616e7c'/>")
+        parts.append(f"<text x='{px(xmax / 2):.1f}' y='{hgt + 12}' text-anchor='middle' fill='#616e7c'>distance between the nuclei (Å)</text>")
+        parts.append(f"<text transform='translate({x0 + 13},{py((ymin + ymax) / 2):.1f}) rotate(-90)' text-anchor='middle' fill='#616e7c'>energy (eV)</text>")
+        return px, py
+
+    def path(px, py, pts, color, dash=""):
+        d = " ".join(f"{'M' if i == 0 else 'L'}{px(x):.1f},{py(y):.1f}" for i, (x, y) in enumerate(pts))
+        extra = f" stroke-dasharray='{dash}'" if dash else ""
+        parts.append(f"<path d='{d}' fill='none' stroke='{color}' stroke-width='2.2'{extra}/>")
+
+    px, py = panel(0, "H₂: two shared electrons", 5.5, -6, 8, [1, 2, 3, 4, 5], [-4, -2, 0, 2, 4, 6])
+    if CURVE:
+        e_atoms = 2 * e_h
+        rs = sorted(CURVE)
+        path(px, py, [(R * BOHR_A, (CURVE[R][1] - e_atoms) * HARTREE_EV) for R in rs], "#dc2626", "6 4")
+        path(px, py, [(R * BOHR_A, (CURVE[R][0] - e_atoms) * HARTREE_EV) for R in rs], "#2563eb")
+        for key, val in DATA["H2_curve_benchmark_hartree"].items():
+            parts.append(f"<circle cx='{px(float(key) * BOHR_A):.1f}' cy='{py((val + 1) * HARTREE_EV):.1f}' r='3.5' fill='#1f2933'/>")
+        parts.append(f"<text x='{px(1.2):.1f}' y='{py(7.0):.1f}' fill='#dc2626'>forced sharing (Hartree–Fock)</text>")
+        parts.append(f"<text x='{px(2.3):.1f}' y='{py(-2.6):.1f}' fill='#2563eb'>full CI: levels off at two free atoms</text>")
+        parts.append(f"<text x='{px(2.3):.1f}' y='{py(-4.0):.1f}' fill='#1f2933'>● benchmark values</text>")
+
+    px, py = panel(450, "NaCl: one transferred electron", 12, -6, 3, [2, 4, 6, 8, 10, 12], [-4, -2, 0, 2])
+    _, _, energy = nacl_model(alpha_sum)
+    xs = [1.9 + 0.1 * i for i in range(102)]
+    path(px, py, [(x, energy(x)) for x in xs], "#2563eb")
+    parts.append(f"<line x1='{px(0):.1f}' y1='{py(gap_nacl):.1f}' x2='{px(12):.1f}' y2='{py(gap_nacl):.1f}' stroke='#059669' stroke-dasharray='6 4' stroke-width='1.6'/>")
+    cross = COULOMB / gap_nacl
+    parts.append(f"<circle cx='{px(cross):.1f}' cy='{py(0):.1f}' r='4' fill='#dc2626'/>")
+    parts.append(f"<text x='{px(5.2):.1f}' y='{py(gap_nacl) - 6:.1f}' fill='#059669'>free ions Na⁺ + Cl⁻</text>")
+    parts.append(f"<text x='{px(8.3):.1f}' y='{py(0) + 17:.1f}' fill='#dc2626'>crossing at {cross:.1f} Å</text>")
+    parts.append(f"<text x='{px(3.6):.1f}' y='{py(-3.6):.1f}' fill='#2563eb'>ionic model: −e²/r</text>")
+    parts.append(f"<text x='{px(0.3):.1f}' y='{py(0) - 6:.1f}' fill='#616e7c'>neutral atoms</text>")
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
 # ---------------------------------------------------------------- reporting
 def verdict(r):
     inside = abs(r["err"]) <= r["tol"]
@@ -411,6 +548,8 @@ CAVEATS = [
     "NIST-JANAF heat capacities are calculated from measured spectroscopic constants, not measured "
     "in a calorimeter. Agreement with the vibration-corrected rows therefore partly compares two "
     "versions of the same theory.",
+    "The NaCl ionic model takes the bond length and vibration frequency from measurement and uses "
+    "free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.",
     "The uncertainty column uses one representative relative uncertainty per class of data "
     "(see relative_uncertainty in reference_data.json), not a separate figure for every value.",
     "The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are "
@@ -488,6 +627,12 @@ tr.sum td{background:var(--code);font-weight:600}li{margin:6px 0;max-width:820px
         last = ROWS[chain[-1]]
         out.append(f"<tr class='sum'><td></td><td></td><td>remaining</td><td class='n'>{times(last)} "
                    f"the reference uncertainty</td><td>{reading(last)}</td></tr>")
+    out.append("</table></div><h2>Two kinds of bond</h2><p class='lede'>Pulling H₂ apart costs energy only "
+               "over a short distance, then the curve levels off: the shared electrons go back to one atom each. "
+               "NaCl follows the −e²/r attraction of two ions out to about 9.4 Å, where it becomes cheaper for the "
+               "electron to jump back and leave two neutral atoms.</p>"
+               "<div class='wrap' style='padding:8px;background:#fff'><img src='img/bond.svg' alt='Energy curves "
+               "of H2 and NaCl' style='width:100%;min-width:640px'></div>")
     out.append("</table></div><h2>Caveats</h2><ul>" + "".join(f"<li>{c}</li>" for c in CAVEATS) + "</ul>")
     out.append("<p class='note'>Generated by <code>analyzer/analyze.py</code>. Reference values: NIST "
                "Atomic Spectra Database, NIST Chemistry WebBook, NIST-JANAF tables, CODATA.</p></main></body></html>")
@@ -503,6 +648,8 @@ def main():
     if "--write" in sys.argv:
         (ROOT / "analyzer" / "REPORT.md").write_text(markdown())
         (ROOT / "docs" / "analyzer.html").write_text(html())
+        for folder in ("img", "docs/img"):
+            (ROOT / folder / "bond.svg").write_text(bond_figure())
     if "--check" not in sys.argv or bad:
         for r in ROWS:
             print(f"{verdict(r)[0]:19} {r['system'][:18]:18} {r['quantity'][:26]:26} {r['model'][:40]:40} "

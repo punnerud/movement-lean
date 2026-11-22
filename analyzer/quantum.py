@@ -251,6 +251,17 @@ def h2_energy(R):
     return fci_two_electrons(*integrals(exps, cen, nuclei), e_nuc=1.0 / R)
 
 
+def h2_point(R):
+    """(full CI energy, Hartree-Fock energy) of H2 at distance R, same basis.
+
+    With one alpha and one beta electron started from the same density, the
+    Hartree-Fock solution keeps both electrons in one shared orbital."""
+    exps, cen = h2_basis(R)
+    nuclei = [(1, (0, 0, -R / 2)), (1, (0, 0, R / 2))]
+    S, h, eri = integrals(exps, cen, nuclei)
+    return (fci_two_electrons(S, h, eri, e_nuc=1.0 / R), uhf(S, h, eri, 1, 1, e_nuc=1.0 / R))
+
+
 def hydrogen_atom_energy():
     """Energy of one H atom in the same atomic basis (exact value: -0.5)."""
     exps = list(H_S)

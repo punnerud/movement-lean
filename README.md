@@ -243,6 +243,24 @@ The H₂ rows use no measured property of the molecule: only the electron and pr
 
 The methods themselves are not formalised. Lean covers the principle behind them, `rayleigh_ritz_bound`: the energy of any trial state is at least the true ground-state energy, so every number above is an upper bound. The analyzer checks the resulting ordering (Hartree–Fock ≥ CI ≥ Hylleraas ≥ exact) on every run, and compares the code against published benchmark energies.
 
+### Two kinds of bond: shared and transferred electrons
+
+![Energy curves of H2 and NaCl](img/bond.svg)
+
+**H₂ (shared electrons).** The computed curve has a minimum at the bond length, rises steeply when the nuclei are pushed together, and levels off when they are pulled apart: beyond about 3 Å the molecule is two free atoms. It follows published benchmark energies to 1.3 % to 4.3 % between 0.5 Å and 2.1 Å. Forcing both electrons to stay in one shared orbital (Hartree–Fock) gives a curve that keeps rising, 6 eV too high at large distance, because half of the time it puts both electrons on the same atom.
+
+**NaCl (transferred electron).** Here the picture of two opposite charges works, as in a capacitor, but with point charges the energy follows `−e²/r` rather than growing linearly:
+
+| NaCl | Model | Error |
+|---|---|---|
+| Binding energy | two point charges at the bond length | +7.5 %, **fails** |
+| Binding energy | + short-range repulsion | −10.0 %, **fails** |
+| Binding energy | + polarization of the ions | −3.9 % |
+| Dipole moment | two point charges | +26 %, **fails** |
+| Dipole moment | + polarization of the ions | −13 % |
+
+The first row is closer than the second only because two omissions cancel. The ionic curve crosses the energy of two neutral atoms at about 9.4 Å: further out it is cheaper for the electron to jump back. Unlike the H₂ rows, the NaCl model is not a first-principles calculation: it takes the bond length and vibration frequency from measurement. This is also the one place where measurement uncertainty matters: the binding energy of NaCl is only known to about 2 % (4.23 ± 0.09 eV), so the final 3.9 % is within twice that uncertainty.
+
 ### Where do the deviations come from?
 
 For each simple model that misses, the analyzer adds the known physical correction and checks whether the gap closes:

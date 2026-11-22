@@ -113,6 +113,22 @@ Each formula's derivation is proved in Lean where a theorem is named; the compar
 | H⁻, Hylleraas | total energy | this code vs. published benchmark | `rayleigh_ritz_bound` | -0.5277501 hartree | -0.527751 hartree | -0.00018 % | matches | 18× |
 | H₂, full CI at minimum | total energy | this code vs. published benchmark | `rayleigh_ritz_bound` | -1.172484 hartree | -1.174476 hartree | -0.17 % | matches | 16 959× |
 
+## Chemical bonds: shared electrons (H₂) and transferred electrons (NaCl)
+
+| System | Quantity | Model | Lean theorem | Predicted | Reference | Error | Verdict | Error ÷ uncertainty |
+|---|---|---|---|---|---|---|---|---|
+| NaCl | binding energy D_e | two point charges ±e at the bond length | `not formalised` | 4.573125 eV | 4.252608 eV | +7.54 % | fails, as expected (no repulsion and no polarization; the two omissions partly cancel) | 3.6× |
+| NaCl | binding energy D_e | point charges + short-range repulsion | `not formalised` | 3.829164 eV | 4.252608 eV | -9.96 % | fails, as expected (repulsion range fitted to the measured vibration frequency) | 4.7× |
+| NaCl | binding energy D_e | + polarization of the ions | `not formalised` | 4.087042 eV | 4.252608 eV | -3.89 % | matches (uses free-ion polarizabilities; van der Waals attraction is left out) | 1.9× |
+| NaCl | electric dipole moment | two point charges ±e at the bond length | `not formalised` | 11.33941 D | 8.971 D | +26 % | fails, as expected (a full electron is not cleanly on one side: the ions polarise each other) | 2 640× |
+| NaCl | electric dipole moment | + polarization of the ions (Rittner) | `not formalised` | 7.805775 D | 8.971 D | -13 % | matches (overcorrects: Cl⁻ is less polarizable when squeezed against Na⁺ than when free) | 1 299× |
+| H₂ at 0.53 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 3.334935 eV | 3.388898 eV | -1.59 % | matches (reference: benchmark calculation, not a measurement) | 159 236× |
+| H₂ at 1.06 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 3.709666 eV | 3.758789 eV | -1.31 % | matches (reference: benchmark calculation, not a measurement) | 130 690× |
+| H₂ at 1.59 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 1.52114 eV | 1.559927 eV | -2.49 % | matches (reference: benchmark calculation, not a measurement) | 248 650× |
+| H₂ at 2.12 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 0.4266712 eV | 0.4460015 eV | -4.33 % | matches (reference: benchmark calculation, not a measurement) | 433 414× |
+| H₂ at 3.18 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 0.01998315 eV | 0.02274077 eV | -12 % | fails, as expected (the weak long-range attraction needs more diffuse, directional orbitals) | 1 212 634× |
+| H₂ at 3.18 Å | energy below two free atoms | Hartree–Fock: both electrons forced to share one orbital | `rayleigh_ritz_bound` | -4.77748 eV | 0.02274077 eV | -21108 % | fails, as expected (a shared orbital puts both electrons on one atom half the time) | 2 110 843 273× |
+
 ## Where do the deviations come from?
 
 Each line follows one quantity from the simplest model to the best one here.
@@ -197,12 +213,20 @@ Each line follows one quantity from the simplest model to the best one here.
 |  |  | full CI, spherical orbitals only | -48 % | electrons avoid each other radially: the ion becomes stable |
 |  |  | Hylleraas (r₁₂ in the wavefunction) | +0.0678 % | electrons avoid each other in every direction |
 | | | **remaining** | 27× the reference uncertainty | close to the reference uncertainty |
+| NaCl | binding energy D_e | two point charges ±e at the bond length | +7.54 % | starting point |
+|  |  | point charges + short-range repulsion | -9.96 % | the electron clouds resist overlapping (this alone makes it worse) |
+|  |  | + polarization of the ions | -3.89 % | each ion's cloud is pulled towards the other ion |
+| | | **remaining** | 1.9× the reference uncertainty | within the reference uncertainty |
+| NaCl | electric dipole moment | two point charges ±e at the bond length | +26 % | starting point |
+|  |  | + polarization of the ions (Rittner) | -13 % | induced dipoles point against the main one |
+| | | **remaining** | 1 299× the reference uncertainty | model error, far above the reference uncertainty |
 
 ## Caveats
 
 - Ionization energies of one-electron ions in the NIST database are high-precision QED calculations, not direct measurements; experiment confirms them where it can reach.
 - NIST-JANAF heat capacities are calculated from measured spectroscopic constants, not measured in a calorimeter. Agreement with the vibration-corrected rows therefore partly compares two versions of the same theory.
+- The NaCl ionic model takes the bond length and vibration frequency from measurement and uses free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.
 - The uncertainty column uses one representative relative uncertainty per class of data (see relative_uncertainty in reference_data.json), not a separate figure for every value.
 - The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
 
-**79 comparisons: 71 inside the model's domain and matching, 8 documented limits.**
+**90 comparisons: 77 inside the model's domain and matching, 13 documented limits.**
