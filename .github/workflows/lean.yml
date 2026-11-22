@@ -14,4 +14,4 @@ jobs:
         with:
           use-mathlib-cache: true
       - name: Check for sorry
-        run: "! grep -n 'sorry' Movement.lean"
+        run: "! grep -rn 'sorry' Movement.lean Movement/"

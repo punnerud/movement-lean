@@ -44,9 +44,9 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 <main>
 <span class="tag">Lean 4 · Mathlib · no <code>sorry</code></span>
 <h1>From collision course to diffusion</h1>
-<p class="lede">A sailor's rule of thumb, followed down to molecules, with every step machine-checked in Lean 4.</p>
+<p class="lede">A sailor's rule of thumb, followed down to molecules, the heat equation and quantum mechanics, with every step machine-checked in Lean 4.</p>
 <blockquote>If another boat stays still in your windscreen while it grows larger, you are on a collision course.</blockquote>
-<p>Source and proofs: <a href="https://github.com/punnerud/movement-lean">github.com/punnerud/movement-lean</a> (<code>Movement.lean</code>).</p>
+<p>Source and proofs: <a href="https://github.com/punnerud/movement-lean">github.com/punnerud/movement-lean</a> (folder <code>Movement/</code>).</p>
 
 <h2>1. Constant bearing, decreasing range</h2>
 <p>You (blue) sail straight up. Change the other vessel's course and speed. The dashed sight lines show the bearing over time. When they stay parallel, the boats meet.</p>
@@ -98,11 +98,49 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
   <p class="readout" id="walkOut"></p>
 </div>
 
+<h2>4. From the random walk to the heat equation</h2>
+<p>Count the paths instead of following one walker. To be at <code>x</code> after <code>n+1</code> steps you must have been at <code>x−1</code> or <code>x+1</code>. That one sentence is already a heat equation in disguise:</p>
+<p style="text-align:center"><code>p(n+1,x) − p(n,x) = ½ · [ p(n,x+1) − 2p(n,x) + p(n,x−1) ]</code></p>
+<div class="card"><img src="img/heat.svg" alt="Random walk probabilities approaching the Gaussian heat kernel" style="width:100%;border-radius:8px"></div>
+<table>
+<tr><td class="thm">master_equation, discrete_heat</td><td>the path counts obey the discrete heat equation above</td></tr>
+<tr><td class="thm">diffusive_scaling</td><td>with step <code>h</code> every <code>τ</code> seconds the diffusion coefficient is <code>D = h²/2τ</code></td></tr>
+<tr><td class="thm">second_difference_tendsto</td><td>the bracket divided by <code>h²</code> converges to the second derivative as <code>h → 0</code></td></tr>
+<tr><td class="thm">heatKernel_solves</td><td>the Gaussian <code>exp(−x²/4Dt)/√t</code> solves <code>∂ₜu = D ∂ₓₓu</code></td></tr>
+</table>
+
+<h2>5. From diffusion to quantum mechanics</h2>
+<p>Take the heat equation and make the diffusion coefficient imaginary, <code>D = iħ/2m</code>. The result is the Schrödinger equation for a free particle, <code>iħ ∂ₜψ = −(ħ²/2m) ∂ₓₓψ</code>. Lean proves both this and what the factor <code>i</code> changes: a heat wave <em>decays</em>, while a quantum wave keeps its size for ever and only rotates its phase.</p>
+<div class="card">
+  <canvas id="modes" height="230"></canvas>
+  <div class="controls"><label>wavenumber k <input id="kk" type="range" min="1" max="4" step="1" value="2"></label><button id="modeReset">Restart</button></div>
+  <p class="readout" id="modeOut"></p>
+</div>
+<table>
+<tr><td class="thm">mode_solves</td><td>the wave <code>exp(−ck²t)·exp(ikx)</code> solves <code>∂ₜu = c ∂ₓₓu</code> for any complex <code>c</code></td></tr>
+<tr><td class="thm">schrodinger_mode</td><td>for <code>c = iħ/2m</code> this is the Schrödinger equation</td></tr>
+<tr><td class="thm">norm_heat_mode</td><td>heat: size = <code>exp(−Dk²t)</code>, so sharp detail (large <code>k</code>) dies fastest</td></tr>
+<tr><td class="thm">norm_schrodinger_mode</td><td>quantum: size = 1 at all times</td></tr>
+<tr><td class="thm">heat_to_schrodinger</td><td>any heat solution continued to imaginary time solves Schrödinger (Wick rotation)</td></tr>
+</table>
+
+<h2>6. Why electron orbits come in fixed sizes</h2>
+<p>Around a proton, the electric pull <code>K/r²</code> supplies exactly the centripetal force <code>mv²/r</code>. Classically that allows <em>any</em> radius, and closer just means faster. Bohr added one rule, angular momentum <code>mvr = nħ</code>, and only discrete orbits survive.</p>
+<div class="card"><img src="img/bohr.svg" alt="Bohr orbits" style="width:100%;border-radius:8px"></div>
+<table>
+<tr><td class="thm">orbit_speed</td><td>force balance alone: <code>v² = K/(mr)</code>, every radius allowed</td></tr>
+<tr><td class="thm">bohr_orbit</td><td>with quantisation: <code>v = K/nħ</code>, <code>r = (nħ)²/mK</code>, <code>E = −mK²/2(nħ)²</code></td></tr>
+<tr><td class="thm">bohr_speed_fraction</td><td><code>v = c·α/n</code> with <code>α ≈ 1/137</code>: about 0.7 % of light speed in the ground state</td></tr>
+</table>
+<p>The Bohr model is a stepping stone. It gets hydrogen's energies right, but real electrons are standing waves (section 5), not dots on orbits.</p>
+
 <h2 id="further">Where this leads: Boltzmann and Navier–Stokes</h2>
 <p>The pieces above are textbook physics. The <em>bridge</em> between them is the deep part: showing that deterministic hard-sphere collisions really produce random-walk behaviour, and that it averages out to fluid equations.</p>
 <table>
 <tr><th>Scale</th><th>Description</th><th>Status</th></tr>
 <tr><td>Particles</td><td>Newton's laws plus elastic collisions (sections 1–2b)</td><td class="ok">proved here</td></tr>
+<tr><td>Random walk → heat equation</td><td>Master equation, continuum limit of the operator, Gaussian kernel (section 4)</td><td class="ok">proved here</td></tr>
+<tr><td>Heat → Schrödinger</td><td>Imaginary diffusion coefficient (section 5)</td><td class="ok">proved here (free particle)</td></tr>
 <tr><td>Kinetic</td><td>Boltzmann equation: the statistics of many collisions</td><td>Lanford (1975), short times only</td></tr>
 <tr><td>Fluid</td><td>Navier–Stokes: viscosity is <em>momentum</em> diffusing through collisions, <code>ν ≈ ⅓·v·λ</code>, the same shape as <code>D</code></td><td>Derived rigorously from hard spheres by Deng, Hani &amp; Ma (2025), part of Hilbert's sixth problem; not formalised in Lean</td></tr>
 <tr><td>Regularity</td><td>Do smooth 3D Navier–Stokes solutions exist for all time?</td><td class="bad">open Millennium Prize problem, untouched by this work</td></tr>
@@ -113,7 +151,7 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 <li><strong>Mass mismatch → slow thermal equilibration.</strong> Because <code>4m₁m₂/(m₁+m₂)² ≈ 4mₑ/mᵢ</code> is tiny for electrons and ions, a plasma can sustain two different temperatures for a long time.</li>
 </ul>
 
-<footer>Proofs: Lean 4 + Mathlib. Figures and simulations are illustrations; the theorems are in <code>Movement.lean</code>.</footer>
+<footer>Proofs: Lean 4 + Mathlib. Figures and simulations are illustrations; the theorems are in <code>Movement/</code>.</footer>
 </main>
 
 <script>
@@ -282,6 +320,35 @@ const $ = id => document.getElementById(id);
     x.fillStyle = css('--b'); x.fillText('ballistic n²', X(Math.sqrt(MAXN)) + 6, T + 14);
     x.fillStyle = css('--ink'); x.fillText('mean squared displacement', L + 6, B - 8);
     $('walkOut').innerHTML = `step n = <b>${n}</b> · measured MSD = <b>${msd[n].toFixed(1)}</b> · predicted (proved) = <b>${n}</b> · RMS spread √n = <b>${Math.sqrt(n).toFixed(1)}</b>`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ---------- 5. heat vs Schrödinger modes ---------- */
+(() => {
+  const S = setup('modes'); let t0 = performance.now();
+  $('modeReset').onclick = $('kk').oninput = () => t0 = performance.now();
+  function frame(now){
+    const {x, h, r} = S, w = S.w();
+    x.setTransform(r, 0, 0, r, 0, 0); x.clearRect(0, 0, w, h);
+    const k = +$('kk').value, t = (now - t0) / 1000, D = 0.06;
+    const decay = Math.exp(-D * k * k * t), half = w / 2, amp = h * 0.32, mid = h / 2 + 8;
+    const plot = (ox, col, f) => {
+      x.strokeStyle = css('--line'); x.lineWidth = 1; x.beginPath(); x.moveTo(ox + 10, mid); x.lineTo(ox + half - 10, mid); x.stroke();
+      x.strokeStyle = css(col); x.lineWidth = 2.5; x.beginPath();
+      for (let i = 0; i <= 200; i++){
+        const u = i / 200, px = ox + 10 + u * (half - 20), py = mid - amp * f(u * 2 * Math.PI * k / 2 * 2);
+        i ? x.lineTo(px, py) : x.moveTo(px, py);
+      }
+      x.stroke();
+    };
+    plot(0, '--b', a => decay * Math.cos(a));
+    plot(half, '--a', a => Math.cos(a - D * 6 * k * k * t));
+    x.font = 'bold 13px sans-serif';
+    x.fillStyle = css('--b'); x.fillText('heat: real D', 14, 18);
+    x.fillStyle = css('--a'); x.fillText('Schrödinger: D = iħ/2m', half + 14, 18);
+    $('modeOut').innerHTML = `heat amplitude: <b>${(100 * decay).toFixed(0)}%</b> (decays as exp(−Dk²t)) · quantum amplitude: <b>100%</b> (proved constant)`;
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

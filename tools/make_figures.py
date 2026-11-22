@@ -187,6 +187,94 @@ def diffusion():
     (OUT / "diffusion.svg").write_text(svg(W, H, "\n".join(out)))
 
 
+# ------------------------------------------- 5. random walk -> heat kernel
+def heat():
+    W, H = 760, 400
+    L, R, T, Bm = 60, 730, 55, 340
+    out = [text(W / 2, 30, "Random-walk probabilities approach the Gaussian heat kernel", 17,
+                anchor="middle", weight="bold")]
+    xmax, pmax = 30, 0.27
+    def X(x): return L + (x + xmax) / (2 * xmax) * (R - L)
+    def Y(p): return Bm - p / pmax * (Bm - T)
+    out.append(f"<line x1='{L}' x2='{R}' y1='{Bm}' y2='{Bm}' stroke='{MUTED}'/>")
+    for x in (-30, -20, -10, 0, 10, 20, 30):
+        out.append(text(X(x), Bm + 20, str(x), 12, MUTED, "middle"))
+    for n, col in ((10, B), (40, A), (160, C)):
+        for k in range(n + 1):
+            x = 2 * k - n
+            if abs(x) > xmax:
+                continue
+            p = math.comb(n, k) / 2 ** n
+            bw = (R - L) / (2 * xmax) * 1.2
+            out.append(f"<rect x='{X(x)-bw/2:.1f}' y='{Y(p):.1f}' width='{bw:.1f}' "
+                       f"height='{Bm-Y(p):.1f}' fill='{col}' opacity='0.35'/>")
+        pts = [(X(x / 10), Y(2 / math.sqrt(2 * math.pi * n) * math.exp(-(x / 10) ** 2 / (2 * n))))
+               for x in range(-10 * xmax, 10 * xmax + 1)]
+        out.append(poly(pts, col, 2.5))
+        peak = 2 / math.sqrt(2 * math.pi * n)
+        out.append(text(X(0) + 14 + n ** 0.5 * 9, Y(peak * 0.75), f"n = {n}", 14, col, weight="bold"))
+    out.append(text((L + R) / 2, Bm + 44, "position x", 14, INK, "middle"))
+    out.append(text(L + 4, T + 6, "bars: exact path counts / 2ⁿ", 13, MUTED))
+    out.append(text(L + 4, T + 24, "curves: exp(−x²/2n) / √n  (heat kernel)", 13, MUTED))
+    (OUT / "heat.svg").write_text(svg(W, H, "\n".join(out)))
+
+
+# ------------------------------------------- 6. heat vs Schrödinger modes
+def quantum():
+    W, H = 880, 360
+    out = []
+    def panel(ox, title, sub, col, fn):
+        L, R, mid, amp = ox + 40, ox + 400, 200, 90
+        out.append(text(ox + 220, 34, title, 17, anchor="middle", weight="bold"))
+        out.append(f"<line x1='{L}' x2='{R}' y1='{mid}' y2='{mid}' stroke='{GRID}'/>")
+        for j, t in enumerate((0, 0.5, 1.0, 1.5)):
+            pts = [(L + i / 200 * (R - L), mid - amp * fn(i / 200 * 4 * math.pi, t)) for i in range(201)]
+            out.append(poly(pts, col, 2.5, opacity=1 - 0.24 * j))
+            out.append(text(R - 6, 54 + 13 * j, f"t = {t:g}", 12, col, "end"))
+        out.append(text(ox + 220, 335, sub, 14, col, "middle", "bold"))
+    panel(0, "Heat mode: real D", "amplitude decays: exp(−Dk²t)", B,
+          lambda x, t: math.exp(-t) * math.cos(x))
+    panel(440, "Schrödinger mode: D = iħ/2m", "amplitude constant: the wave just moves", A,
+          lambda x, t: math.cos(x - 1.3 * t))
+    out.append(f"<line x1='440' y1='50' x2='440' y2='310' stroke='{GRID}' stroke-width='2'/>")
+    (OUT / "quantum.svg").write_text(svg(W, H, "\n".join(out)))
+
+
+# ------------------------------------------------------------- 7. Bohr
+def bohr():
+    W, H = 760, 400
+    cx, cy = 230, 218
+    out = [text(W / 2, 30, "Bohr model: force balance + quantised angular momentum", 17,
+                anchor="middle", weight="bold")]
+    out.append(dot(cx, cy, 6, B))
+    out.append(dot(40, 70, 6, B) + text(52, 75, "proton", 13) + dot(120, 70, 6, A) + text(132, 75, "electron", 13))
+    for n in (1, 2, 3):
+        r = 17 * n * n
+        out.append(f"<circle cx='{cx}' cy='{cy}' r='{r}' fill='none' stroke='{A}' stroke-width='2' opacity='{1.1-0.25*n:.2f}'/>")
+        a = -0.6 - 0.35 * n
+        out.append(dot(cx + r * math.cos(a), cy + r * math.sin(a), 6, A))
+        out.append(text(cx + r * math.cos(0.5) + 6, cy + r * math.sin(0.5) + 4, f"n={n}", 13, A, weight="bold"))
+    x0 = 470
+    rows = [("n", "radius", "speed", "energy"),
+            ("1", "a₀", "c/137", "−13.6 eV"),
+            ("2", "4a₀", "c/274", "−3.40 eV"),
+            ("3", "9a₀", "c/411", "−1.51 eV")]
+    for i, row in enumerate(rows):
+        for j, cell in enumerate(row):
+            out.append(text(x0 + (0, 40, 110, 185)[j], 110 + 30 * i, cell, 14,
+                            INK if i else MUTED, weight="bold" if i == 0 else "normal"))
+    out.append(text(x0, 260, "r ∝ n²  ·  v ∝ 1/n  ·  E ∝ −1/n²", 15, A, weight="bold"))
+    out.append(text(x0, 290, "m v²/r = K/r²  and  m v r = nħ", 13, MUTED))
+    out.append(text(x0, 345, "A picture, not reality: real electrons", 12, MUTED))
+    out.append(text(x0, 362, "are standing waves, not orbiting dots.", 12, MUTED))
+    (OUT / "bohr.svg").write_text(svg(W, H, "\n".join(out)))
+
+
+
 if __name__ == "__main__":
-    cbdr(); elastic(); rotation(); diffusion()
+    cbdr(); elastic(); rotation(); diffusion(); heat(); quantum(); bohr()
+    docs = OUT.parent / "docs" / "img"
+    docs.mkdir(parents=True, exist_ok=True)
+    for f in OUT.glob("*.svg"):
+        (docs / f.name).write_text(f.read_text())
     print("wrote", sorted(p.name for p in OUT.glob("*.svg")))

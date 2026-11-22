@@ -7,9 +7,9 @@ This repository starts from a sailor's rule of thumb:
 
 > *If another boat stays still in your windscreen while it grows larger, you are on a collision course.*
 
-It then follows the idea down to the molecular scale (billiard-ball collisions, spinning molecules, diffusion) and proves each step formally in [Lean 4](https://lean-lang.org/) with [Mathlib](https://github.com/leanprover-community/mathlib4).
+It then follows the idea down to the molecular scale (billiard-ball collisions, spinning molecules, diffusion), on to the heat equation, and across to quantum mechanics (the Schrödinger equation and Bohr's electron orbits). Each step is proved formally in [Lean 4](https://lean-lang.org/) with [Mathlib](https://github.com/leanprover-community/mathlib4).
 
-All results are in [`Movement.lean`](Movement.lean). The file contains no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
+The proofs are in [`Movement/`](Movement): [`Basic.lean`](Movement/Basic.lean) (sections 1–3), [`Heat.lean`](Movement/Heat.lean) (4), [`Quantum.lean`](Movement/Quantum.lean) (5) and [`Bohr.lean`](Movement/Bohr.lean) (6). There is no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
 
 ---
 
@@ -67,11 +67,57 @@ Each collision randomises the direction. The simplest model of this is a ±1 ran
 
 Without collisions a particle moves ballistically and its distance grows like `n`. Collisions *slow* spreading down to `√n`, and that is diffusion. The diffusion coefficient scales roughly as `D ≈ ⅓ · speed · mean free path`, so light, fast gas molecules diffuse faster (Graham's law). In liquids, size and viscosity dominate instead (Stokes–Einstein, `D = kT / 6πηr`).
 
+## 4. From the random walk to the heat equation
+
+![Random walk probabilities and the heat kernel](img/heat.svg)
+
+| Theorem | Statement |
+|---|---|
+| `master_equation` | The number of paths ending at `x` satisfies `N(n+1, x) = N(n, x−1) + N(n, x+1)`. |
+| `discrete_heat` | So the probabilities obey a discrete heat equation: `p(n+1,x) − p(n,x) = ½·[p(n,x+1) − 2p(n,x) + p(n,x−1)]`. |
+| `diffusive_scaling` | With grid spacing `h` and time step `τ` this is a finite-difference heat equation with **`D = h²/2τ`**. |
+| `einstein_relation` | Mean squared displacement `n·h² = 2Dt`. |
+| `second_difference_tendsto` | The discrete Laplacian converges: `(f(x+h) − 2f(x) + f(x−h))/h² → f''(x)` as `h → 0`. |
+| `heatKernel_dt`, `heatKernel_dxx`, `heatKernel_solves` | The Gaussian `exp(−x²/4Dt)/√t` solves **`∂ₜu = D ∂ₓₓu`**. |
+
+## 5. From diffusion to quantum mechanics
+
+![Heat mode vs Schrödinger mode](img/quantum.svg)
+
+The free Schrödinger equation `iħ ∂ₜψ = −(ħ²/2m) ∂ₓₓψ` is the heat equation with an **imaginary diffusion coefficient** `D = iħ/2m`, or equivalently the heat equation run in imaginary time (a Wick rotation).
+
+| Theorem | Statement |
+|---|---|
+| `mode_solves` | The Fourier mode `exp(−ck²t)·exp(ikx)` solves `∂ₜu = c ∂ₓₓu` for any **complex** `c`. |
+| `schrodinger_mode` | With `c = iħ/2m` that is exactly the Schrödinger equation. |
+| `norm_heat_mode` | A heat mode has size `exp(−Dk²t)`: it decays, and information is lost. |
+| `norm_schrodinger_mode` | A Schrödinger mode has norm exactly 1 for all time: only its phase rotates. |
+| `wick_rotation`, `heat_to_schrodinger` | Any heat-equation solution that extends to complex time `s` gives a Schrödinger solution `ψ(t,x) = φ(it,x)`. |
+
+So the same equation describes both, and the single factor `i` is the difference between irreversible spreading and reversible wave motion.
+
+## 6. Why electron orbits come in fixed sizes (Bohr model)
+
+![Bohr orbits](img/bohr.svg)
+
+| Theorem | Statement |
+|---|---|
+| `orbit_speed` | Classical force balance alone: `v² = K/(m r)`. Closer orbits are faster, and every radius is allowed. |
+| `bohr_orbit` | Add `m v r = nħ` and the orbit is fixed: `v = K/nħ`, `r = (nħ)²/(mK)`, `E = −mK²/(2(nħ)²)`. |
+| `bohr_levels` | `Eₙ = E₁/n²`. |
+| `bohr_speed_fraction` | `v = c·α/n` with `α = K/ħc ≈ 1/137`, so the ground-state electron moves at about 0.7 % of light speed. |
+
+The Bohr model is a historical stepping stone. It gives the correct hydrogen energies, but real electrons are standing waves described by the Schrödinger equation, not dots on orbits.
+
 ---
 
 ## What is *not* proved here
 
-Each section is proved in isolation. The bridge between them, namely that deterministic hard-sphere collisions in a gas actually *produce* a random walk, is not formalised. That step is the hard part of statistical mechanics. See [*Where this leads*](https://punnerud.github.io/movement-lean/#further) on the website for how it connects to the Boltzmann and Navier–Stokes equations.
+- That deterministic hard-sphere collisions in a gas actually *produce* a random walk. This is the hard part of statistical mechanics.
+- That the random-walk distribution itself converges to the heat kernel (the de Moivre–Laplace / central limit theorem). Section 4 proves that the *equation* converges and that the Gaussian solves the limit equation, not that the solutions converge.
+- Anything about the Schrödinger equation with a potential, measurement, or spin.
+
+See [*Where this leads*](https://punnerud.github.io/movement-lean/#further) on the website for the connection to the Boltzmann and Navier–Stokes equations.
 
 ## Building
 
