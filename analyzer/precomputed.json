@@ -447,13 +447,15 @@
       0.8
     ],
     "extra_d": [
-      0.35
+      0.2,
+      0.7
     ],
-    "active_orbitals": 15,
-    "E_Cl_minus_hartree": -459.679537,
-    "E_Cl_hartree": -459.563442,
+    "active_orbitals": 20,
+    "determinants": 23474025,
+    "E_Cl_minus_hartree": -459.71815,
+    "E_Cl_hartree": -459.601951,
     "E_Cl_minus_hartree_fock": -459.560857,
-    "seconds": 87,
-    "note": "values as printed, six decimals; with one more s function (16 orbitals) the affinity changes from 3.159 to 3.161 eV"
+    "seconds": 409,
+    "note": "values as printed, six decimals. Smaller sets: 15 orbitals (one d shell) 3.159 eV, 16 orbitals (+ one s) 3.161 eV."
   }
 }

@@ -772,11 +772,15 @@ def _strings(n, k):
     return occ, np.array(pq), np.array(I), np.array(J), np.array(sign)
 
 
-def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200):
+def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=False):
     """Full configuration interaction ground state in an orthonormal orbital basis.
 
     The wavefunction is a matrix C[alpha string, beta string]; the lowest
-    eigenvalue is found by Davidson iteration, never forming the Hamiltonian."""
+    eigenvalue is found by Davidson iteration, never forming the Hamiltonian.
+    With low_memory=True (needs scipy) the work array of size
+    orbitals^2 x determinants is avoided: the same-spin parts become two
+    dense matrices over strings, and the opposite-spin part is applied one
+    orbital pair at a time through sparse matrices."""
     n = h.shape[0]
     occ_a, pq_a, I_a, J_a, s_a = _strings(n, n_alpha)
     occ_b, pq_b, I_b, J_b, s_b = _strings(n, n_beta)
@@ -804,6 +808,37 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200):
             np.add.at(out.T, I_b[b0:b1], s_b[b0:b1, None] * G.transpose(0, 2, 1)[pq_b[b0:b1] - lo, J_b[b0:b1]])
         return out
 
+    if low_memory:
+        from scipy import sparse
+        kf = k.ravel()
+
+        def same_spin(pq_x, I_x, J_x, s_x, N):
+            """Matrix over strings of  sum k_pq E_pq + 1/2 sum (pq|rs) E_pq E_rs."""
+            Hs = np.zeros((N, N))
+            np.add.at(Hs, (I_x, J_x), s_x * kf[pq_x])
+            for pq in range(n * n):
+                lo, hi = np.searchsorted(pq_x, [pq, pq + 1])
+                if lo == hi:
+                    continue
+                M = sparse.csr_matrix((s_x * g2[pq, pq_x], (I_x, J_x)), shape=(N, N))
+                Hs[I_x[lo:hi]] += 0.5 * s_x[lo:hi, None] * M[J_x[lo:hi]].toarray()
+            return Hs
+
+        H_a = same_spin(pq_a, I_a, J_a, s_a, Na)
+        H_b = H_a if n_alpha == n_beta else same_spin(pq_b, I_b, J_b, s_b, Nb)
+
+        def sigma(C):                                      # noqa: F811
+            out = H_a @ C + C @ H_b.T
+            for pq in range(n * n):
+                lo, hi = np.searchsorted(pq_a, [pq, pq + 1])
+                if lo == hi:
+                    continue
+                M = sparse.csr_matrix((s_b * g2[pq, pq_b], (I_b, J_b)), shape=(Nb, Nb))
+                T = s_a[lo:hi, None] * C[J_a[lo:hi]]
+                out[I_a[lo:hi]] += (M @ T.T).T
+            return out
+
+    restart = 8 if low_memory else 25
     hd = np.diag(h)
     Jm = np.einsum("iijj->ij", eri)
     Km = np.einsum("ijji->ij", eri)
@@ -826,7 +861,7 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200):
         residual = (y @ Sg).reshape(Na, Nb) - energy * x
         if np.linalg.norm(residual) < tol:
             break
-        if len(vectors) >= 25:                      # restart
+        if len(vectors) >= restart:
             x /= np.linalg.norm(x)
             vectors, sigmas = [x], [sigma(x)]
             residual = sigmas[0] - energy * x

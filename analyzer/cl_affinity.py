@@ -10,8 +10,8 @@ orbitals, and the outer seven (Cl) or eight (Cl-) electrons are treated by
 full CI in the 3s and 3p orbitals plus a set of correlating functions.
 Each species uses its own Hartree-Fock orbitals.
 
-    python3 analyzer/cl_affinity.py                 # 15 orbitals, 4 GB, 90 s on an M3; writes analyzer/precomputed.json
-    python3 analyzer/cl_affinity.py 0.25 0.3 0.6    # s', p', d exponents ("-" for none): test run
+    python3 analyzer/cl_affinity.py                 # 20 orbitals, 11 GB, 7 minutes on an M3; writes analyzer/precomputed.json
+    python3 analyzer/cl_affinity.py 0.25 0.3 0.6 0.5   # s', p', d, f exponents ("-" for none): test run
 """
 import json
 import sys
@@ -21,11 +21,11 @@ from pathlib import Path
 import numpy as np
 
 import quantum
-from he2_dispersion import contracted_eri, one_electron
+from he2_dispersion import contracted_eri, f_functions, one_electron
 from nacl_hf import CL_P, CL_S, build, functions
 
 HARTREE_EV = 27.211386245981
-EXTRA_S, EXTRA_P, EXTRA_D = (), (0.1, 0.8), (0.35,)
+EXTRA_S, EXTRA_P, EXTRA_D = (), (0.1, 0.8), (0.2, 0.7)
 
 
 def spherical_hf(S, h, eri, occupations):
@@ -46,11 +46,11 @@ def spherical_hf(S, h, eri, occupations):
     return float(0.5 * np.sum(D * (h + F))), C
 
 
-def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d):
+def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=()):
     """Frozen-core full CI energy of the outer electrons of chlorine."""
     funcs = functions(CL_S, CL_P)
     n_sp = len(funcs)
-    extra = (functions((1.0, 1.0, 0), (1.0, 1.0, 0), extra_d) if extra_d else [])
+    extra = (functions((1.0, 1.0, 0), (1.0, 1.0, 0), extra_d) if extra_d else []) + f_functions(extra_f)
     exps, cen, W = build([(0.0, funcs + extra)])
     eri = contracted_eri(exps, cen, W)
     S, h = one_electron(exps, cen, W, [(17, (0, 0, 0))])
@@ -86,7 +86,8 @@ def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d):
     _, U = np.linalg.eigh(A.T @ F @ A)
     A = A @ U
     m = A.shape[1]
-    e_ci = quantum.fci(A.T @ h_eff @ A, quantum._transform(eri, A), n_alpha, n_beta, e_nuc=e_core, tol=1e-6)
+    e_ci = quantum.fci(A.T @ h_eff @ A, quantum._transform(eri, A), n_alpha, n_beta, e_nuc=e_core, tol=1e-6,
+                       low_memory=m > 16)
     return e_hf, e_ci, m
 
 
@@ -95,13 +96,14 @@ def main():
     if len(sys.argv) > 1:
         parse = lambda t: () if t == "-" else tuple(float(x) for x in t.split(","))
         extra_s, extra_p, extra_d = (parse(t) for t in sys.argv[1:4])
+        extra_f = parse(sys.argv[4]) if len(sys.argv) > 4 else ()
     else:
-        extra_s, extra_p, extra_d = EXTRA_S, EXTRA_P, EXTRA_D
+        extra_s, extra_p, extra_d, extra_f = EXTRA_S, EXTRA_P, EXTRA_D, ()
     closed = (2,) * 9
     open_ = (2,) * 6 + (5 / 3,) * 3
-    hf_m, ci_m, m = valence_ci(4, 4, closed, extra_s, extra_p, extra_d)
+    hf_m, ci_m, m = valence_ci(4, 4, closed, extra_s, extra_p, extra_d, extra_f)
     print(f"Cl-  {m} active orbitals  HF {hf_m:.6f}  valence CI {ci_m:.6f}  ({time.time() - t0:.0f} s)", flush=True)
-    _, ci_0, _ = valence_ci(4, 3, open_, extra_s, extra_p, extra_d)
+    _, ci_0, _ = valence_ci(4, 3, open_, extra_s, extra_p, extra_d, extra_f)
     print(f"Cl   valence CI {ci_0:.6f}  ({time.time() - t0:.0f} s)", flush=True)
     ea = (ci_0 - ci_m) * HARTREE_EV
     print(f"electron affinity {ea:.4f} eV   (measured 3.6127, Hartree-Fock about 2.58)")

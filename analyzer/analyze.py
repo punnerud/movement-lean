@@ -510,8 +510,8 @@ if NACL_HF and quantum is not None:
             f"outer electrons by full CI, inner ten frozen ({CL_CI['active_orbitals']} orbitals)",
             "rayleigh_ritz_bound", ea_ci, NACL["Cl_electron_affinity_eV"], "eV", "limit", 0.05,
             UNC["electron_affinity"],
-            "precomputed; over half the gap closed, the rest needs more correlating functions "
-            "(a second d shell, f functions) than fit in memory")
+            "precomputed; over half the gap closed. A second d shell changed it by only 0.003 eV, "
+            "so the rest lies elsewhere (f functions, more s and p functions)")
         VARIATIONAL += [("Cl⁻: Hartree–Fock ≥ valence full CI", CL_CI["E_Cl_minus_hartree_fock"],
                          CL_CI["E_Cl_minus_hartree"])]
     # the same numbers against other people's Hartree-Fock: tests the code, not the physics
@@ -1062,7 +1062,7 @@ CAVEATS = [
     "(dispersion 22.395 K) are quoted from a secondary source.",
     "NaCl from first principles is unrestricted Hartree–Fock in a basis about 26 mEh above the "
     "large-basis energy, most of it in the inner shells. The chlorine electron affinity with "
-    "correlation freezes the inner ten electrons and uses 15 orbitals; it is not converged.",
+    "correlation freezes the inner ten electrons and uses 20 orbitals; it is not converged.",
     "The NaCl ionic model takes the bond length and vibration frequency from measurement and uses "
     "free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.",
     "The uncertainty column uses one representative relative uncertainty per class of data "
