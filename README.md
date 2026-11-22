@@ -227,10 +227,15 @@ Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](http
 | He, total energy | Hylleraas (the distance between the electrons is in the wavefunction) | 0.002 % |
 | Li, ionization energy | Hartree–Fock, `E(Li⁺) − E(Li)` | 0.9 % |
 | Be, ionization energy | Hartree–Fock | 14 %, **fails**: strong 2s–2p correlation |
+| H⁻, electron affinity | Hartree–Fock | negative, **fails**: predicts that the ion does not exist |
+| H⁻, electron affinity | full configuration interaction, spherical orbitals only | 48 %, **fails**: bound, but only half the binding |
+| H⁻, electron affinity | Hylleraas | 0.07 % |
 | H₂, bond length | full configuration interaction, minimum of the computed curve | 0.06 % |
 | H₂, vibration frequency | curvature of the computed curve | 0.04 % |
 | H₂, rotational constant | rigid rotor at the computed bond length | 0.12 % |
 | H₂, binding energy | full configuration interaction | 1.1 % |
+
+H⁻ (a proton with two electrons) shows what the force between the electrons does for stability. In the average field of the other electron, the second electron is not bound at all. The ion exists only because the two electrons actively stay away from each other, and `--check` asserts both facts.
 
 The H₂ rows use no measured property of the molecule: only the electron and proton masses and charges go in.
 

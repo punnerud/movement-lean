@@ -91,6 +91,9 @@ Each formula's derivation is proved in Lean where a theorem is named; the compar
 | He | total ground-state energy | Hylleraas (r₁₂ in the wavefunction) | `rayleigh_ritz_bound` | -79.00353 eV | -79.00515 eV | -0.0021 % | matches (non-relativistic; the remaining 0.002 % is relativistic and QED) | 206× |
 | Li | first ionization energy | Hartree–Fock, E(Li⁺) − E(Li) | `rayleigh_ritz_bound` | 5.342146 eV | 5.391715 eV | -0.92 % | matches (the missing 1 % is electron correlation) | 91 935× |
 | Be | first ionization energy | Hartree–Fock, E(Be⁺) − E(Be) | `rayleigh_ritz_bound` | 8.042107 eV | 9.322699 eV | -14 % | fails, as expected (average-field theory misses the strong 2s–2p correlation in beryllium) | 1 373 628× |
+| H⁻ | electron affinity of H | Hartree–Fock (average field) | `rayleigh_ritz_bound` | -0.3282728 eV | 0.754195 eV | -144 % | fails, as expected (negative: the average field predicts that H⁻ does not exist) | 57 411× |
+| H⁻ | electron affinity of H | full CI, spherical orbitals only | `rayleigh_ritz_bound` | 0.3942391 eV | 0.754195 eV | -48 % | fails, as expected (bound, but only half of the binding) | 19 091× |
+| H⁻ | electron affinity of H | Hylleraas (r₁₂ in the wavefunction) | `rayleigh_ritz_bound` | 0.7547067 eV | 0.754195 eV | +0.0678 % | matches (non-relativistic; nuclear motion included only through the reduced mass) | 27× |
 | H₂ | bond length | full CI, potential-curve minimum | `rayleigh_ritz_bound` | 0.7410006 Å | 0.74144 Å | -0.0593 % | matches | 59× |
 | H₂ | binding energy D_e | full CI, 2·E(H) − E(H₂) | `rayleigh_ritz_bound` | 4.695284 eV | 4.7483 eV | -1.12 % | matches (basis lacks high angular functions, so ~1 % of the binding is missing) | 1 117× |
 | H₂ | vibration wavenumber ω_e | curvature of the computed potential | `not formalised` | 4403.17 cm⁻¹ | 4401.21 cm⁻¹ | +0.0445 % | matches | 45× |
@@ -104,6 +107,8 @@ Each formula's derivation is proved in Lean where a theorem is named; the compar
 | Li⁺, Hartree–Fock | total energy | this code vs. published benchmark | `rayleigh_ritz_bound` | -7.236412 hartree | -7.236415 hartree | -0.00004 % | matches | 3.6× |
 | Be, Hartree–Fock | total energy | this code vs. published benchmark | `rayleigh_ritz_bound` | -14.57302 hartree | -14.57302 hartree | -0.00003 % | matches | 3.2× |
 | He, Hylleraas | total energy | this code vs. published benchmark | `rayleigh_ritz_bound` | -2.903724 hartree | -2.903724 hartree | -0.00001 % | matches | 1.0× |
+| H⁻, Hartree–Fock | total energy | this code vs. published benchmark | `rayleigh_ritz_bound` | -0.4879296 hartree | -0.48793 hartree | -0.00008 % | matches | 7.7× |
+| H⁻, Hylleraas | total energy | this code vs. published benchmark | `rayleigh_ritz_bound` | -0.5277501 hartree | -0.527751 hartree | -0.00018 % | matches | 18× |
 | H₂, full CI at minimum | total energy | this code vs. published benchmark | `rayleigh_ritz_bound` | -1.172484 hartree | -1.174476 hartree | -0.17 % | matches | 16 959× |
 
 ## Where do the deviations come from?
@@ -182,6 +187,10 @@ Each line follows one quantity from the simplest model to the best one here.
 | He | speed of sound at 20 °C | √(γRT/M), γ = 5/3 | -0.0456 % | starting point |
 |  |  | ideal gas + acoustic virial coefficient | +0.00007 % | real helium atoms repel slightly at 1 atm |
 | | | **remaining** | 0.0× the reference uncertainty | within the reference uncertainty |
+| H⁻ | electron affinity of H | Hartree–Fock (average field) | -144 % | starting point |
+|  |  | full CI, spherical orbitals only | -48 % | electrons avoid each other radially: the ion becomes stable |
+|  |  | Hylleraas (r₁₂ in the wavefunction) | +0.0678 % | electrons avoid each other in every direction |
+| | | **remaining** | 27× the reference uncertainty | close to the reference uncertainty |
 
 ## Caveats
 
@@ -190,4 +199,4 @@ Each line follows one quantity from the simplest model to the best one here.
 - The uncertainty column uses one representative relative uncertainty per class of data (see relative_uncertainty in reference_data.json), not a separate figure for every value.
 - The numerical methods are non-relativistic with fixed nuclei, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
 
-**72 comparisons: 66 inside the model's domain and matching, 6 documented limits.**
+**77 comparisons: 69 inside the model's domain and matching, 8 documented limits.**

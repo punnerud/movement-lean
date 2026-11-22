@@ -69,7 +69,8 @@
     "NIST-JANAF heat capacities are calculated from spectroscopic constants by statistical mechanics.",
     "Balmer 'observed' wavelengths are unresolved blends of fine-structure components about 0.009 nm apart; the uncertainty used reflects that.",
     "H2 centrifugal distortion constant (0.0471 cm^-1, Huber & Herzberg) was not re-verified.",
-    "Helium acoustic virial coefficient is interpolated between 273.15 K and 300 K."
+    "Helium acoustic virial coefficient is interpolated between 273.15 K and 300 K.",
+    "H electron affinity 0.754195(19) eV (Lykke, Murray, Lineberger 1991) and the H- benchmark energies (HF -0.487930, exact -0.527751017 hartree) are quoted from the literature and were not re-verified online."
   ],
   "vibration_cm1": {
     "H2": [
@@ -110,7 +111,9 @@
     "He_HF": -2.86168,
     "LiPlus_HF": -7.236415,
     "Be_HF": -14.573023,
-    "H2_exact": -1.174476
+    "H2_exact": -1.174476,
+    "HMinus_HF": -0.48793,
+    "HMinus_exact": -0.527751017
   },
   "relative_uncertainty": {
     "ionization_one_electron": 1e-09,
@@ -123,9 +126,11 @@
     "sound_He": 0.0009,
     "H2_bond": 1e-05,
     "H2_De": 1e-05,
-    "H2_vibration": 1e-05
+    "H2_vibration": 1e-05,
+    "electron_affinity": 2.5e-05
   },
   "H2_B0_cm1": 59.336,
   "H2_centrifugal_D_cm1": 0.0471,
-  "He_acoustic_virial_cm3_per_mol": 21.97
+  "He_acoustic_virial_cm3_per_mol": 21.97,
+  "H_electron_affinity_eV": 0.754195
 }

@@ -240,6 +240,7 @@ row(G_HEAT, "He", "speed of sound at 20 °C", "ideal gas + acoustic virial coeff
     "ok", 5e-4, UNC["sound_He"], base=he_s, fix="real helium atoms repel slightly at 1 atm")
 
 # ---------------------------------------------------------------- numerical quantum mechanics
+STABILITY = []            # (description, bool): qualitative conclusions that must hold
 VARIATIONAL = []          # (description, upper value, lower value): upper >= lower must hold
 if quantum is not None:
     bench = DATA["benchmark_hartree"]
@@ -271,6 +272,23 @@ if quantum is not None:
         "limit", 0.05, u_n,
         "average-field theory misses the strong 2s–2p correlation in beryllium")
 
+    # H-: a proton with two electrons. Bound only because the electrons avoid each other.
+    hm_hf = quantum.atom_hf(1, 1, 1)
+    hm_s = quantum.two_electron_fci_s(1)
+    hm_hyl = quantum.hylleraas_helium(Z=1, order=8, alpha=quantum.Fraction(7, 10))
+    ea, h_ev, u_ea = DATA["H_electron_affinity_eV"], HARTREE_EV * recoil("1H", 1), UNC["electron_affinity"]
+    a = row(G_NUM, "H⁻", "electron affinity of H", "Hartree–Fock (average field)",
+            "rayleigh_ritz_bound", (-0.5 - hm_hf) * h_ev, ea, "eV", "limit", 0.05, u_ea,
+            "negative: the average field predicts that H⁻ does not exist")
+    b = row(G_NUM, "H⁻", "electron affinity of H", "full CI, spherical orbitals only",
+            "rayleigh_ritz_bound", (-0.5 - hm_s) * h_ev, ea, "eV", "limit", 0.05, u_ea,
+            "bound, but only half of the binding", base=a,
+            fix="electrons avoid each other radially: the ion becomes stable")
+    row(G_NUM, "H⁻", "electron affinity of H", "Hylleraas (r₁₂ in the wavefunction)",
+        "rayleigh_ritz_bound", (-0.5 - hm_hyl) * h_ev, ea, "eV", "ok", 2e-3, u_ea, base=b,
+        fix="electrons avoid each other in every direction",
+        note="non-relativistic; nuclear motion included only through the reduced mass")
+
     mu_h2 = mu("H2")
     r_ang = r_e * BOHR_A
     row(G_NUM, "H₂", "bond length", "full CI, potential-curve minimum", "rayleigh_ritz_bound",
@@ -289,13 +307,20 @@ if quantum is not None:
                                  ("Li⁺, Hartree–Fock", li_ion, "LiPlus_HF", 2e-5),
                                  ("Be, Hartree–Fock", be, "Be_HF", 2e-5),
                                  ("He, Hylleraas", he_hyl, "He_exact", 1e-6),
+                                 ("H⁻, Hartree–Fock", hm_hf, "HMinus_HF", 2e-5),
+                                 ("H⁻, Hylleraas", hm_hyl, "HMinus_exact", 1e-5),
                                  ("H₂, full CI at minimum", e_min, "H2_exact", 3e-3)):
         row(G_VAL, label, "total energy", "this code vs. published benchmark",
             "rayleigh_ritz_bound", got, bench[key], "hartree", "ok", tol, 1e-7)
     VARIATIONAL = [("He: HF ≥ s-only CI", he_hf, he_s_fci),
                    ("He: s-only CI ≥ Hylleraas", he_s_fci, he_hyl),
                    ("He: Hylleraas ≥ exact", he_hyl, bench["He_exact"]),
-                   ("H₂: full CI ≥ exact", e_min, bench["H2_exact"])]
+                   ("H₂: full CI ≥ exact", e_min, bench["H2_exact"]),
+                   ("H⁻: HF ≥ s-only CI", hm_hf, hm_s),
+                   ("H⁻: s-only CI ≥ Hylleraas", hm_s, hm_hyl),
+                   ("H⁻: Hylleraas ≥ exact", hm_hyl, bench["HMinus_exact"])]
+    STABILITY = [("H⁻ unbound in Hartree–Fock", hm_hf > -0.5),
+                 ("H⁻ bound with correlation", hm_hyl < -0.5)]
 
 
 # ---------------------------------------------------------------- reporting
@@ -452,6 +477,7 @@ tr.sum td{background:var(--code);font-weight:600}li{margin:6px 0;max-width:820px
 def main():
     bad = [r for r in ROWS if not verdict(r)[1]]
     broken = [d for d, upper, lower in VARIATIONAL if upper < lower - 1e-9]
+    broken += [d for d, holds in STABILITY if not holds]
     if quantum is None:
         print("numpy not available: numerical quantum mechanics rows skipped")
     if "--write" in sys.argv:
@@ -464,7 +490,8 @@ def main():
     for d in broken:
         print("VARIATIONAL BOUND VIOLATED:", d)
     print(f"\n{len(ROWS)} comparisons, {len(bad)} outside their expected band, "
-          f"{len(VARIATIONAL) - len(broken)}/{len(VARIATIONAL)} variational bounds hold")
+          f"{len(VARIATIONAL) + len(STABILITY) - len(broken)}/{len(VARIATIONAL) + len(STABILITY)} "
+          f"variational and stability checks hold")
     if "--check" in sys.argv and quantum is None:
         return 1
     return 1 if bad or broken else 0

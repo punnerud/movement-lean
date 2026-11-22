@@ -126,7 +126,7 @@ def even_tempered(low, high, count):
 # --------------------------------------------------------------------------
 # Atoms (all occupied orbitals are s-type: He, Li, Be and their ions)
 # --------------------------------------------------------------------------
-ATOM_BASIS = {2: (0.05, 6000.0, 16), 3: (0.012, 20000.0, 20), 4: (0.02, 40000.0, 20)}
+ATOM_BASIS = {1: (0.002, 3000.0, 22), 2: (0.05, 6000.0, 16), 3: (0.012, 20000.0, 20), 4: (0.02, 40000.0, 20)}
 
 
 def atom_integrals(Z):
@@ -138,8 +138,12 @@ def atom_hf(Z, n_alpha, n_beta):
     return uhf(*atom_integrals(Z), n_alpha, n_beta)
 
 
+def two_electron_fci_s(Z=2):
+    return fci_two_electrons(*atom_integrals(Z))
+
+
 def helium_fci_s():
-    return fci_two_electrons(*atom_integrals(2))
+    return two_electron_fci_s(2)
 
 
 # --------------------------------------------------------------------------
