@@ -291,3 +291,178 @@ if __name__ == "__main__":
     print("H2 FCI R=1.4    ", h2_energy(1.4), " (exact -1.174476)")
     print("H2 curve        ", h2_curve())
     print(f"{time.time() - t0:.1f} s")
+
+
+# --------------------------------------------------------------------------
+# p-type orbitals and full CI for any number of electrons
+# --------------------------------------------------------------------------
+def atom_sp_orbitals(Z, occupations, s_keep, p_exponents, delta=0.1):
+    """Orthonormal s and p orbitals for an atom, with h and (pq|rs) in that basis.
+
+    s space: the Hartree-Fock orbitals of the atom (occupation numbers given),
+    plus the primitive s-Gaussians with indices `s_keep`.
+    p space: for each exponent a, three functions g(r - d e) - g(r + d e) along
+    x, y, z with d = delta / sqrt(a). Such a difference of two shifted s-Gaussians
+    is odd along its axis: a p orbital (with a 1 % admixture of f), which needs
+    no new integral formulas."""
+    s_exps = even_tempered(*ATOM_BASIS[Z])
+    ns = len(s_exps)
+    exps, cen = list(s_exps), [(0.0, 0.0, 0.0)] * ns
+    for a in p_exponents:
+        d = delta / math.sqrt(a)
+        for axis in range(3):
+            for sign in (1.0, -1.0):
+                c = [0.0, 0.0, 0.0]
+                c[axis] = sign * d
+                exps.append(a); cen.append(tuple(c))
+    S, h, eri = integrals(exps, np.array(cen), [(Z, (0, 0, 0))])
+    n_prim = len(exps)
+
+    # Hartree-Fock with averaged occupations, s functions only
+    X = orthogonalizer(S[:ns, :ns])
+    hs, es = h[:ns, :ns], eri[:ns, :ns, :ns, :ns]
+    D = np.zeros((ns, ns))
+    for it in range(200):
+        F = hs + np.einsum("ijkl,kl->ij", es, D) - 0.5 * np.einsum("ikjl,kl->ij", es, D)
+        _, C = np.linalg.eigh(X.T @ F @ X)
+        C = X @ C[:, :len(occupations)]
+        new = (C * np.asarray(occupations, float)) @ C.T
+        if np.abs(new - D).max() < 1e-10:
+            break
+        D = 0.5 * (D + new) if it < 30 else new
+
+    columns = []
+    for k in range(len(occupations)):
+        columns.append(np.concatenate([C[:, k], np.zeros(n_prim - ns)]))
+    for k in s_keep:
+        e = np.zeros(n_prim); e[k] = 1.0
+        columns.append(e)
+    for k in range(len(p_exponents) * 3):
+        e = np.zeros(n_prim); e[ns + 2 * k] = 1.0; e[ns + 2 * k + 1] = -1.0
+        columns.append(e)
+    W = np.array(columns).T
+    W = W @ orthogonalizer(W.T @ S @ W, 1e-8)
+
+    # canonical orbitals of the average Fock operator (good for the CI preconditioner)
+    Dp = np.zeros((n_prim, n_prim)); Dp[:ns, :ns] = D
+    F = h + np.einsum("ijkl,kl->ij", eri, Dp) - 0.5 * np.einsum("ikjl,kl->ij", eri, Dp)
+    _, U = np.linalg.eigh(W.T @ F @ W)
+    W = W @ U
+    g = np.einsum("pi,pqrs->iqrs", W, eri)
+    g = np.einsum("qj,iqrs->ijrs", W, g)
+    g = np.einsum("rk,ijrs->ijks", W, g)
+    g = np.einsum("sl,ijks->ijkl", W, g)
+    return W.T @ h @ W, g
+
+
+def _strings(n, k):
+    """All ways to put k electrons of one spin into n orbitals, and the table
+    of single excitations <I| a+_p a_q |J> = sign."""
+    from itertools import combinations
+    strings = list(combinations(range(n), k))
+    index = {s: i for i, s in enumerate(strings)}
+    pq, I, J, sign = [], [], [], []
+    for j, s in enumerate(strings):
+        occupied = set(s)
+        for q in s:
+            rest = [x for x in s if x != q]
+            for p in range(n):
+                if p in occupied and p != q:
+                    continue
+                target = tuple(sorted(rest + [p]))
+                lo, hi = min(p, q), max(p, q)
+                between = sum(1 for x in rest if lo < x < hi)
+                pq.append(p * n + q); I.append(index[target]); J.append(j)
+                sign.append(-1.0 if between % 2 else 1.0)
+    occ = np.zeros((len(strings), n))
+    for i, s in enumerate(strings):
+        occ[i, list(s)] = 1.0
+    return occ, np.array(pq), np.array(I), np.array(J), np.array(sign)
+
+
+def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200):
+    """Full configuration interaction ground state in an orthonormal orbital basis.
+
+    The wavefunction is a matrix C[alpha string, beta string]; the lowest
+    eigenvalue is found by Davidson iteration, never forming the Hamiltonian."""
+    n = h.shape[0]
+    occ_a, pq_a, I_a, J_a, s_a = _strings(n, n_alpha)
+    occ_b, pq_b, I_b, J_b, s_b = _strings(n, n_beta)
+    Na, Nb = len(occ_a), len(occ_b)
+    k = h - 0.5 * np.einsum("prrq->pq", eri)
+    g2 = eri.reshape(n * n, n * n)
+
+    def sigma(C):
+        D = np.zeros((n * n, Na, Nb))
+        np.add.at(D, (pq_a, I_a), s_a[:, None] * C[J_a])
+        Dt = D.transpose(0, 2, 1)
+        np.add.at(Dt, (pq_b, I_b), s_b[:, None] * C.T[J_b])
+        G = (g2 @ D.reshape(n * n, Na * Nb)).reshape(n * n, Na, Nb)
+        G *= 0.5
+        out = np.tensordot(k.ravel(), D, 1)
+        np.add.at(out, I_a, s_a[:, None] * G[pq_a, J_a])
+        Gt = G.transpose(0, 2, 1)
+        np.add.at(out.T, I_b, s_b[:, None] * Gt[pq_b, J_b])
+        return out
+
+    hd = np.diag(h)
+    Jm = np.einsum("iijj->ij", eri)
+    Km = np.einsum("ijji->ij", eri)
+    same = Jm - Km
+    diag = ((occ_a @ hd)[:, None] + (occ_b @ hd)[None, :]
+            + 0.5 * np.einsum("ip,pq,iq->i", occ_a, same, occ_a)[:, None]
+            + 0.5 * np.einsum("ip,pq,iq->i", occ_b, same, occ_b)[None, :]
+            + occ_a @ Jm @ occ_b.T)
+
+    start = np.zeros((Na, Nb))
+    start.flat[np.argmin(diag)] = 1.0
+    vectors, sigmas = [start], [sigma(start)]
+    energy = diag.min()
+    for _ in range(max_iter):
+        V = np.array([v.ravel() for v in vectors])
+        Sg = np.array([s.ravel() for s in sigmas])
+        w, y = np.linalg.eigh(V @ Sg.T)
+        energy, y = w[0], y[:, 0]
+        x = (y @ V).reshape(Na, Nb)
+        residual = (y @ Sg).reshape(Na, Nb) - energy * x
+        if np.linalg.norm(residual) < tol:
+            break
+        if len(vectors) >= 25:                      # restart
+            x /= np.linalg.norm(x)
+            vectors, sigmas = [x], [sigma(x)]
+            residual = sigmas[0] - energy * x
+        denom = energy - diag
+        denom[np.abs(denom) < 1e-3] = -1e-3
+        new = residual / denom
+        for v in vectors:
+            new -= np.vdot(v, new) * v
+        for v in vectors:
+            new -= np.vdot(v, new) * v
+        new /= np.linalg.norm(new)
+        vectors.append(new); sigmas.append(sigma(new))
+    else:
+        raise RuntimeError("full CI did not converge")
+    return float(energy) + e_nuc
+
+
+def helium_fci_s_general():
+    """Helium, s orbitals only, through the general solver (a self-test)."""
+    S, h, eri = atom_integrals(2)
+    X = orthogonalizer(S, 1e-8)
+    _, U = np.linalg.eigh(X.T @ h @ X)
+    X = X @ U
+    g = np.einsum("pi,qj,rk,sl,pqrs->ijkl", X, X, X, X, eri, optimize=True)
+    return fci(X.T @ h @ X, g, 1, 1)
+
+
+S_KEEP = {3: (0, 1, 2, 3, 4, 5, 7, 9, 11), 4: (1, 2, 3, 4, 5, 7, 9)}
+P_EXPONENTS = {3: (0.03, 0.1, 0.35, 1.2, 4.0), 4: (0.06, 0.2, 0.7, 2.5)}
+
+
+def atom_fci_sp(Z, neutral_occupations, electron_counts):
+    """Full CI energies in one s+p basis for several charge states of an atom.
+
+    electron_counts: list of (n_alpha, n_beta). The basis is built from the
+    neutral atom and reused for the ions, so the comparison is balanced."""
+    h, eri = atom_sp_orbitals(Z, neutral_occupations, S_KEEP[Z], P_EXPONENTS[Z])
+    return [fci(h, eri, na, nb) for na, nb in electron_counts]

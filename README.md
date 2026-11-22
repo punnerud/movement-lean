@@ -218,7 +218,7 @@ Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](http
 
 ### Numerical quantum mechanics for several electrons
 
-[`analyzer/quantum.py`](analyzer/quantum.py) solves the non-relativistic Schrödinger equation numerically (numpy only, about 6 seconds):
+[`analyzer/quantum.py`](analyzer/quantum.py) solves the non-relativistic Schrödinger equation numerically (numpy only, about 20 seconds):
 
 | System | Method | Error against reference |
 |---|---|---|
@@ -226,7 +226,9 @@ Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](http
 | He, total energy | full configuration interaction, spherical orbitals only | 0.85 % |
 | He, total energy | Hylleraas (the distance between the electrons is in the wavefunction) | 0.002 % |
 | Li, ionization energy | Hartree–Fock, `E(Li⁺) − E(Li)` | 0.9 % |
+| Li, ionization energy | full configuration interaction with s and p orbitals | 0.14 % |
 | Be, ionization energy | Hartree–Fock | 14 %, **fails**: strong 2s–2p correlation |
+| Be, ionization energy | full configuration interaction with s and p orbitals | 0.5 % |
 | H⁻, electron affinity | Hartree–Fock | negative, **fails**: predicts that the ion does not exist |
 | H⁻, electron affinity | full configuration interaction, spherical orbitals only | 48 %, **fails**: bound, but only half the binding |
 | H⁻, electron affinity | Hylleraas | 0.07 % |
@@ -263,7 +265,7 @@ Two things in the reference data are worth knowing:
 
 Every row states in advance whether the model should work, and `--check` fails if a row that should match misses, or one that should fail starts matching.
 
-**What this is and is not.** The numerical part handles two electrons accurately and three or four at the Hartree–Fock level, with spherical orbitals only. It is a demonstration that the same variational principle carries from the Lean theorems to real numbers, not a replacement for a quantum chemistry package.
+**What this is and is not.** The numerical part handles two electrons accurately, and three or four electrons by full configuration interaction with s and p orbitals (a p orbital is built as the difference of two shifted s-Gaussians). What is left for Li and Be needs d orbitals and beyond. It is a demonstration that the same variational principle carries from the Lean theorems to real numbers, not a replacement for a quantum chemistry package.
 
 ---
 

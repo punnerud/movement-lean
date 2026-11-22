@@ -90,7 +90,9 @@ Each formula's derivation is proved in Lean where a theorem is named; the compar
 | He | total ground-state energy | full CI, spherical orbitals only | `rayleigh_ritz_bound` | -78.33153 eV | -79.00515 eV | -0.85 % | matches | 85 264× |
 | He | total ground-state energy | Hylleraas (r₁₂ in the wavefunction) | `rayleigh_ritz_bound` | -79.00353 eV | -79.00515 eV | -0.0021 % | matches (non-relativistic; the remaining 0.002 % is relativistic and QED) | 206× |
 | Li | first ionization energy | Hartree–Fock, E(Li⁺) − E(Li) | `rayleigh_ritz_bound` | 5.342146 eV | 5.391715 eV | -0.92 % | matches (the missing 1 % is electron correlation) | 91 935× |
+| Li | first ionization energy | full CI with s and p orbitals | `rayleigh_ritz_bound` | 5.384119 eV | 5.391715 eV | -0.14 % | matches (the remaining 0.1 % needs d orbitals and beyond) | 14 088× |
 | Be | first ionization energy | Hartree–Fock, E(Be⁺) − E(Be) | `rayleigh_ritz_bound` | 8.042107 eV | 9.322699 eV | -14 % | fails, as expected (average-field theory misses the strong 2s–2p correlation in beryllium) | 1 373 628× |
+| Be | first ionization energy | full CI with s and p orbitals | `rayleigh_ritz_bound` | 9.27433 eV | 9.322699 eV | -0.52 % | matches (the remaining 0.5 % needs d orbitals and beyond) | 51 883× |
 | H⁻ | electron affinity of H | Hartree–Fock (average field) | `rayleigh_ritz_bound` | -0.3282728 eV | 0.754195 eV | -144 % | fails, as expected (negative: the average field predicts that H⁻ does not exist) | 57 411× |
 | H⁻ | electron affinity of H | full CI, spherical orbitals only | `rayleigh_ritz_bound` | 0.3942391 eV | 0.754195 eV | -48 % | fails, as expected (bound, but only half of the binding) | 19 091× |
 | H⁻ | electron affinity of H | Hylleraas (r₁₂ in the wavefunction) | `rayleigh_ritz_bound` | 0.7547067 eV | 0.754195 eV | +0.0678 % | matches (non-relativistic; nuclear motion included only through the reduced mass) | 27× |
@@ -161,7 +163,8 @@ Each line follows one quantity from the simplest model to the best one here.
 | | | **remaining** | 206× the reference uncertainty | model error, far above the reference uncertainty |
 | Li | first ionization energy | Bohr, n=2, full screening (Z=1) | -37 % | starting point |
 |  |  | Hartree–Fock, E(Li⁺) − E(Li) | -0.92 % | self-consistent screening and penetration |
-| | | **remaining** | 91 935× the reference uncertainty | model error, far above the reference uncertainty |
+|  |  | full CI with s and p orbitals | -0.14 % | the outer electron polarises the inner pair (needs p orbitals) |
+| | | **remaining** | 14 088× the reference uncertainty | model error, far above the reference uncertainty |
 | 12C16O | J=0→1 line frequency | rigid rotor, line spacing 2B | +0.46 % | starting point |
 |  |  | vibrating, stretching rotor: 2B₀ − 4D | +0.00012 % | zero-point vibration lengthens the bond; rotation stretches it |
 | | | **remaining** | 230× the reference uncertainty | model error, far above the reference uncertainty |
@@ -187,6 +190,9 @@ Each line follows one quantity from the simplest model to the best one here.
 | He | speed of sound at 20 °C | √(γRT/M), γ = 5/3 | -0.0456 % | starting point |
 |  |  | ideal gas + acoustic virial coefficient | +0.00007 % | real helium atoms repel slightly at 1 atm |
 | | | **remaining** | 0.0× the reference uncertainty | within the reference uncertainty |
+| Be | first ionization energy | Hartree–Fock, E(Be⁺) − E(Be) | -14 % | starting point |
+|  |  | full CI with s and p orbitals | -0.52 % | the two outer electrons spend part of the time in 2p instead of 2s |
+| | | **remaining** | 51 883× the reference uncertainty | model error, far above the reference uncertainty |
 | H⁻ | electron affinity of H | Hartree–Fock (average field) | -144 % | starting point |
 |  |  | full CI, spherical orbitals only | -48 % | electrons avoid each other radially: the ion becomes stable |
 |  |  | Hylleraas (r₁₂ in the wavefunction) | +0.0678 % | electrons avoid each other in every direction |
@@ -197,6 +203,6 @@ Each line follows one quantity from the simplest model to the best one here.
 - Ionization energies of one-electron ions in the NIST database are high-precision QED calculations, not direct measurements; experiment confirms them where it can reach.
 - NIST-JANAF heat capacities are calculated from measured spectroscopic constants, not measured in a calorimeter. Agreement with the vibration-corrected rows therefore partly compares two versions of the same theory.
 - The uncertainty column uses one representative relative uncertainty per class of data (see relative_uncertainty in reference_data.json), not a separate figure for every value.
-- The numerical methods are non-relativistic with fixed nuclei, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
+- The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
 
-**77 comparisons: 69 inside the model's domain and matching, 8 documented limits.**
+**79 comparisons: 71 inside the model's domain and matching, 8 documented limits.**

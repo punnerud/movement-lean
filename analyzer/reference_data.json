@@ -113,7 +113,10 @@
     "Be_HF": -14.573023,
     "H2_exact": -1.174476,
     "HMinus_HF": -0.48793,
-    "HMinus_exact": -0.527751017
+    "HMinus_exact": -0.527751017,
+    "Li_exact": -7.478060324,
+    "LiPlus_exact": -7.279913413,
+    "Be_exact": -14.667356
   },
   "relative_uncertainty": {
     "ionization_one_electron": 1e-09,

@@ -263,14 +263,26 @@ if quantum is not None:
         "rayleigh_ritz_bound", he_hyl * he_ev, he_total, "eV", "ok", 5e-5, u_n, base=b,
         fix="electrons avoid each other in every direction; remaining error is relativity + QED",
         note="non-relativistic; the remaining 0.002 % is relativistic and QED")
-    row(G_NUM, "Li", "first ionization energy", "Hartree–Fock, E(Li⁺) − E(Li)",
+    li_hf_row = row(G_NUM, "Li", "first ionization energy", "Hartree–Fock, E(Li⁺) − E(Li)",
         "rayleigh_ritz_bound", (li_ion - li) * HARTREE_EV * recoil("7Li", 3), ie["Li"], "eV",
         "ok", 0.02, u_n, base=li_b, fix="self-consistent screening and penetration",
         note="the missing 1 % is electron correlation")
-    row(G_NUM, "Be", "first ionization energy", "Hartree–Fock, E(Be⁺) − E(Be)",
-        "rayleigh_ritz_bound", (be_ion - be) * HARTREE_EV * recoil("9Be", 4), ie["Be"], "eV",
-        "limit", 0.05, u_n,
-        "average-field theory misses the strong 2s–2p correlation in beryllium")
+    li_ci, li_ion_ci = quantum.atom_fci_sp(3, (2, 1), [(2, 1), (1, 1)])
+    row(G_NUM, "Li", "first ionization energy", "full CI with s and p orbitals",
+        "rayleigh_ritz_bound", (li_ion_ci - li_ci) * HARTREE_EV * recoil("7Li", 3), ie["Li"], "eV",
+        "ok", 3e-3, u_n, base=li_hf_row,
+        fix="the outer electron polarises the inner pair (needs p orbitals)",
+        note="the remaining 0.1 % needs d orbitals and beyond")
+    be_hf_row = row(G_NUM, "Be", "first ionization energy", "Hartree–Fock, E(Be⁺) − E(Be)",
+                    "rayleigh_ritz_bound", (be_ion - be) * HARTREE_EV * recoil("9Be", 4), ie["Be"],
+                    "eV", "limit", 0.05, u_n,
+                    "average-field theory misses the strong 2s–2p correlation in beryllium")
+    be_ci, be_ion_ci = quantum.atom_fci_sp(4, (2, 2), [(2, 2), (2, 1)])
+    row(G_NUM, "Be", "first ionization energy", "full CI with s and p orbitals",
+        "rayleigh_ritz_bound", (be_ion_ci - be_ci) * HARTREE_EV * recoil("9Be", 4), ie["Be"], "eV",
+        "ok", 1e-2, u_n, base=be_hf_row,
+        fix="the two outer electrons spend part of the time in 2p instead of 2s",
+        note="the remaining 0.5 % needs d orbitals and beyond")
 
     # H-: a proton with two electrons. Bound only because the electrons avoid each other.
     hm_hf = quantum.atom_hf(1, 1, 1)
@@ -316,11 +328,18 @@ if quantum is not None:
                    ("He: s-only CI ≥ Hylleraas", he_s_fci, he_hyl),
                    ("He: Hylleraas ≥ exact", he_hyl, bench["He_exact"]),
                    ("H₂: full CI ≥ exact", e_min, bench["H2_exact"]),
+                   ("Li: HF ≥ full CI (s, p)", li, li_ci),
+                   ("Li: full CI ≥ exact", li_ci, bench["Li_exact"]),
+                   ("Li⁺: full CI ≥ exact", li_ion_ci, bench["LiPlus_exact"]),
+                   ("Be: HF ≥ full CI (s, p)", be, be_ci),
+                   ("Be: full CI ≥ exact", be_ci, bench["Be_exact"]),
                    ("H⁻: HF ≥ s-only CI", hm_hf, hm_s),
                    ("H⁻: s-only CI ≥ Hylleraas", hm_s, hm_hyl),
                    ("H⁻: Hylleraas ≥ exact", hm_hyl, bench["HMinus_exact"])]
     STABILITY = [("H⁻ unbound in Hartree–Fock", hm_hf > -0.5),
-                 ("H⁻ bound with correlation", hm_hyl < -0.5)]
+                 ("H⁻ bound with correlation", hm_hyl < -0.5),
+                 ("general CI solver reproduces the two-electron solver (He)",
+                  abs(quantum.helium_fci_s_general() - he_s_fci) < 1e-8)]
 
 
 # ---------------------------------------------------------------- reporting
@@ -394,7 +413,8 @@ CAVEATS = [
     "versions of the same theory.",
     "The uncertainty column uses one representative relative uncertainty per class of data "
     "(see relative_uncertainty in reference_data.json), not a separate figure for every value.",
-    "The numerical methods are non-relativistic with fixed nuclei, and are not formalised in Lean. "
+    "The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are "
+    "not formalised in Lean. "
     "Lean covers only the principle that makes their energies upper bounds.",
 ]
 
