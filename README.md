@@ -263,6 +263,21 @@ The methods themselves are not formalised. Lean covers the principle behind them
 
 The first row is closer than the second only because two omissions cancel. The ionic curve crosses the energy of two neutral atoms at about 9.4 Å: further out it is cheaper for the electron to jump back. Unlike the H₂ rows, the NaCl model is not a first-principles calculation: it takes the bond length and vibration frequency from measurement. This is also the one place where measurement uncertainty matters: the binding energy of NaCl is only known to about 2 % (4.23 ± 0.09 eV), so the final 3.9 % is within twice that uncertainty.
 
+### Magnetism: the electron cloud as a tiny superconductor
+
+A magnetic field sets the whole electron cloud circulating, and the induced current opposes the field, with no resistance. This is the same response as in a superconductor, but an atom is about a hundred times thinner than the layer needed to expel the field, so the effect is of order `(v/c)² = α²`:
+
+| Quantity | Model | Error |
+|---|---|---|
+| H, field shielded at the nucleus (17.7 ppm) | Lamb formula `α²/3` | 0.08 % |
+| He, field shielded at the nucleus (60.0 ppm) | two independent Bohr electrons | +18 %, **fails** |
+| He, field shielded at the nucleus | screening `ζ = Z − 5/16` | −0.10 % |
+| He, field shielded at the nucleus | Hylleraas wavefunction | −0.05 % |
+| He, diamagnetic susceptibility | Hylleraas wavefunction, against the best published calculation | below 0.001 % |
+| He, diamagnetic susceptibility | Hylleraas wavefunction, against the measured value | −6.4 %, **outside** |
+
+The shielding references are calculations; nobody has measured the shielding of a neutral atom directly. The last row is the one place in this analyzer where the measurement is the likely weak link: the only gas-phase measurement (1960, −2.02 ± 0.07 in units of 10⁻⁶ cm³/mol) lies 7 % from both this code and the best modern calculation (−1.891), which agree with each other. The 2023 paper behind that calculation notes the same gap and asks for a new measurement.
+
 ### Where do the deviations come from?
 
 For each simple model that misses, the analyzer adds the known physical correction and checks whether the gap closes:
@@ -276,7 +291,7 @@ For each simple model that misses, the analyzer adds the known physical correcti
 | Heat capacity of Cl₂, CO₂ | 14 %, 22 % | 0.5 %, 0.05 % | quantised vibration |
 | Speed of sound in helium | 0.05 % | 0.0001 % | real-gas (acoustic virial) correction |
 
-**Could the deviations be measurement errors?** No. Every deviation of a simple model is tens to millions of times larger than the uncertainty of the reference value, and each one closes when the corresponding known physics is added. After correction, the heat capacities, the sound speeds and the Balmer lines agree within the reference uncertainty, except Cl₂ (0.5 % left, because its vibration is treated as perfectly harmonic). The ionization energies and the CO line are known to nine significant figures, and there the corrected models still miss in the seventh or eighth figure because only the leading-order corrections are included.
+**Could the deviations be measurement errors?** With one exception (helium's diamagnetic susceptibility, above), no. Every deviation of a simple model is tens to millions of times larger than the uncertainty of the reference value, and each one closes when the corresponding known physics is added. After correction, the heat capacities, the sound speeds and the Balmer lines agree within the reference uncertainty, except Cl₂ (0.5 % left, because its vibration is treated as perfectly harmonic). The ionization energies and the CO line are known to nine significant figures, and there the corrected models still miss in the seventh or eighth figure because only the leading-order corrections are included.
 
 Two things in the reference data are worth knowing:
 

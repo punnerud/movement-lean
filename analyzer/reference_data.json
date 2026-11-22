@@ -75,7 +75,9 @@
     "NaCl: omega_e from Irikura 2007; D_0 = 4.23 +/- 0.09 eV (flame photometry / thermochemistry, 1961); dipole is the equilibrium value 8.971 D (v=0 value is 9.0012 D).",
     "NaCl ion polarizabilities 0.179 and 3.66 A^3 are the handbook values commonly used in Rittner-type models. Modern ab initio free-ion values are 0.148 and about 5.36 A^3, so the Cl- choice matters.",
     "H2 curve benchmark energies: Pachucki, Phys. Rev. A 82, 032509 (2010).",
-    "H2 triplet (b 3Sigma_u+) energies: Kolos & Wolniewicz, J. Chem. Phys. 43, 2429 (1965), Table VII; variational upper bounds from 1965, not checked against later work."
+    "H2 triplet (b 3Sigma_u+) energies: Kolos & Wolniewicz, J. Chem. Phys. 43, 2429 (1965), Table VII; variational upper bounds from 1965, not checked against later work.",
+    "Magnetic shielding of H (CODATA 2022) and 3He (Pachucki 2023) are theoretical values; no direct measurement of the neutral-atom shielding exists.",
+    "Helium susceptibility: measured -2.02(7)e-6 cm^3/mol (Barter, Meisenheimer, Stevenson 1960, as quoted by Puchalski, Lesiuk, Jeziorski 2023, and tabulated in the CRC Handbook); theory -1.891035(30)e-6 (same 2023 paper). No modern precise measurement was found."
   ],
   "vibration_cm1": {
     "H2": [
@@ -137,7 +139,8 @@
     "H2_vibration": 1e-05,
     "electron_affinity": 2.5e-05,
     "NaCl_De": 0.021,
-    "NaCl_dipole": 0.0001
+    "NaCl_dipole": 0.0001,
+    "shielding_theory": 1e-06
   },
   "H2_B0_cm1": 59.336,
   "H2_centrifugal_D_cm1": 0.0471,
@@ -165,5 +168,12 @@
     "2.0": -0.8970636,
     "3.0": -0.9720104,
     "4.0": -0.9933781
+  },
+  "magnetism": {
+    "H_shielding_ppm": 17.7354,
+    "He3_shielding_ppm": 59.966512,
+    "He_susceptibility_theory_1e6_cm3_per_mol": -1.891035,
+    "He_susceptibility_measured_1e6_cm3_per_mol": -2.02,
+    "He_susceptibility_measured_uncertainty": 0.07
   }
 }

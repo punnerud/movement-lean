@@ -187,14 +187,19 @@ def _integral(poly, alpha):
     return total
 
 
-def hylleraas_helium(Z=2, order=5, alpha=Fraction(9, 5)):
-    """Ground-state energy of a two-electron atom with nuclear charge Z."""
+def hylleraas_helium(Z=2, order=5, alpha=Fraction(9, 5), expect=False):
+    """Ground-state energy of a two-electron atom with nuclear charge Z.
+
+    With expect=True, returns (energy, <1/r1 + 1/r2>, <r1^2 + r2^2>) in atomic
+    units, evaluated with the same wavefunction."""
     terms = [(l, m, n) for l, m, n in product(range(order + 1), repeat=3) if l + 2 * m + n <= order]
     s2_t2 = {(2, 0, 0): 1, (0, 2, 0): -1}                       # s^2 - t^2
     weight = _mul(s2_t2, {(0, 0, 1): 1})                        # u (s^2 - t^2)
     potential = _add({(1, 0, 1): -4 * Z}, s2_t2)                # -4 Z s u + s^2 - t^2
     a_term = _mul({(1, 0, 0): 1}, {(0, 0, 2): 1, (0, 2, 0): -1})  # s (u^2 - t^2)
     b_term = _mul({(0, 1, 0): 1}, {(2, 0, 0): 1, (0, 0, 2): -1})  # t (s^2 - u^2)
+    inv_r = {(1, 0, 1): 4}                                      # (1/r1 + 1/r2) * weight
+    r_sq = _mul({(2, 0, 0): Fraction(1, 2), (0, 2, 0): Fraction(1, 2)}, weight)   # (r1^2 + r2^2) * weight
 
     def parts(l, m, n):
         f = {(l, 2 * m, n): Fraction(1)}
@@ -209,6 +214,8 @@ def hylleraas_helium(Z=2, order=5, alpha=Fraction(9, 5)):
     size = len(terms)
     N = np.zeros((size, size))
     Hm = np.zeros((size, size))
+    A1 = np.zeros((size, size))
+    A2 = np.zeros((size, size))
     for i in range(size):
         f1, s1, t1, u1 = P[i]
         for j in range(i, size):
@@ -221,8 +228,17 @@ def hylleraas_helium(Z=2, order=5, alpha=Fraction(9, 5)):
             pot = _integral(_mul(potential, _mul(f1, f2)), alpha)
             N[i, j] = N[j, i] = float(norm)
             Hm[i, j] = Hm[j, i] = float(kinetic + pot)
+            if expect:
+                ff = _mul(f1, f2)
+                A1[i, j] = A1[j, i] = float(_integral(_mul(inv_r, ff), alpha))
+                A2[i, j] = A2[j, i] = float(_integral(_mul(r_sq, ff), alpha))
     X = orthogonalizer(N, 1e-13)
-    return float(np.linalg.eigvalsh(X.T @ Hm @ X)[0])
+    if not expect:
+        return float(np.linalg.eigvalsh(X.T @ Hm @ X)[0])
+    w, V = np.linalg.eigh(X.T @ Hm @ X)
+    c = X @ V[:, 0]
+    norm = c @ N @ c
+    return float(w[0]), float(c @ A1 @ c / norm), float(c @ A2 @ c / norm)
 
 
 # --------------------------------------------------------------------------

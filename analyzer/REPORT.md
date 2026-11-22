@@ -133,6 +133,19 @@ Each formula's derivation is proved in Lean where a theorem is named; the compar
 | H₂, equal spins, at 1.59 Å | energy above two free atoms | full CI, antisymmetric pair function | `rayleigh_ritz_bound` | 0.7828136 eV | 0.7616358 eV | +2.78 % | matches (reference: benchmark calculation, not a measurement) | 2 781× |
 | H₂, equal spins, at 2.12 Å | energy above two free atoms | full CI, antisymmetric pair function | `rayleigh_ritz_bound` | 0.1935267 eV | 0.1801911 eV | +7.40 % | fails, as expected (the weak long-range repulsion needs more diffuse, directional orbitals) | 7 401× |
 
+## Magnetism: the electron cloud as a tiny superconductor
+
+| System | Quantity | Model | Lean theorem | Predicted | Reference | Error | Verdict | Error ÷ uncertainty |
+|---|---|---|---|---|---|---|---|---|
+| H | field shielded at the nucleus | Lamb formula, α²/3 | `not formalised` | 17.75045 ppm | 17.7354 ppm | +0.0849 % | matches (reference: calculation with relativistic and recoil terms, not a measurement) | 849× |
+| He | field shielded at the nucleus | two independent Bohr electrons | `not formalised` | 71.00181 ppm | 59.96651 ppm | +18 % | fails, as expected (ignores electron–electron repulsion) | 184 024× |
+| He | field shielded at the nucleus | one screening parameter, ζ = Z − 5/16 | `helium_variational` | 59.90777 ppm | 59.96651 ppm | -0.0980 % | matches | 980× |
+| He | diamagnetic susceptibility | two independent Bohr electrons | `not formalised` | -1.188023 10⁻⁶ cm³/mol | -2.02 10⁻⁶ cm³/mol | -41 % | fails, as expected (ignores electron–electron repulsion: the cloud comes out too small) | 12× |
+| He | diamagnetic susceptibility | one screening parameter, ζ = Z − 5/16 | `helium_variational` | -1.668774 10⁻⁶ cm³/mol | -2.02 10⁻⁶ cm³/mol | -17 % | fails, as expected (a single exponential falls off too fast at large distance) | 5.0× |
+| He | field shielded at the nucleus | Hylleraas wavefunction, Σ⟨1/r⟩ | `not formalised` | 59.93675 ppm | 59.96651 ppm | -0.0496 % | matches (non-relativistic; reference is a calculation with relativistic terms) | 496× |
+| He | diamagnetic susceptibility | Hylleraas wavefunction, Σ⟨r²⟩ | `not formalised` | -1.891034 10⁻⁶ cm³/mol | -2.02 10⁻⁶ cm³/mol | -6.38 % | fails, as expected (the measurement (1960) is the weak link here: see the next row) | 1.8× |
+| He | diamagnetic susceptibility | Hylleraas vs. best published calculation | `not formalised` | -1.891034 10⁻⁶ cm³/mol | -1.891035 10⁻⁶ cm³/mol | -0.00003 % | matches | 0.0× |
+
 ## Where do the deviations come from?
 
 Each line follows one quantity from the simplest model to the best one here.
@@ -224,13 +237,22 @@ Each line follows one quantity from the simplest model to the best one here.
 | NaCl | electric dipole moment | two point charges ±e at the bond length | +26 % | starting point |
 |  |  | + polarization of the ions (Rittner) | -13 % | induced dipoles point against the main one |
 | | | **remaining** | 1 299× the reference uncertainty | model error, far above the reference uncertainty |
+| He | field shielded at the nucleus | two independent Bohr electrons | +18 % | starting point |
+|  |  | one screening parameter, ζ = Z − 5/16 | -0.0980 % | average screening by the other electron |
+|  |  | Hylleraas wavefunction, Σ⟨1/r⟩ | -0.0496 % | the correlated electron cloud |
+| | | **remaining** | 496× the reference uncertainty | model error, far above the reference uncertainty |
+| He | diamagnetic susceptibility | two independent Bohr electrons | -41 % | starting point |
+|  |  | one screening parameter, ζ = Z − 5/16 | -17 % | average screening by the other electron |
+|  |  | Hylleraas wavefunction, Σ⟨r²⟩ | -6.38 % | the correlated electron cloud |
+| | | **remaining** | 1.8× the reference uncertainty | within the reference uncertainty |
 
 ## Caveats
 
 - Ionization energies of one-electron ions in the NIST database are high-precision QED calculations, not direct measurements; experiment confirms them where it can reach.
 - NIST-JANAF heat capacities are calculated from measured spectroscopic constants, not measured in a calorimeter. Agreement with the vibration-corrected rows therefore partly compares two versions of the same theory.
+- Helium's diamagnetic susceptibility is the one case here where the measurement is the likely weak link: the only gas-phase value (1960, ±3.5 %) lies 7 % from both this code and the best published calculation, which agree with each other to better than 0.001 %. The cause is not known.
 - The NaCl ionic model takes the bond length and vibration frequency from measurement and uses free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.
 - The uncertainty column uses one representative relative uncertainty per class of data (see relative_uncertainty in reference_data.json), not a separate figure for every value.
 - The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
 
-**94 comparisons: 80 inside the model's domain and matching, 14 documented limits.**
+**102 comparisons: 84 inside the model's domain and matching, 18 documented limits.**

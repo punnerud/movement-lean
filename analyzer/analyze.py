@@ -69,6 +69,7 @@ def reduced(m1, m2):
     return m1 * m2 / (m1 + m2)
 
 
+G_MAG = "Magnetism: the electron cloud as a tiny superconductor"
 G_BOND = "Chemical bonds: shared electrons (H₂) and transferred electrons (NaCl)"
 G_ONE, G_MANY, G_ROT, G_HEAT, G_NUM, G_VAL = (
     "One-electron atoms", "Atoms with several electrons: simple models", "Rotating molecules",
@@ -438,6 +439,47 @@ if quantum is not None:
                    min(CURVE, key=lambda R: CURVE[R][0]) == 1.4)]
 
 
+# ---------------------------------------------------------------- magnetism
+# A magnetic field makes the whole electron cloud circulate. The induced current
+# opposes the field: at the nucleus by the fraction (α²/3)·Σ⟨a₀/r⟩ (Lamb shielding),
+# and as a whole by the susceptibility −(N_A α² a₀³/6)·Σ⟨r²/a₀²⟩ (Langevin).
+MAG = DATA["magnetism"]
+SHIELD_PPM = ALPHA ** 2 / 3 * 1e6
+CHI_UNIT = 6.02214076e23 * ALPHA ** 2 * (BOHR_A * 1e-8) ** 3 / 6 * 1e6     # 10⁻⁶ cm³/mol per a₀²
+row(G_MAG, "H", "field shielded at the nucleus", "Lamb formula, α²/3", "not formalised",
+    SHIELD_PPM, MAG["H_shielding_ppm"], "ppm", "ok", 2e-3, UNC["shielding_theory"],
+    "reference: calculation with relativistic and recoil terms, not a measurement")
+m1 = row(G_MAG, "He", "field shielded at the nucleus", "two independent Bohr electrons",
+         "not formalised", SHIELD_PPM * 2 * 2, MAG["He3_shielding_ppm"], "ppm", "limit", 0.05,
+         UNC["shielding_theory"], "ignores electron–electron repulsion")
+m2 = row(G_MAG, "He", "field shielded at the nucleus", "one screening parameter, ζ = Z − 5/16",
+         "helium_variational", SHIELD_PPM * 2 * (2 - 5 / 16), MAG["He3_shielding_ppm"], "ppm", "ok",
+         3e-3, UNC["shielding_theory"], base=m1, fix="average screening by the other electron")
+chi_ref = MAG["He_susceptibility_measured_1e6_cm3_per_mol"]
+chi_unc = MAG["He_susceptibility_measured_uncertainty"] / abs(chi_ref)
+c1 = row(G_MAG, "He", "diamagnetic susceptibility", "two independent Bohr electrons",
+         "not formalised", -CHI_UNIT * 2 * 3 / 2 ** 2, chi_ref, "10⁻⁶ cm³/mol", "limit", 0.05, chi_unc,
+         "ignores electron–electron repulsion: the cloud comes out too small")
+c2 = row(G_MAG, "He", "diamagnetic susceptibility", "one screening parameter, ζ = Z − 5/16",
+         "helium_variational", -CHI_UNIT * 2 * 3 / (2 - 5 / 16) ** 2, chi_ref, "10⁻⁶ cm³/mol",
+         "limit", 0.05, chi_unc, "a single exponential falls off too fast at large distance",
+         base=c1, fix="average screening by the other electron")
+if quantum is not None:
+    _, inv_r, r_sq = quantum.hylleraas_helium(order=8, alpha=quantum.Fraction(2), expect=True)
+    row(G_MAG, "He", "field shielded at the nucleus", "Hylleraas wavefunction, Σ⟨1/r⟩",
+        "not formalised", SHIELD_PPM * inv_r, MAG["He3_shielding_ppm"], "ppm", "ok", 1e-3,
+        UNC["shielding_theory"], base=m2, fix="the correlated electron cloud",
+        note="non-relativistic; reference is a calculation with relativistic terms")
+    chi_he = -CHI_UNIT * r_sq / recoil("4He", 2) ** 2
+    row(G_MAG, "He", "diamagnetic susceptibility", "Hylleraas wavefunction, Σ⟨r²⟩",
+        "not formalised", chi_he, chi_ref, "10⁻⁶ cm³/mol", "limit", 0.05, chi_unc, base=c2,
+        fix="the correlated electron cloud",
+        note="the measurement (1960) is the weak link here: see the next row")
+    row(G_MAG, "He", "diamagnetic susceptibility", "Hylleraas vs. best published calculation",
+        "not formalised", chi_he, MAG["He_susceptibility_theory_1e6_cm3_per_mol"], "10⁻⁶ cm³/mol",
+        "ok", 1e-3, 1e-4)
+
+
 def bond_figure():
     """SVG: H₂ curve (shared electrons) and NaCl ionic model (transferred electron)."""
     w, hgt, top, bottom = 430, 300, 40, 44
@@ -571,6 +613,9 @@ CAVEATS = [
     "NIST-JANAF heat capacities are calculated from measured spectroscopic constants, not measured "
     "in a calorimeter. Agreement with the vibration-corrected rows therefore partly compares two "
     "versions of the same theory.",
+    "Helium's diamagnetic susceptibility is the one case here where the measurement is the likely "
+    "weak link: the only gas-phase value (1960, ±3.5 %) lies 7 % from both this code and the best "
+    "published calculation, which agree with each other to better than 0.001 %. The cause is not known.",
     "The NaCl ionic model takes the bond length and vibration frequency from measurement and uses "
     "free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.",
     "The uncertainty column uses one representative relative uncertainty per class of data "
