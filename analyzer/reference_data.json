@@ -1,0 +1,68 @@
+{
+  "_note": "Measured reference values, checked against: NIST Atomic Spectra Database 5.12 (ionization energies, Balmer lines), NIST Chemistry WebBook / Huber & Herzberg (diatomic constants), NIST-JANAF tables (heat capacities), JPL molecular spectroscopy catalog (CO line), NIST fluid properties (helium sound speed), NIST atomic masses, CODATA.",
+  "atomic_mass_u": {
+    "1H": 1.00782503,
+    "2H": 2.01410178,
+    "4He": 4.00260325,
+    "7Li": 7.0160034,
+    "9Be": 9.0121831,
+    "11B": 11.0093054,
+    "12C": 12.0,
+    "13C": 13.0033548,
+    "14N": 14.003074,
+    "16O": 15.9949146,
+    "35Cl": 34.9688527
+  },
+  "ionization_energy_eV": {
+    "H": 13.598434,
+    "He+": 54.417765,
+    "Li2+": 122.454354,
+    "Be3+": 217.718584,
+    "B4+": 340.22602,
+    "C5+": 489.993198,
+    "He": 24.587389,
+    "Li": 5.391715
+  },
+  "balmer_air_nm": {
+    "3": 656.279,
+    "4": 486.135,
+    "5": 434.047,
+    "6": 410.174
+  },
+  "rotational_constant_Be_cm1": {
+    "H2": 60.853,
+    "D2": 30.4436,
+    "HD": 45.655,
+    "N2": 1.99824,
+    "O2": 1.44563,
+    "12C16O": 1.93128,
+    "H35Cl": 10.59341,
+    "D35Cl": 5.448794
+  },
+  "bond_length_re_angstrom": {
+    "H2": 0.74144,
+    "N2": 1.09768,
+    "O2": 1.20752,
+    "12C16O": 1.12832,
+    "H35Cl": 1.27455
+  },
+  "CO_J0_to_1_GHz": 115.271,
+  "Cp_298K_J_per_molK": {
+    "He": 20.786,
+    "Ar": 20.786,
+    "H2": 28.836,
+    "N2": 29.124,
+    "O2": 29.378,
+    "CO": 29.142,
+    "Cl2": 33.95,
+    "CO2": 37.13
+  },
+  "sound_speed_20C_m_per_s": {
+    "air": 343.2,
+    "He": 1007.89
+  },
+  "_caveats": [
+    "16O2 B_e is not tabulated directly; 1.44563 is B_0 + alpha_e/2 from the WebBook values.",
+    "Dry-air speed of sound (343.2 m/s) is from a secondary source."
+  ]
+}

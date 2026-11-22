@@ -9,7 +9,7 @@ This repository starts from a sailor's rule of thumb:
 
 It then follows the idea down to the molecular scale (billiard-ball collisions, spinning molecules, diffusion), on to the heat equation, and across to quantum mechanics (the Schrödinger equation, Bohr's electron orbits, and a test of whether spin can be a circulation at light speed). Each step is proved formally in [Lean 4](https://lean-lang.org/) with [Mathlib](https://github.com/leanprover-community/mathlib4).
 
-The proofs are in [`Movement/`](Movement): [`Basic.lean`](Movement/Basic.lean) (sections 1–3), [`Heat.lean`](Movement/Heat.lean) (4), [`Quantum.lean`](Movement/Quantum.lean) (5) [`Bohr.lean`](Movement/Bohr.lean) (6), [`Spin.lean`](Movement/Spin.lean) (7), [`Rotation4D.lean`](Movement/Rotation4D.lean) (8) and [`Waveguide.lean`](Movement/Waveguide.lean) (9). There is no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
+The proofs are in [`Movement/`](Movement): [`Basic.lean`](Movement/Basic.lean) (sections 1–3), [`Heat.lean`](Movement/Heat.lean) (4), [`Quantum.lean`](Movement/Quantum.lean) (5) [`Bohr.lean`](Movement/Bohr.lean) (6), [`Spin.lean`](Movement/Spin.lean) (7), [`Rotation4D.lean`](Movement/Rotation4D.lean) (8), [`Waveguide.lean`](Movement/Waveguide.lean) (9) and [`Atoms.lean`](Movement/Atoms.lean) (10). There is no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
 
 ---
 
@@ -188,6 +188,35 @@ Sections 7 and 8 explored "the total speed is always `c`" as an interpretation. 
 | `zitter_is_twice_compton` | The cutoff frequency matching the electron's mass is `mc²/ħ`; the Zitterbewegung frequency of section 7 is twice that. |
 
 So a massive particle and light trapped in a waveguide obey the same equations. Light slowed in glass is a different effect: there the slowdown comes from interference with waves re-radiated by the material's electrons, which is not formalised here.
+
+## 10. Testing the formulas on real atoms and molecules
+
+Lean proves that a formula follows from a model. It cannot say whether the model matches nature. The **analyzer** does that part: it evaluates the proved formulas with measured constants and compares them with measured data.
+
+```bash
+python3 analyzer/analyze.py            # print all comparisons
+python3 analyzer/analyze.py --check    # exit 1 if any row leaves its expected band (run in CI)
+```
+
+Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](https://punnerud.github.io/movement-lean/analyzer.html).
+
+| What | Lean theorem | Typical error | Verdict |
+|---|---|---|---|
+| Ionization energy of one-electron ions, H to C⁵⁺ | `bohr_orbit`, `hydrogenlike_energy` | 0.001 % to 0.04 % | matches |
+| Same, with the relativistic ground state | `dirac_binding_ge_bohr` (inequality only) | 0.0003 % to 0.005 % | matches |
+| Balmer lines of hydrogen | `rydberg_formula` | 0.001 % | matches |
+| Helium ground state, screening `ζ = Z − 5/16` | `helium_variational` | 1.9 % | matches roughly |
+| Rotational constant of D₂, HD and DCl from the lighter isotope | `reduced_mass_inertia`, `isotope_rotational_constant` | 0.005 % to 0.02 % | matches |
+| CO rotational line (rigid rotor) | `rotor_spacing` | 0.5 % | matches |
+| Heat capacity of He, Ar, H₂, N₂, O₂, CO | `heat_capacity_ratio` | below 1 % | matches |
+| Speed of sound in air and helium | `gamma_values` | 0.01 % to 0.05 % | matches |
+| Helium as two independent Bohr electrons | `hydrogenlike_energy` | 38 % | **fails**: no electron repulsion |
+| Lithium's outer electron, with or without screening | `hydrogenlike_energy` | 37 % to 468 % | **fails**: needs real many-electron theory |
+| Heat capacity of Cl₂ and CO₂ | `heat_capacity_ratio` | 14 % to 22 % | **fails**: vibrations are active |
+
+Every row states in advance whether the model should work, and `--check` fails if a row that should match misses, or one that should fail starts matching. That is what keeps the analyzer stable as formulas and data change.
+
+**What this is and is not.** The simple models are accurate for one-electron atoms, isotope shifts, and counting motions in a gas. They are not a general tool for atoms and molecules: anything with several interacting electrons (which is all of chemistry) needs numerical quantum mechanics, which is not formalised here.
 
 ---
 
