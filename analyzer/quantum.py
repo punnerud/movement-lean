@@ -20,6 +20,8 @@ import math
 from fractions import Fraction
 from itertools import product  # noqa: F401
 
+from pathlib import Path
+
 import numpy as np
 
 try:                                    # optional: much faster for large basis sets
@@ -877,6 +879,424 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
     else:
         raise RuntimeError("full CI did not converge")
     return float(energy) + e_nuc
+
+
+def excited_strings(n, n_electrons, max_level):
+    """Strings of one spin that differ from the lowest one (orbitals 0..k-1
+    occupied) by at most `max_level` excitations."""
+    from itertools import combinations
+    ref, virt = tuple(range(n_electrons)), range(n_electrons, n)
+    out = []
+    for level in range(min(max_level, n_electrons, n - n_electrons) + 1):
+        for holes in combinations(ref, level):
+            kept = [x for x in ref if x not in holes]
+            for parts in combinations(virt, level):
+                out.append(tuple(kept + list(parts)))
+    return out
+
+
+def _selected_tables(n, strings):
+    """Single excitations <target| a+_p a_q |J> for J in the selected strings.
+    Returns (pq, target, J, sign, all strings); targets inside the selection
+    keep their index, the others ("external") are numbered after them."""
+    index = {tuple(s): i for i, s in enumerate(strings)}
+    pq, T, J, sign = [], [], [], []
+    for j, s in enumerate(strings):
+        occupied = set(s)
+        for q in s:
+            rest = [x for x in s if x != q]
+            for p in range(n):
+                if p in occupied and p != q:
+                    continue
+                target = tuple(sorted(rest + [p]))
+                if target not in index:
+                    index[target] = len(index)
+                lo, hi = min(p, q), max(p, q)
+                between = sum(1 for x in rest if lo < x < hi)
+                pq.append(p * n + q); T.append(index[target]); J.append(j)
+                sign.append(-1.0 if between % 2 else 1.0)
+    return np.array(pq), np.array(T), np.array(J), np.array(sign), list(index)
+
+
+def _prepare_strings(n, strings, kf, g2):
+    """Everything selected CI needs about one spin: the same-spin Hamiltonian
+    over the selected strings, the excitation tables inside the selection, and
+    the tables that lead out of it (used to decide what to add next)."""
+    N = len(strings)
+    pq, T, J, sg, names = _selected_tables(n, strings)
+    inside = T < N
+    Hs = np.zeros((N, N))
+    np.add.at(Hs, (T[inside], J[inside]), sg[inside] * kf[pq[inside]])
+    order = np.argsort(T, kind="stable")           # group by intermediate string
+    Ts, pqs, Js, ss = T[order], pq[order], J[order], sg[order]
+    bounds = np.flatnonzero(np.diff(Ts)) + 1
+    for lo, hi in zip(np.r_[0, bounds], np.r_[bounds, len(Ts)]):
+        jj, ww = Js[lo:hi], ss[lo:hi]
+        block = 0.5 * np.outer(ww, ww) * g2[np.ix_(pqs[lo:hi], pqs[lo:hi])]
+        np.add.at(Hs, (jj[:, None], jj[None, :]), block)
+    occ = np.zeros((N, n))
+    for i, st in enumerate(strings):
+        occ[i, list(st)] = 1.0
+    o, x = np.argsort(pq[inside], kind="stable"), np.argsort(pq[~inside], kind="stable")
+    rows = np.argsort(T[inside][o], kind="stable")  # fixed sparse layout; only the values change per orbital pair
+    return {"N": N, "H": Hs, "occ": occ, "rows": rows, "cols": J[inside][o][rows],
+            "indptr": np.r_[0, np.cumsum(np.bincount(T[inside], minlength=N))],
+            "pq": pq[inside][o], "I": T[inside][o], "J": J[inside][o], "s": sg[inside][o],
+            "xpq": pq[~inside][x], "xT": T[~inside][x] - N, "xJ": J[~inside][x], "xs": sg[~inside][x],
+            "external": names[N:]}
+
+
+def selected_ci(h, eri, strings_a, strings_b, e_nuc=0.0, tol=1e-6, max_iter=300, start=None, tables=False,
+                max_vectors=6):
+    """Configuration interaction in a chosen subset of determinants: every
+    determinant whose alpha string is in `strings_a` and whose beta string is
+    in `strings_b`. The Hamiltonian is projected exactly onto that subset
+    (excitations that pass through strings outside the selection are included
+    where they lead back in), so the energy is an upper bound, and with all
+    strings selected it equals full CI. `start` is an initial guess, for
+    example the solution in a smaller selection. Needs scipy."""
+    from scipy import sparse
+    n = h.shape[0]
+    k = h - 0.5 * np.einsum("prrq->pq", eri)
+    kf, g2 = k.ravel(), eri.reshape(n * n, n * n)
+    a = _prepare_strings(n, strings_a, kf, g2)
+    same = [tuple(x) for x in strings_a] == [tuple(x) for x in strings_b]
+    b = a if same else _prepare_strings(n, strings_b, kf, g2)
+    Na, Nb = a["N"], b["N"]
+
+    cuts = np.searchsorted(a["pq"], np.arange(n * n + 1))
+    b_sign_sorted, b_pq_sorted = b["s"][b["rows"]], b["pq"][b["rows"]]
+
+    def one_pair(pq, C):
+        lo, hi = cuts[pq], cuts[pq + 1]
+        M = sparse.csr_matrix((b_sign_sorted * g2[pq, b_pq_sorted], b["cols"], b["indptr"]), shape=(Nb, Nb))
+        return lo, hi, (M @ (a["s"][lo:hi, None] * C[a["J"][lo:hi]]).T).T
+
+    def sigma(C):
+        out = a["H"] @ C + C @ b["H"].T
+        pairs = [pq for pq in range(n * n) if cuts[pq] < cuts[pq + 1]]
+        # for one orbital pair each selected string has at most one image, so rows are distinct
+        for lo, hi, block in pool.map(lambda pq: one_pair(pq, C), pairs):
+            out[a["I"][lo:hi]] += block
+        return out
+
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max(1, min(8, (os.cpu_count() or 2) - 1)))   # the sparse products run in parallel
+    Jm = np.einsum("iijj->ij", eri)
+    diag = np.diag(a["H"])[:, None] + np.diag(b["H"])[None, :] + a["occ"] @ Jm @ b["occ"].T
+    if start is None:
+        start = np.zeros((Na, Nb))
+        start.flat[np.argmin(diag)] = 1.0
+    else:
+        start = start / np.linalg.norm(start)
+    vectors, sigmas = [start], [sigma(start)]
+    for _ in range(max_iter):
+        m = len(vectors)                           # small matrices only: no stacked copies of the vectors
+        G = np.array([[np.vdot(vectors[i], sigmas[j]) for j in range(m)] for i in range(m)])
+        w, y = np.linalg.eigh(0.5 * (G + G.T))
+        energy, y = w[0], y[:, 0]
+        x = sum(c * v for c, v in zip(y, vectors))
+        residual = sum(c * sg for c, sg in zip(y, sigmas)) - energy * x
+        if np.linalg.norm(residual) < tol:
+            return (float(energy) + e_nuc, x, a, b) if tables else (float(energy) + e_nuc, x)
+        if m >= max_vectors:
+            x /= np.linalg.norm(x)
+            vectors, sigmas = [x], [residual + energy * x]
+        denom = energy - diag
+        denom[np.abs(denom) < 1e-3] = -1e-3
+        new = residual / denom
+        del residual, denom
+        for _twice in range(2):
+            for v in vectors:
+                new -= np.vdot(v, new) * v
+        new /= np.linalg.norm(new)
+        vectors.append(new); sigmas.append(sigma(new))
+    raise RuntimeError("selected CI did not converge")
+
+
+CANDIDATE_BYTES = 3e9          # memory for ranking candidate strings in iterative_ci
+
+
+def _external_weights(C, a, b, kf, g2, n, eps, n_electrons):
+    """How much each string just outside the selection would matter: the
+    squared coupling of the current wavefunction to it (one-electron and
+    opposite-spin parts), divided by its orbital-energy cost."""
+    from scipy import sparse
+    Nb = b["N"]
+    xpq, xT, xJ, xs = a["xpq"], a["xT"], a["xJ"], a["xs"]
+    budget = int(CANDIDATE_BYTES / (4 * Nb))
+    if len(a["external"]) > budget:
+        # too many candidates: look only at those reached from the heaviest selected strings
+        heavy = np.argsort(-np.einsum("ij,ij->i", C, C), kind="stable")
+        rank = np.empty(len(heavy), dtype=np.int64); rank[heavy] = np.arange(len(heavy))
+        order = np.argsort(rank[xJ], kind="stable")
+        first_seen = np.unique(xT[order], return_index=True)[1]
+        reach = np.zeros(len(a["external"]), dtype=bool)
+        reach[xT[order][np.sort(first_seen)[:budget]]] = True
+        keep = reach[xT]
+        xpq, xT, xJ, xs = xpq[keep], xT[keep], xJ[keep], xs[keep]
+    R = np.zeros((len(a["external"]), Nb), dtype=np.float32) if len(a["external"]) <= budget else None
+    if R is None:
+        compact = np.full(len(a["external"]), -1, dtype=np.int64)
+        ids = np.flatnonzero(reach); compact[ids] = np.arange(len(ids))
+        xT = compact[xT]
+        R = np.zeros((len(ids), Nb), dtype=np.float32)
+    else:
+        ids = np.arange(len(a["external"]))
+    for pq in range(n * n):
+        lo, hi = np.searchsorted(xpq, [pq, pq + 1])
+        if lo == hi:
+            continue
+        rows = xs[lo:hi, None] * C[xJ[lo:hi]]
+        M = sparse.csr_matrix(((b["s"] * g2[pq, b["pq"]])[b["rows"]], b["cols"], b["indptr"]), shape=(Nb, Nb))
+        R[xT[lo:hi]] += kf[pq] * rows + (M @ rows.T).T
+    gap = np.array([eps[list(t)].sum() for t in a["external"]]) - np.sort(eps)[:n_electrons].sum()
+    coupling = np.zeros(len(a["external"]))
+    coupling[ids] = np.einsum("ij,ij->i", R, R).astype(float)
+    return coupling, np.maximum(gap, 0.2)
+
+
+def _excite(k, I, J):
+    """The excitation that turns the reference string (0..k-1) into +I,
+    applied to string J. Returns (string, sign), or None if it cannot act."""
+    holes = [x for x in range(k) if x not in I]
+    parts = [x for x in I if x >= k]
+
+    def raw(string):
+        st, sign = list(string), 1
+        for q in holes:
+            if q not in st:
+                return None
+            i = st.index(q); st.pop(i)
+            sign = -sign if i % 2 else sign
+        for q in parts:
+            if q in st:
+                return None
+            i = sum(1 for x in st if x < q); st.insert(i, q)
+            sign = -sign if i % 2 else sign
+        return tuple(st), sign
+
+    hit = raw(J)
+    return None if hit is None else (hit[0], hit[1] * raw(range(k))[1])
+
+
+def _cluster_product(X, Y, strings_a, strings_b, index_a, index_b, n_alpha, n_beta, shape):
+    """Product of two excitation operators given as coefficient arrays (as
+    they act on the reference); results outside the selection are dropped."""
+    out = np.zeros(shape[0] * shape[1])
+    xa, xb = np.nonzero(X)
+    ya, yb = np.nonzero(Y)
+    if len(xa) == 0 or len(ya) == 0:
+        return out.reshape(shape)
+    xv, yv = X[xa, xb], Y[ya, yb]
+
+    def table(xs, ys, strings, index, k):
+        ux, px = np.unique(xs, return_inverse=True)
+        uy, py = np.unique(ys, return_inverse=True)
+        K = np.full((len(ux), len(uy)), -1, dtype=np.int64)
+        S = np.zeros((len(ux), len(uy)))
+        for j, J in enumerate(uy):
+            for i, I in enumerate(ux):
+                hit = _excite(k, strings[J], strings[I])
+                if hit is not None and hit[0] in index:
+                    K[i, j], S[i, j] = index[hit[0]], hit[1]
+        return K, S, px, py
+
+    Ka, Sa, pxa, pya = table(xa, ya, strings_a, index_a, n_alpha)
+    Kb, Sb, pxb, pyb = table(xb, yb, strings_b, index_b, n_beta)
+    step = max(1, 4_000_000 // len(xa))
+    for lo in range(0, len(ya), step):
+        sl = slice(lo, lo + step)
+        ka, kb = Ka[pxa[:, None], pya[None, sl]], Kb[pxb[:, None], pyb[None, sl]]
+        w = Sa[pxa[:, None], pya[None, sl]] * Sb[pxb[:, None], pyb[None, sl]] * xv[:, None] * yv[None, sl]
+        ok = (ka >= 0) & (kb >= 0)
+        out += np.bincount(ka[ok] * shape[1] + kb[ok], weights=w[ok], minlength=len(out))
+    return out.reshape(shape)
+
+
+def cluster_base(Z, strings_a, strings_b, n_alpha, n_beta, order=4, keep=1e-4, keep_products=1e-5):
+    """What the single and double excitations alone predict for the higher
+    ones. Z holds the coefficients relative to the reference determinant
+    (which is the first string of each list). With T1 the singles and
+    T2 = doubles - T1^2/2, the wavefunction exp(T1 + T2) contains triples
+    T1 T2 + ..., quadruples T2^2/2 + ... and so on: two pairs of electrons
+    that avoid each other independently. Returns that prediction for
+    excitation level 3 and up (zero below). Small terms are left out; the
+    result is a base to store residuals against, not an exact identity."""
+    level_a = np.array([sum(1 for x in t if x >= n_alpha) for t in strings_a])
+    level_b = np.array([sum(1 for x in t if x >= n_beta) for t in strings_b])
+    level = level_a[:, None] + level_b[None, :]
+    index_a = {tuple(t): i for i, t in enumerate(strings_a)}
+    index_b = {tuple(t): i for i, t in enumerate(strings_b)}
+    args = (strings_a, strings_b, index_a, index_b, n_alpha, n_beta, Z.shape)
+    T1 = np.where(level == 1, Z, 0.0)
+    T = np.where((level == 1) | (level == 2), Z, 0.0)
+    T -= np.where(level == 2, 0.5 * _cluster_product(T1, T1, *args), 0.0)
+    T[np.abs(T) < keep] = 0.0
+    term, base = T, np.zeros(Z.shape)
+    for k in range(2, order + 1):
+        term = _cluster_product(term, T, *args) / k
+        term[np.abs(term) < keep_products] = 0.0
+        base += term
+    return np.where(level >= 3, base, 0.0)
+
+
+def _log_code(Z, keep):
+    """Sign and magnitude on a logarithmic scale (1/32 octave, about 2 %),
+    as small integers; entries below `keep` become 0."""
+    big = np.abs(Z) >= keep
+    code = np.zeros(Z.shape, dtype=np.int16)
+    code[big] = (np.sign(Z[big]) * np.clip(np.round(32 * np.log2(np.abs(Z[big]))) + 2000, 1, 32000)).astype(np.int16)
+    return code
+
+
+def _log_decode(code):
+    code = code.astype(float)
+    return np.where(code == 0, 0.0, np.sign(code) * 2.0 ** ((np.abs(code) - 2000) / 32))
+
+
+def _low_levels(strings_a, strings_b, n_alpha, n_beta):
+    level_a = np.array([sum(1 for x in t if x >= n_alpha) for t in strings_a])
+    level_b = np.array([sum(1 for x in t if x >= n_beta) for t in strings_b])
+    return level_a[:, None] + level_b[None, :] <= 2
+
+
+def save_ci_state(path, n, strings_a, strings_b, C, history, keep=1e-5, cluster=True):
+    """Store a selected-CI state compactly: the chosen strings in the order
+    they were added, and the wavefunction as a base plus a residual.
+
+    Single and double excitations are stored as they are. For the higher
+    ones only the difference from what the singles and doubles predict
+    (`cluster_base`) is stored. Everything is written as a sign and a
+    magnitude on a logarithmic scale, and what is smaller than `keep` times
+    the largest coefficient is dropped. The file is only ever a starting
+    point: the solver re-converges from it and regenerates what was dropped,
+    so the loss costs a few iterations, never correctness."""
+    n_alpha, n_beta = len(strings_a[0]), len(strings_b[0])
+    cluster = cluster and abs(C[0, 0]) > 0.5 * np.abs(C).max()
+    Z = C / (C[0, 0] if cluster else np.abs(C).max())
+    if cluster:
+        low = _low_levels(strings_a, strings_b, n_alpha, n_beta)
+        code = np.where(low, _log_code(Z, keep), 0).astype(np.int16)
+        base = cluster_base(_log_decode(code), strings_a, strings_b, n_alpha, n_beta)   # from what the reader will see
+        code = np.where(low, code, _log_code(Z - base, keep)).astype(np.int16)
+    else:
+        code = _log_code(Z, keep)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, n=n, strings_a=np.array(strings_a, dtype=np.int16),
+                        strings_b=np.array(strings_b, dtype=np.int16), code=code, cluster=cluster,
+                        history=np.array(history, dtype=float))
+    return float(np.mean(code != 0))
+
+
+def load_ci_state(path, n, n_alpha, n_beta, max_strings):
+    """Read a stored state if it belongs to a problem of the same shape.
+    Strings are stored in order of importance, so a larger stored state can
+    be cut down to `max_strings`. Returns (strings_a, strings_b, C) or None."""
+    if not Path(path).exists():
+        return None
+    with np.load(path) as f:
+        if "code" not in f or "cluster" not in f:
+            return None
+        sa, sb, code, cluster = f["strings_a"], f["strings_b"], f["code"], bool(f["cluster"])
+        if int(f["n"]) != n or sa.shape[1] != n_alpha or sb.shape[1] != n_beta:
+            return None
+    sa = [tuple(int(x) for x in t) for t in sa]
+    sb = [tuple(int(x) for x in t) for t in sb]
+    C = _log_decode(code)
+    if cluster:
+        low = _low_levels(sa, sb, n_alpha, n_beta)
+        C = C + cluster_base(np.where(low, C, 0.0), sa, sb, n_alpha, n_beta)
+    ka, kb = min(len(sa), max_strings), min(len(sb), max_strings)
+    return sa[:ka], sb[:kb], np.ascontiguousarray(C[:ka, :kb])
+
+
+def iterative_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_strings=6000, growth=2.0, tol=0.0, report=None,
+                 store=None, refine=4, swap=0.25):
+    """Selected CI grown and refined step by step, the way a mesh is refined
+    where the solution demands it.
+
+    Grow: solve in a small set of strings, rank the strings one excitation
+    outside it by how strongly the current wavefunction couples to them, add
+    the best, and solve again starting from the previous answer, until
+    `max_strings` per spin is reached.
+
+    Refine (up to `refine` rounds): at full size, exchange the selected
+    strings that turned out to carry the least weight for outside strings
+    estimated to carry more, at most a fraction `swap` at a time, and solve
+    again. An exchange is kept only if the energy went down.
+
+    Stops early when a step lowers the energy by less than `tol`, or when
+    nothing is left to add (then the result is full CI). Returns
+    (energy, history); every energy is an upper bound.
+
+    With `store` (a file path) the state is written after every step and read
+    at the start, so a later run, also one with a larger `max_strings`,
+    continues from where the last one ended."""
+    n = h.shape[0]
+    k = h - 0.5 * np.einsum("prrq->pq", eri)
+    kf, g2 = k.ravel(), eri.reshape(n * n, n * n)
+    Jm, Km = np.einsum("iijj->ij", eri), np.einsum("ijji->ij", eri)
+    orbital = lambda own, other: (np.diag(h) + Jm[:, :own].sum(1) - Km[:, :own].sum(1) + Jm[:, :other].sum(1))
+    sa, sb = excited_strings(n, n_alpha, 1), excited_strings(n, n_beta, 1)
+    C, history, previous = None, [], None
+    stored = load_ci_state(store, n, n_alpha, n_beta, max_strings) if store else None
+    if stored and len(stored[0]) >= len(sa) and len(stored[1]) >= len(sb):
+        sa, sb, C = stored
+    while True:
+        energy, C, a, b = selected_ci(h, eri, sa, sb, e_nuc=e_nuc, start=C, tables=True)
+        if previous is not None and energy > previous[0]:          # the exchange did not pay: undo it
+            energy, sa, sb, C = previous
+            break
+        history.append((len(sa), len(sb), energy))
+        if store:
+            save_ci_state(store, n, sa, sb, C, history)
+        if report:
+            report(len(sa), len(sb), energy)
+        if len(history) > 1 and history[-2][2] - energy < tol:
+            break
+        sides = ((sa, n_alpha, n_beta, a, b, C), (sb, n_beta, n_alpha, b, a, C.T))
+        room = [min(int(len(st) * (growth - 1.0)), max_strings - len(st), len(mine["external"]))
+                for st, _, _, mine, _, _ in sides]
+        if max(room) > 0:                                          # grow
+            previous, grown = None, []
+            for (strings, own, other, mine, theirs, coeff), space in zip(sides, room):
+                if space > 0:
+                    coupling, gap = _external_weights(coeff, mine, theirs, kf, g2, n, orbital(own, other), own)
+                    best = np.argsort(-coupling / gap, kind="stable")[:space]
+                    strings = list(strings) + [mine["external"][i] for i in best]
+                grown.append(strings)
+            wider = np.zeros((len(grown[0]), len(grown[1])))
+            wider[:len(sa), :len(sb)] = C
+            (sa, sb), C = grown, wider
+            continue
+        if refine <= 0:
+            break
+        refine -= 1                                                # exchange weak strings for better ones
+        previous, new_sets, new_C, swapped = (energy, sa, sb, C), [], C.copy(), 0
+        for axis, (strings, own, other, mine, theirs, coeff) in enumerate(sides):
+            strings = list(strings)
+            if mine["external"]:
+                coupling, gap = _external_weights(coeff, mine, theirs, kf, g2, n, orbital(own, other), own)
+                expected = coupling / gap ** 2                     # estimated weight if it were included
+                weight = np.einsum("ij,ij->i", coeff, coeff)
+                weight[0] = np.inf                                 # the reference stays
+                weakest = np.argsort(weight, kind="stable")[:int(swap * len(strings))]
+                best = np.argsort(-expected, kind="stable")[:len(weakest)]
+                count = int(np.sum(expected[best] > weight[weakest]))
+                for i, j in zip(weakest[:count], best[:count]):
+                    strings[i] = mine["external"][j]
+                    if axis == 0:
+                        new_C[i, :] = 0.0
+                    else:
+                        new_C[:, i] = 0.0
+                swapped += count
+            new_sets.append(strings)
+        if swapped == 0:
+            break
+        (sa, sb), C = new_sets, new_C
+    return energy, history
 
 
 def helium_fci_s_general():

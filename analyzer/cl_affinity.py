@@ -46,7 +46,7 @@ def spherical_hf(S, h, eri, occupations):
     return float(0.5 * np.sum(D * (h + F))), C
 
 
-def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=()):
+def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=(), level=None):
     """Frozen-core full CI energy of the outer electrons of chlorine."""
     funcs = functions(CL_S, CL_P)
     n_sp = len(funcs)
@@ -86,8 +86,19 @@ def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=
     _, U = np.linalg.eigh(A.T @ F @ A)
     A = A @ U
     m = A.shape[1]
-    e_ci = quantum.fci(A.T @ h_eff @ A, quantum._transform(eri, A), n_alpha, n_beta, e_nuc=e_core, tol=1e-6,
-                       low_memory=m > 16)
+    ha, ga = A.T @ h_eff @ A, quantum._transform(eri, A)
+    if level and level > 9:
+        # iterative selected CI: grow the set of strings up to `level` per spin
+        label = "_".join(",".join(f"{x:g}" for x in t) or "-" for t in (extra_s, extra_p, extra_d, extra_f))
+        store = Path(__file__).resolve().parent / "ci_cache" / f"Cl_{n_alpha}{n_beta}_{label}.npz"
+        e_ci, _ = quantum.iterative_ci(ha, ga, n_alpha, n_beta, e_nuc=e_core, max_strings=level, store=store,
+                                       report=lambda na, nb, e: print(f"    {na:6d} x {nb:6d} strings  {e:.6f}", flush=True))
+    elif level:
+        # each spin's electrons leave the 3s and 3p orbitals at most `level` at a time
+        e_ci, _ = quantum.selected_ci(ha, ga, quantum.excited_strings(m, n_alpha, level),
+                                      quantum.excited_strings(m, n_beta, level), e_nuc=e_core)
+    else:
+        e_ci = quantum.fci(ha, ga, n_alpha, n_beta, e_nuc=e_core, tol=1e-6, low_memory=m > 16)
     return e_hf, e_ci, m
 
 
@@ -97,13 +108,14 @@ def main():
         parse = lambda t: () if t == "-" else tuple(float(x) for x in t.split(","))
         extra_s, extra_p, extra_d = (parse(t) for t in sys.argv[1:4])
         extra_f = parse(sys.argv[4]) if len(sys.argv) > 4 else ()
+        level = int(sys.argv[5]) if len(sys.argv) > 5 else None
     else:
-        extra_s, extra_p, extra_d, extra_f = EXTRA_S, EXTRA_P, EXTRA_D, ()
+        extra_s, extra_p, extra_d, extra_f, level = EXTRA_S, EXTRA_P, EXTRA_D, (), None
     closed = (2,) * 9
     open_ = (2,) * 6 + (5 / 3,) * 3
-    hf_m, ci_m, m = valence_ci(4, 4, closed, extra_s, extra_p, extra_d, extra_f)
+    hf_m, ci_m, m = valence_ci(4, 4, closed, extra_s, extra_p, extra_d, extra_f, level)
     print(f"Cl-  {m} active orbitals  HF {hf_m:.6f}  valence CI {ci_m:.6f}  ({time.time() - t0:.0f} s)", flush=True)
-    _, ci_0, _ = valence_ci(4, 3, open_, extra_s, extra_p, extra_d, extra_f)
+    _, ci_0, _ = valence_ci(4, 3, open_, extra_s, extra_p, extra_d, extra_f, level)
     print(f"Cl   valence CI {ci_0:.6f}  ({time.time() - t0:.0f} s)", flush=True)
     ea = (ci_0 - ci_m) * HARTREE_EV
     print(f"electron affinity {ea:.4f} eV   (measured 3.6127, Hartree-Fock about 2.58)")

@@ -290,6 +290,30 @@ The molecule itself comes out well: geometry, stiffness and charge distribution 
 
 This is also the one place where measurement uncertainty matters: the binding energy of NaCl is only known to about 2 % (4.23 ± 0.09 eV), so the final 3.9 % is within twice that uncertainty.
 
+### Solving in steps: the route-planner idea
+
+Full CI counts every way of placing the electrons in the orbitals. For chlorine's eight outer electrons that is 23 million arrangements in 20 orbitals and about 18 billion in 44, most of which contribute almost nothing. `quantum.iterative_ci` does not compute them all. It solves the problem in a small set, ranks the arrangements just outside that set by how strongly the current answer couples to them, adds the best ones, and solves again starting from the previous answer. Every step gives an upper bound on the energy, the bounds only go down, and if everything is eventually added the result is exactly full CI (checked in the code against the direct full-CI solver).
+
+The idea is borrowed from route planning. In the [MPEE](https://github.com/punnerud/mpee) routing engine, the [matrix broker](https://github.com/punnerud/mpee/blob/main/crates/brooom/docs/matrix-broker.md) never fills in the whole N × N travel-time table: it obtains the thin skeleton of cells the optimizer actually reads, derives the rest, and reuses what it already knows on the next solve. Its [gateway index](https://github.com/punnerud/mpee/blob/main/docs/matcodec-gateway-index.md) rests on the fact that traffic between two regions passes through a few roads. The same two observations hold for electrons:
+
+| Route planning (MPEE) | Electrons (here) |
+|---|---|
+| Buy only the cells of the N × N matrix that the solver reads | Keep only the electron arrangements that carry weight |
+| Rank candidate cells by a cheap prior before paying for them | Rank candidate arrangements by their coupling to the current answer |
+| A warm cache makes the next solve start from what is known | Each solve starts from the previous wavefunction |
+| A few gateways connect regions | A few orbitals connect a filled shell to the empty ones |
+| Minimize travel time | Minimize energy |
+
+In quantum chemistry this family of methods is known as selected configuration interaction; the code here is a simple member of it that selects whole strings (the arrangement of the electrons of one spin) and not single determinants.
+
+Three more steps follow the same pattern:
+
+- **Refine where it matters.** At full size, the strings that turned out to carry the least weight are exchanged for outside strings estimated to carry more, and an exchange is kept only if the energy went down. This is how a finite-element mesh is refined where the flow is turbulent. On the 20-orbital test it gains little (0.05 millihartree of the 0.41 that separate the selection from full CI), which says the ranking during growth was already good.
+- **Store a base and a residual.** The state is saved after every step, so a later run continues where the last one ended, also with a larger selection. Single and double excitations are stored as they are; for higher excitations only the difference from what the singles and doubles predict is stored. That prediction is the coupled-cluster idea: two pairs of electrons that avoid each other independently. It accounts for 98 % of the weight of the quadruple excitations in Cl⁻, but for little of the triples and quintuples. Coefficients are written as a sign and a logarithmic magnitude, and the smallest are dropped. For 1.4 million determinants the file is 0.28 MB against 11.5 MB of raw numbers.
+- **Lossy storage is safe here.** The file is only a starting point. The solver re-converges from it and regenerates what was dropped, so the loss costs iterations and never correctness. This is the role the exact base plays in MPEE's matrix codec, with the difference that there the residual restores the data bit for bit and here the solver does.
+
+Measured on chlorine with 20 orbitals, where full CI is available: 1.4 of 23 million determinants give the electron affinity to 0.005 eV, in about one minute against seven for full CI.
+
 ### Magnetism: the electron cloud as a tiny superconductor
 
 A magnetic field sets the whole electron cloud circulating, and the induced current opposes the field, with no resistance. This is the same response as in a superconductor, but an atom is about a hundred times thinner than the layer needed to expel the field, so the effect is of order `(v/c)² = α²`:
