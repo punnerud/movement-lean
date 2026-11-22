@@ -304,7 +304,7 @@ if quantum is not None:
              "the remaining 0.25 % is mostly correlation between core and outer electrons")
     pre = PRECOMPUTED.get("Be_full_ci_spd")
     if pre:
-        row(G_NUM, "Be", "first ionization energy",
+        be_full_row = row(G_NUM, "Be", "first ionization energy",
             "full CI, all four electrons, s, p and d ("
             + f"{pre['determinants']:,}".replace(",", " ") + " determinants)",
             "rayleigh_ritz_bound",
@@ -313,6 +313,17 @@ if quantum is not None:
             fix="core and outer electrons correlated together, no frozen core",
             note="precomputed with analyzer/be_full_ci.py (needs about 15 GB of memory); "
                  "the remaining 0.2 % needs f orbitals and larger sets")
+    pre_f = PRECOMPUTED.get("Be_full_ci_spdf")
+    if pre and pre_f:
+        row(G_NUM, "Be", "first ionization energy",
+            "full CI, all four electrons, s, p, d and f ("
+            + f"{pre_f['determinants']:,}".replace(",", " ") + " determinants)",
+            "rayleigh_ritz_bound",
+            (pre_f["E_BePlus_hartree"] - pre_f["E_Be_hartree"]) * HARTREE_EV * recoil("9Be", 4),
+            ie["Be"], "eV", "ok", 2.5e-3, u_n, base=be_full_row,
+            fix="f orbitals: a finer angular pattern for the outer pair",
+            note="precomputed with analyzer/be_full_ci.py (27 minutes, about 20 GB); "
+                 "the remaining 0.15 % needs larger orbital sets of every kind")
 
     # H-: a proton with two electrons. Bound only because the electrons avoid each other.
     hm_hf = quantum.atom_hf(1, 1, 1)
@@ -368,6 +379,10 @@ if quantum is not None:
                    *([("Be: more orbitals lower the energy (s,p ≥ s,p,d)", be_ci, pre["E_Be_hartree"]),
                       ("Be: full CI (s, p, d) ≥ exact", pre["E_Be_hartree"], bench["Be_exact"])]
                      if pre else []),
+                   *([("Be: more orbitals lower the energy (s,p,d ≥ s,p,d,f)",
+                       pre["E_Be_hartree"], pre_f["E_Be_hartree"]),
+                      ("Be: full CI (s, p, d, f) ≥ exact", pre_f["E_Be_hartree"], bench["Be_exact"])]
+                     if pre and pre_f else []),
                    ("H⁻: HF ≥ s-only CI", hm_hf, hm_s),
                    ("H⁻: s-only CI ≥ Hylleraas", hm_s, hm_hyl),
                    ("H⁻: Hylleraas ≥ exact", hm_hyl, bench["HMinus_exact"])]

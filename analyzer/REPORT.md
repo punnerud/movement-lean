@@ -96,6 +96,7 @@ Each formula's derivation is proved in Lean where a theorem is named; the compar
 | Be | first ionization energy | full CI with s and p orbitals | `rayleigh_ritz_bound` | 9.282404 eV | 9.322699 eV | -0.43 % | matches | 43 223× |
 | Be | first ionization energy | + d orbitals for the two outer electrons | `not formalised` | 9.299148 eV | 9.322699 eV | -0.25 % | matches (composite: the d-orbital change is computed with the 1s² core frozen and added; the remaining 0.25 % is mostly correlation between core and outer electrons) | 25 262× |
 | Be | first ionization energy | full CI, all four electrons, s, p and d (549 081 determinants) | `rayleigh_ritz_bound` | 9.305575 eV | 9.322699 eV | -0.18 % | matches (precomputed with analyzer/be_full_ci.py (needs about 15 GB of memory); the remaining 0.2 % needs f orbitals and larger sets) | 18 368× |
+| Be | first ionization energy | full CI, all four electrons, s, p, d and f (1 071 225 determinants) | `rayleigh_ritz_bound` | 9.308583 eV | 9.322699 eV | -0.15 % | matches (precomputed with analyzer/be_full_ci.py (27 minutes, about 20 GB); the remaining 0.15 % needs larger orbital sets of every kind) | 15 142× |
 | H⁻ | electron affinity of H | Hartree–Fock (average field) | `rayleigh_ritz_bound` | -0.3282728 eV | 0.754195 eV | -144 % | fails, as expected (negative: the average field predicts that H⁻ does not exist) | 57 411× |
 | H⁻ | electron affinity of H | full CI, spherical orbitals only | `rayleigh_ritz_bound` | 0.3942391 eV | 0.754195 eV | -48 % | fails, as expected (bound, but only half of the binding) | 19 091× |
 | H⁻ | electron affinity of H | Hylleraas (r₁₂ in the wavefunction) | `rayleigh_ritz_bound` | 0.7547067 eV | 0.754195 eV | +0.0678 % | matches (non-relativistic; nuclear motion included only through the reduced mass) | 27× |
@@ -241,7 +242,8 @@ Each line follows one quantity from the simplest model to the best one here.
 |  |  | full CI with s and p orbitals | -0.43 % | the two outer electrons spend part of the time in 2p instead of 2s |
 |  |  | + d orbitals for the two outer electrons | -0.25 % | d orbitals let the outer pair avoid each other at an angle |
 |  |  | full CI, all four electrons, s, p and d (549 081 determinants) | -0.18 % | core and outer electrons correlated together, no frozen core |
-| | | **remaining** | 18 368× the reference uncertainty | model error, far above the reference uncertainty |
+|  |  | full CI, all four electrons, s, p, d and f (1 071 225 determinants) | -0.15 % | f orbitals: a finer angular pattern for the outer pair |
+| | | **remaining** | 15 142× the reference uncertainty | model error, far above the reference uncertainty |
 | H⁻ | electron affinity of H | Hartree–Fock (average field) | -144 % | starting point |
 |  |  | full CI, spherical orbitals only | -48 % | electrons avoid each other radially: the ion becomes stable |
 |  |  | Hylleraas (r₁₂ in the wavefunction) | +0.0678 % | electrons avoid each other in every direction |
@@ -277,4 +279,4 @@ Each line follows one quantity from the simplest model to the best one here.
 - The uncertainty column uses one representative relative uncertainty per class of data (see relative_uncertainty in reference_data.json), not a separate figure for every value.
 - The numerical methods are non-relativistic with fixed nuclei, use s and p orbitals only, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
 
-**110 comparisons: 89 inside the model's domain and matching, 21 documented limits.**
+**111 comparisons: 90 inside the model's domain and matching, 21 documented limits.**
