@@ -17,5 +17,5 @@ jobs:
         run: "! grep -rn 'sorry' Movement.lean Movement/"
       - name: Analyzer regression check
         run: |
-          python3 -m pip install --quiet numpy
+          python3 -m pip install --quiet numpy scipy
           python3 analyzer/analyze.py --check

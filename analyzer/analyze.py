@@ -270,21 +270,34 @@ if quantum is not None:
         "ok", 0.02, u_n, base=li_b, fix="self-consistent screening and penetration",
         note="the missing 1 % is electron correlation")
     li_ci, li_ion_ci = quantum.atom_fci_sp(3, (2, 1), [(2, 1), (1, 1)])
-    row(G_NUM, "Li", "first ionization energy", "full CI with s and p orbitals",
+    li_sp_row = row(G_NUM, "Li", "first ionization energy", "full CI with s and p orbitals",
         "rayleigh_ritz_bound", (li_ion_ci - li_ci) * HARTREE_EV * recoil("7Li", 3), ie["Li"], "eV",
         "ok", 3e-3, u_n, base=li_hf_row,
         fix="the outer electron polarises the inner pair (needs p orbitals)",
-        note="the remaining 0.1 % needs d orbitals and beyond")
+        )
+    li_d, li_ion_d = quantum.atom_fci_sp(3, (2, 1), [(2, 1), (1, 1)], with_d=True)
+    row(G_NUM, "Li", "first ionization energy", "full CI with s, p and d orbitals",
+        "rayleigh_ritz_bound", (li_ion_d - li_d) * HARTREE_EV * recoil("7Li", 3), ie["Li"], "eV",
+        "ok", 1.5e-3, u_n, base=li_sp_row,
+        fix="tighter p and one d shell: finer polarization of the inner pair",
+        note="the remaining 0.1 % needs still larger orbital sets")
     be_hf_row = row(G_NUM, "Be", "first ionization energy", "Hartree–Fock, E(Be⁺) − E(Be)",
                     "rayleigh_ritz_bound", (be_ion - be) * HARTREE_EV * recoil("9Be", 4), ie["Be"],
                     "eV", "limit", 0.05, u_n,
                     "average-field theory misses the strong 2s–2p correlation in beryllium")
     be_ci, be_ion_ci = quantum.atom_fci_sp(4, (2, 2), [(2, 2), (2, 1)])
-    row(G_NUM, "Be", "first ionization energy", "full CI with s and p orbitals",
+    be_sp_row = row(G_NUM, "Be", "first ionization energy", "full CI with s and p orbitals",
         "rayleigh_ritz_bound", (be_ion_ci - be_ci) * HARTREE_EV * recoil("9Be", 4), ie["Be"], "eV",
         "ok", 1e-2, u_n, base=be_hf_row,
         fix="the two outer electrons spend part of the time in 2p instead of 2s",
-        note="the remaining 0.5 % needs d orbitals and beyond")
+        )
+    be_d = quantum.beryllium_d_correction()
+    row(G_NUM, "Be", "first ionization energy", "+ d orbitals for the two outer electrons",
+        "not formalised", (be_ion_ci - be_ci + be_d) * HARTREE_EV * recoil("9Be", 4), ie["Be"], "eV",
+        "ok", 4e-3, u_n, base=be_sp_row,
+        fix="d orbitals let the outer pair avoid each other at an angle",
+        note="composite: the d-orbital change is computed with the 1s² core frozen and added; "
+             "the remaining 0.25 % is mostly correlation between core and outer electrons")
 
     # H-: a proton with two electrons. Bound only because the electrons avoid each other.
     hm_hf = quantum.atom_hf(1, 1, 1)
@@ -332,6 +345,8 @@ if quantum is not None:
                    ("H₂: full CI ≥ exact", e_min, bench["H2_exact"]),
                    ("Li: HF ≥ full CI (s, p)", li, li_ci),
                    ("Li: full CI ≥ exact", li_ci, bench["Li_exact"]),
+                   ("Li: more orbitals lower the energy (s,p ≥ s,p,d)", li_ci, li_d),
+                   ("Li: full CI (s, p, d) ≥ exact", li_d, bench["Li_exact"]),
                    ("Li⁺: full CI ≥ exact", li_ion_ci, bench["LiPlus_exact"]),
                    ("Be: HF ≥ full CI (s, p)", be, be_ci),
                    ("Be: full CI ≥ exact", be_ci, bench["Be_exact"]),

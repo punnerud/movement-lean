@@ -14,7 +14,7 @@ All three are variational: by the Rayleigh-Ritz principle (Lean:
 `rayleigh_ritz_bound`) every energy computed here is an upper bound on the
 exact energy of the model Hamiltonian.
 
-Only numpy is required.
+Only numpy is required; scipy, if installed, speeds up the integrals.
 """
 import math
 from fractions import Fraction
@@ -22,6 +22,10 @@ from itertools import product  # noqa: F401
 
 import numpy as np
 
+try:                                    # optional: much faster for large basis sets
+    from scipy.special import erf as _fast_erf
+except ImportError:
+    _fast_erf = None
 _erf = np.frompyfunc(math.erf, 1, 1)
 
 
@@ -29,7 +33,8 @@ def boys0(t):
     """F0(t) = (1/2) sqrt(pi/t) erf(sqrt t), with the t -> 0 limit."""
     t = np.asarray(t, dtype=float)
     safe = np.where(t < 1e-12, 1.0, t)
-    val = 0.5 * np.sqrt(np.pi / safe) * _erf(np.sqrt(safe)).astype(float)
+    root = np.sqrt(safe)
+    val = 0.5 * np.sqrt(np.pi / safe) * (_fast_erf(root) if _fast_erf else _erf(root).astype(float))
     return np.where(t < 1e-12, 1.0 - t / 3.0, val)
 
 
@@ -329,29 +334,96 @@ if __name__ == "__main__":
 # --------------------------------------------------------------------------
 # p-type orbitals and full CI for any number of electrons
 # --------------------------------------------------------------------------
-def atom_sp_orbitals(Z, occupations, s_keep, p_exponents, delta=0.1):
-    """Orthonormal s and p orbitals for an atom, with h and (pq|rs) in that basis.
+def contracted_integrals(exponents, centers, nuclei, W):
+    """S, h and (pq|rs) for functions that are fixed combinations (columns of W)
+    of s-Gaussians. The two-electron integrals are built in slices, so the full
+    primitive array is never stored."""
+    a = np.asarray(exponents, float)
+    A = np.asarray(centers, float).reshape(len(a), 3)
+    n, nc = len(a), W.shape[1]
+    p = a[:, None] + a[None, :]
+    red = a[:, None] * a[None, :] / p
+    d2 = ((A[:, None, :] - A[None, :, :]) ** 2).sum(-1)
+    K = np.exp(-red * d2)
+    P = (a[:, None, None] * A[:, None, :] + a[None, :, None] * A[None, :, :]) / p[:, :, None]
+    S = (np.pi / p) ** 1.5 * K
+    T = red * (3.0 - 2.0 * red * d2) * S
+    V = np.zeros_like(S)
+    for charge, pos in nuclei:
+        r2 = ((P - np.asarray(pos, float)) ** 2).sum(-1)
+        V -= charge * 2.0 * np.pi / p * K * boys0(p * r2)
+    pf, Kf, Pf = p.ravel(), K.ravel(), P.reshape(n * n, 3)
+    sq = (Pf ** 2).sum(-1)
+    half = np.empty((n * n, nc, nc))
+    step = max(1, 4_000_000 // (n * n))
+    for lo in range(0, n * n, step):
+        hi = min(n * n, lo + step)
+        pq = pf[lo:hi, None] + pf[None, :]
+        R2 = np.maximum(sq[lo:hi, None] + sq[None, :] - 2.0 * Pf[lo:hi] @ Pf.T, 0.0)
+        block = (2.0 * np.pi ** 2.5 / (pf[lo:hi, None] * pf[None, :] * np.sqrt(pq))
+                 * Kf[lo:hi, None] * Kf[None, :] * boys0(pf[lo:hi, None] * pf[None, :] / pq * R2))
+        block = block.reshape(hi - lo, n, n)
+        half[lo:hi] = np.einsum("xkl,kc,ld->xcd", block, W, W, optimize=True)
+    half = half.reshape(n, n, nc, nc)
+    eri = np.einsum("ijcd,ia,jb->abcd", half, W, W, optimize=True)
+    return W.T @ S @ W, W.T @ (T + V) @ W, eri
 
-    s space: the Hartree-Fock orbitals of the atom (occupation numbers given),
-    plus the primitive s-Gaussians with indices `s_keep`.
-    p space: for each exponent a, three functions g(r - d e) - g(r + d e) along
-    x, y, z with d = delta / sqrt(a). Such a difference of two shifted s-Gaussians
-    is odd along its axis: a p orbital (with a 1 % admixture of f), which needs
-    no new integral formulas."""
+
+def atom_raw_basis(Z, p_exponents, d_exponents=(), delta_p=0.1, delta_d=0.3):
+    """s, p and d functions for an atom, all made from s-Gaussians.
+
+    p: g(r - d e) - g(r + d e) along x, y, z (odd along the axis).
+    d: second differences. xy-type: four lobes in a plane with signs + - - +;
+    x2-y2: lobes on the x axis minus lobes on the y axis; z2: twice the z
+    lobes minus the x and y lobes. Each has the angular shape of a d orbital,
+    with a small admixture of higher (g-type) functions.
+    Returns (S, h, eri, number of s functions) in this raw, non-orthogonal basis."""
     s_exps = even_tempered(*ATOM_BASIS[Z])
     ns = len(s_exps)
-    exps, cen = list(s_exps), [(0.0, 0.0, 0.0)] * ns
-    for a in p_exponents:
-        d = delta / math.sqrt(a)
-        for axis in range(3):
-            for sign in (1.0, -1.0):
-                c = [0.0, 0.0, 0.0]
-                c[axis] = sign * d
-                exps.append(a); cen.append(tuple(c))
-    S, h, eri = integrals(exps, np.array(cen), [(Z, (0, 0, 0))])
-    n_prim = len(exps)
+    exps, cen, cols = list(s_exps), [(0.0, 0.0, 0.0)] * ns, []
+    for k in range(ns):
+        cols.append({k: 1.0})
 
-    # Hartree-Fock with averaged occupations, s functions only
+    def lobe(a, pos):
+        exps.append(a); cen.append(tuple(pos))
+        return len(exps) - 1
+
+    for a in p_exponents:
+        d = delta_p / math.sqrt(a)
+        for axis in range(3):
+            plus, minus = [0.0] * 3, [0.0] * 3
+            plus[axis], minus[axis] = d, -d
+            cols.append({lobe(a, plus): 1.0, lobe(a, minus): -1.0})
+    for a in d_exponents:
+        d = delta_d / math.sqrt(a)
+        ax = []
+        for axis in range(3):
+            plus, minus = [0.0] * 3, [0.0] * 3
+            plus[axis], minus[axis] = d, -d
+            ax.append((lobe(a, plus), lobe(a, minus)))
+        for u, v in ((0, 1), (0, 2), (1, 2)):
+            col = {}
+            for su in (1.0, -1.0):
+                for sv in (1.0, -1.0):
+                    pos = [0.0] * 3
+                    pos[u], pos[v] = su * d, sv * d
+                    col[lobe(a, pos)] = su * sv
+            cols.append(col)
+        cols.append({ax[0][0]: 1.0, ax[0][1]: 1.0, ax[1][0]: -1.0, ax[1][1]: -1.0})
+        cols.append({ax[2][0]: 2.0, ax[2][1]: 2.0, ax[0][0]: -1.0, ax[0][1]: -1.0,
+                     ax[1][0]: -1.0, ax[1][1]: -1.0})
+    W = np.zeros((len(exps), len(cols)))
+    for c, col in enumerate(cols):
+        for k, v in col.items():
+            W[k, c] = v
+    S, h, eri = contracted_integrals(exps, np.array(cen), [(Z, (0, 0, 0))], W)
+    return S, h, eri, ns
+
+
+def _average_hf(S, h, eri, ns, occupations):
+    """Hartree-Fock with averaged occupations in the s functions.
+    Returns (occupied orbital coefficients, density matrix), both in the raw basis."""
+    n = S.shape[0]
     X = orthogonalizer(S[:ns, :ns])
     hs, es = h[:ns, :ns], eri[:ns, :ns, :ns, :ns]
     D = np.zeros((ns, ns))
@@ -363,29 +435,60 @@ def atom_sp_orbitals(Z, occupations, s_keep, p_exponents, delta=0.1):
         if np.abs(new - D).max() < 1e-10:
             break
         D = 0.5 * (D + new) if it < 30 else new
+    Cf = np.zeros((n, len(occupations))); Cf[:ns] = C
+    Df = np.zeros((n, n)); Df[:ns, :ns] = D
+    return Cf, Df
 
-    columns = []
-    for k in range(len(occupations)):
-        columns.append(np.concatenate([C[:, k], np.zeros(n_prim - ns)]))
-    for k in s_keep:
-        e = np.zeros(n_prim); e[k] = 1.0
-        columns.append(e)
-    for k in range(len(p_exponents) * 3):
-        e = np.zeros(n_prim); e[ns + 2 * k] = 1.0; e[ns + 2 * k + 1] = -1.0
-        columns.append(e)
-    W = np.array(columns).T
-    W = W @ orthogonalizer(W.T @ S @ W, 1e-8)
 
-    # canonical orbitals of the average Fock operator (good for the CI preconditioner)
-    Dp = np.zeros((n_prim, n_prim)); Dp[:ns, :ns] = D
-    F = h + np.einsum("ijkl,kl->ij", eri, Dp) - 0.5 * np.einsum("ikjl,kl->ij", eri, Dp)
-    _, U = np.linalg.eigh(W.T @ F @ W)
-    W = W @ U
+def _transform(eri, W):
     g = np.einsum("pi,pqrs->iqrs", W, eri)
     g = np.einsum("qj,iqrs->ijrs", W, g)
     g = np.einsum("rk,ijrs->ijks", W, g)
-    g = np.einsum("sl,ijks->ijkl", W, g)
-    return W.T @ h @ W, g
+    return np.einsum("sl,ijks->ijkl", W, g)
+
+
+def atom_sp_orbitals(Z, occupations, s_keep, p_exponents, d_exponents=()):
+    """Orthonormal orbitals for an atom, with h and (pq|rs) in that basis.
+
+    s space: the Hartree-Fock orbitals of the atom (occupation numbers given),
+    plus the primitive s-Gaussians with indices `s_keep`; then all p and d
+    functions from `atom_raw_basis`."""
+    S, h, eri, ns = atom_raw_basis(Z, p_exponents, d_exponents)
+    n = S.shape[0]
+    C, D = _average_hf(S, h, eri, ns, occupations)
+    columns = [C[:, k] for k in range(C.shape[1])]
+    for k in list(s_keep) + list(range(ns, n)):
+        e = np.zeros(n); e[k] = 1.0
+        columns.append(e)
+    W = np.array(columns).T
+    W = W @ orthogonalizer(W.T @ S @ W, 1e-8)
+    # canonical orbitals of the average Fock operator (good for the CI preconditioner)
+    F = h + np.einsum("ijkl,kl->ij", eri, D) - 0.5 * np.einsum("ikjl,kl->ij", eri, D)
+    _, U = np.linalg.eigh(W.T @ F @ W)
+    W = W @ U
+    return W.T @ h @ W, _transform(eri, W)
+
+
+def frozen_core_valence(Z, p_exponents, d_exponents=()):
+    """Two valence electrons outside a frozen 1s² core (for beryllium).
+
+    The core is the Hartree-Fock 1s orbital of the neutral atom. The valence
+    electrons move in the nuclear field plus the average field of the core,
+    in all orbitals orthogonal to it. Returns (energy of the valence pair by
+    full CI, energy of a single valence electron); their difference is the
+    ionization energy in this model."""
+    S, h, eri, ns = atom_raw_basis(Z, p_exponents, d_exponents)
+    C, _ = _average_hf(S, h, eri, ns, (2, 2))
+    core = C[:, :1]
+    Dc = 2.0 * core @ core.T
+    h_eff = h + np.einsum("ijkl,kl->ij", eri, Dc) - 0.5 * np.einsum("ikjl,kl->ij", eri, Dc)
+    X = orthogonalizer(S, 1e-8)
+    c = X.T @ S @ core                           # core in the orthonormal basis
+    _, vecs = np.linalg.eigh(np.eye(X.shape[1]) - c @ c.T)
+    W = X @ vecs[:, 1:]                          # everything orthogonal to the core
+    ho, g = W.T @ h_eff @ W, _transform(eri, W)
+    pair = fci_two_electrons(np.eye(ho.shape[0]), ho, g)
+    return pair, float(np.linalg.eigvalsh(ho)[0])
 
 
 def _strings(n, k):
@@ -489,13 +592,27 @@ def helium_fci_s_general():
 
 
 S_KEEP = {3: (0, 1, 2, 3, 4, 5, 7, 9, 11), 4: (1, 2, 3, 4, 5, 7, 9)}
-P_EXPONENTS = {3: (0.03, 0.1, 0.35, 1.2, 4.0), 4: (0.06, 0.2, 0.7, 2.5)}
+P_EXPONENTS = {3: (0.03, 0.1, 0.35, 1.2, 4.0), 4: (0.06, 0.2, 0.7, 2.5, 8.0)}
+# larger sets used together with d orbitals
+P_EXPONENTS_D = {3: (0.03, 0.1, 0.35, 1.2, 4.0, 12.0), 4: (0.03, 0.08, 0.2, 0.5, 1.2, 3.0, 8.0)}
+D_EXPONENTS = {3: (0.6,), 4: (0.13, 0.35, 0.9)}
 
 
-def atom_fci_sp(Z, neutral_occupations, electron_counts):
+def atom_fci_sp(Z, neutral_occupations, electron_counts, with_d=False):
     """Full CI energies in one s+p basis for several charge states of an atom.
 
     electron_counts: list of (n_alpha, n_beta). The basis is built from the
     neutral atom and reused for the ions, so the comparison is balanced."""
-    h, eri = atom_sp_orbitals(Z, neutral_occupations, S_KEEP[Z], P_EXPONENTS[Z])
+    if with_d:
+        h, eri = atom_sp_orbitals(Z, neutral_occupations, S_KEEP[Z], P_EXPONENTS_D[Z], D_EXPONENTS[Z])
+    else:
+        h, eri = atom_sp_orbitals(Z, neutral_occupations, S_KEEP[Z], P_EXPONENTS[Z])
     return [fci(h, eri, na, nb) for na, nb in electron_counts]
+
+
+def beryllium_d_correction():
+    """Change in the ionization energy of Be (hartree) when the two valence
+    electrons get a larger p set and d orbitals, with the 1s² core frozen."""
+    small = frozen_core_valence(4, P_EXPONENTS[4])
+    large = frozen_core_valence(4, P_EXPONENTS_D[4], D_EXPONENTS[4])
+    return (large[1] - large[0]) - (small[1] - small[0])
