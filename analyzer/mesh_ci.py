@@ -66,6 +66,17 @@ def _u(x):
     return x.ctypes.data_as(ctypes.POINTER(ctypes.c_uint64))
 
 
+def _memory(label, size):
+    """With CI_MEMORY_LOG set: print the memory in use now and the peak so far, after each phase."""
+    import os
+    if not os.environ.get("CI_MEMORY_LOG"):
+        return
+    import resource
+    now = int(subprocess.run(["ps", "-o", "rss=", "-p", str(os.getpid())], capture_output=True, text=True).stdout or 0) / 1e6
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1e9 if sys.platform == "darwin" else 1e6)
+    print(f"      memory after {label:10s} ({size} determinants): now {now:.2f} GB, peak {peak:.2f} GB", flush=True)
+
+
 def strings(values, wide):
     """Bit strings (Python integers) as an array: one 64-bit word each, or
     with wide=True two words each (lowest first), for up to 128 orbitals."""
@@ -399,16 +410,20 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
                     alpha, beta, c = f["alpha"][:k].copy(), f["beta"][:k].copy(), f["c"][:k].astype(float)
     while True:
         mesh = Mesh(h, eri, alpha, beta)
+        _memory("index", len(alpha))
         if plan_bytes:
             mesh.plan(plan_bytes)
+            _memory("plan", len(alpha))
         if packed is not None:
             c, packed = _unpack(mesh, packed), None
         energy, c = mesh.solve(start=c)
+        _memory("solve", len(alpha))
         room = min(max(int(len(alpha) * (growth - 1.0)), 200), max_determinants - len(alpha))
         rest, step_eps = 0.0, eps
         new_a = new_b = strings([], wide)
         for _ in range(12):                                # look further out until enough candidates turn up
             new_a, new_b, gain, rest, found = mesh.candidates(c, energy, step_eps, max(room, 1))
+            _memory(f"search {step_eps:.0e}"[:10], f"{found} candidates, {len(alpha)}")
             if found >= 3 * room or step_eps < 1e-9:
                 break
             step_eps *= 0.3
