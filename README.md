@@ -526,6 +526,17 @@ The richer form cuts the noise of H₂ by a factor of four, which the simple for
 
 The improved guesses cut the statistical error by a factor of five to fourteen, and for hydrogen the search found the exact wavefunction. The walkers lie below our own full CI for every species, as they must. But with the noise gone, three of the six (H₂, HeH⁺, H₃) sit about three error bars above the published values, by 0.3 to 0.7 mEh. For H₃ part of this can be the zero surfaces. For H₂ and HeH⁺ it cannot, since with two electrons the answer should not depend on the guess. In HeH⁺ the energy falls steadily as the step shrinks (−2.97752, −2.97768, −2.97812), so a straight line to step zero probably lands too high; that is the likely cause and it has not been examined. Until it is, the honest accuracy of this engine is about half a millihartree, not the quoted error bars.
 
+**Where the bias comes from.** `diffusion_mc.py steps` runs H₂ at five time steps, and at step 0.01 with one thing changed at a time (20 000 walkers; difference from the published energy in mEh):
+
+| H₂, improved guess | Difference |
+|---|---|
+| step 0.04, 0.02, 0.01, 0.005, 0.0025 | +0.43(3), +0.40(7), +0.27(7), +0.21(10), +0.13(14) |
+| step 0.01, no limit on the reaction rate | −0.09(8) |
+| step 0.01, reaction also on rejected moves | +0.30(9) |
+| step 0.01, a tenth of the walkers | +0.36(21) |
+
+The cause is the limit this engine puts on the reaction rate (0.2 √(particles/step)), which was there to keep walkers near a zero surface from multiplying without bound. Where the guess is poor, the rate is cut off on one side more than the other and the energy comes out too high. Since the limit itself moves with the step, the bias falls only as about the square root of the step, and a straight line through three steps does not remove it. Taking the limit away removes the bias at a single step; rejected moves and the size of the population make no difference. Hydrogen with a deliberately wrong guess shows the same thing more noisily (+0.40(41) with the limit, −0.13(27) without), and a hydrogen guess with the right slope at the nucleus shows no bias at any step (all within 0.07 mEh). Long runs of all six species without the limit are the confirmation still to come; whether the species with zero surfaces (H₃) stay stable without it is part of that test.
+
 **Following the gradient instead of searching.** The spread on a fixed set of sample points is a smooth function of the parameters, so its gradient can be followed (`diffusion_mc.py gradient`; the gradient is taken by differences, not yet by automatic differentiation). Three uses of the gradient were compared with the search at the same number of evaluations, each also with the positive parameters on a logarithmic scale. Spread on fresh sample points after three rounds:
 
 | | He (13 parameters) | H₂ (11) | H₃, richer orbitals (23) |

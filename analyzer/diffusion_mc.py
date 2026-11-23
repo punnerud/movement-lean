@@ -682,6 +682,32 @@ def improved_guess(name, report=None):
     return make, best
 
 
+def unlimited_main(names):
+    """The long runs again with the stored improved guesses, but with no limit on the reaction
+    rate: the study of the time step (`steps`) found that the limit raises the energy."""
+    import mesh_ci
+    mesh_ci.kernel().walk_options(0.0, 0)
+    stored = json.loads(IMPROVED_STORE.read_text())
+    store = STORE.with_name("diffusion_mc_unlimited.json")
+    results = json.loads(store.read_text()) if store.exists() else {}
+    taus = (0.02, 0.01, 0.005)
+    for name in names or list(CASES):
+        t0 = time.time()
+        nuclei = CASES[name][0]
+        simple = {"H": (lambda p: Guess(nuclei, p[0], 0.4), 1), "He": (IMPROVE["He"][1], len(IMPROVE["He"][2])),
+                  "H2": (IMPROVE["H2"][1], len(IMPROVE["H2"][2])), "H3": (h3_orbitals, 14),
+                  "H3+": (lambda p: Guess(nuclei, p[0], p[1]), 2),
+                  "HeH+": (lambda p: Guess(nuclei, (p[0], p[1]), p[2], up=[[1.0, p[3]]], down=[[1.0, p[3]]]), 4)}[name]
+        guess = richer(*simple)(np.array(stored[name]["parameters"]))
+        runs, e0, s0 = extrapolated(guess, sum(CASES[name][1]), taus, duration=600.0, walkers=20000)
+        reference = CASES[name][5]
+        results[name] = {"energy": e0, "error": s0, "steps": [list(r[:2]) for r in runs]}
+        store.write_text(json.dumps(results, indent=1))
+        print(f"{name}, no limit on the rate: " + ", ".join(f"step {tau:g}: {e:.5f} ± {s:.5f}" for tau, (e, s, _) in zip(taus, runs)) +
+              f"; step -> 0: {e0:.5f} ± {s0:.5f}   published {reference:.6f}, difference {1e3 * (e0 - reference):+.2f} mEh = "
+              f"{(e0 - reference) / s0:+.1f} errors   (with the limit: {stored[name]['energy']:.5f} ± {stored[name]['error']:.5f})   ({time.time() - t0:.0f} s)", flush=True)
+
+
 def gradient_main():
     """The richer guesses of He, H2 and H3 improved four ways with the same number of evaluations:
     search then simplex (no gradients), and the three uses of the gradient in `by_gradient`.
@@ -751,6 +777,8 @@ def main():
         return improve_main("then simplex" if "polish" in args else None)
     if "steps" in args:
         return step_main(args)
+    if "unlimited" in args:
+        return unlimited_main([a for a in args if a in CASES])
     if "gradient" in args:
         return gradient_main()
     if "improved" in args:
