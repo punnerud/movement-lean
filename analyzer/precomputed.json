@@ -479,14 +479,12 @@
   ],
   "active_orbitals": 44,
   "determinants": 2000000,
-  "E_Cl_minus_hartree": -459.790452,
-  "E_Cl_hartree": -459.663146,
+  "E_Cl_minus_hartree": -459.791578,
+  "E_Cl_hartree": -459.663563,
   "E_Cl_minus_hartree_fock": -459.560857,
-  "seconds": 6031,
   "command": "python3 analyzer/cl_affinity.py 0.15,0.6 0.1,0.4,1.2 0.15,0.4,1.0 0.3,0.8 -2000000",
-  "note": "selected CI on a free list of determinants (mesh_ci), two threads on an M3; values as printed, six decimals. Each energy is an upper bound for its species; the difference is not a bound. Smaller lists: 823296 determinants give Cl- -459.788737, Cl -459.662617.",
+  "note": "selected CI on a free list of determinants (mesh_ci) on an M3, orbitals of equal energy fixed by quantum.settle_shells; values as printed, six decimals. Each energy is an upper bound for its species; the difference is not a bound. Smaller lists: 823296 determinants give Cl- -459.791017, Cl -459.663382 (3.4731 eV); 1646592 give -459.791488 and -459.663543 (3.4815 eV). The run was resumed and used different thread counts, so no time is given.",
   "second_order_rest": {
-   "command": "python3 analyzer/cl_rest.py 0.15,0.6 0.1,0.4,1.2 0.15,0.4,1.0 0.3,0.8",
    "thresholds": [
     0.0001,
     3e-05,
@@ -497,41 +495,42 @@
     1e-07
    ],
    "rest_Cl_minus_hartree": [
-    -4.5e-05,
-    -0.000205,
-    -0.000603,
-    -0.001106,
-    -0.001438,
-    -0.00162,
-    -0.001665
+    -1.4e-05,
+    -1.8e-05,
+    -6.3e-05,
+    -0.000283,
+    -0.000481,
+    -0.00057,
+    -0.000587
    ],
    "rest_Cl_hartree": [
+    -3e-06,
+    -5e-06,
+    -7e-06,
     -2e-05,
-    -3.6e-05,
-    -7.8e-05,
-    -0.000252,
-    -0.000386,
-    -0.000463,
-    -0.000486
+    -5.5e-05,
+    -8.1e-05,
+    -8.6e-05
    ],
    "electron_affinity_with_rest_eV": [
-    3.4648,
-    3.4688,
-    3.4784,
-    3.4874,
-    3.4928,
-    3.4957,
-    3.4962
+    3.4838,
+    3.4838,
+    3.485,
+    3.4906,
+    3.4951,
+    3.4968,
+    3.4971
    ],
-   "note": "estimate, not a bound. Levels off with the threshold: the last step (3e-7 to 1e-7, 511 million outside determinants for Cl-) changes the electron affinity by 0.0005 eV"
+   "note": "estimate, not a bound. Levels off with the threshold: the last step (3e-7 to 1e-7, 216 million outside determinants for Cl-) changes the electron affinity by 0.0003 eV",
+   "command": "python3 analyzer/cl_rest.py 0.15,0.6 0.1,0.4,1.2 0.15,0.4,1.0 0.3,0.8 1e-4,3e-5,1e-5,3e-6,1e-6,3e-7,1e-7"
   },
-  "settled_orbitals": {
-   "E_Cl_minus_hartree": -459.791578,
-   "E_Cl_hartree": -459.663563,
-   "electron_affinity_eV": 3.4835,
-   "determinants": 2000000,
-   "note": "the same run after quantum.settle_shells fixed the mixture of equal-energy orbitals. Both energies are lower than the headline values above at the same list size. The second-order threshold series above belongs to the old orbitals and has not been rerun, so the headline values are kept.",
+  "before_settled_orbitals": {
+   "E_Cl_minus_hartree": -459.790452,
+   "E_Cl_hartree": -459.663146,
+   "seconds": 6031,
+   "note": "selected CI on a free list of determinants (mesh_ci), two threads on an M3; values as printed, six decimals. Each energy is an upper bound for its species; the difference is not a bound. Smaller lists: 823296 determinants give Cl- -459.788737, Cl -459.662617.",
    "second_order_rest": {
+    "command": "python3 analyzer/cl_rest.py 0.15,0.6 0.1,0.4,1.2 0.15,0.4,1.0 0.3,0.8",
     "thresholds": [
      0.0001,
      3e-05,
@@ -542,34 +541,36 @@
      1e-07
     ],
     "rest_Cl_minus_hartree": [
-     -1.4e-05,
-     -1.8e-05,
-     -6.3e-05,
-     -0.000283,
-     -0.000481,
-     -0.00057,
-     -0.000587
+     -4.5e-05,
+     -0.000205,
+     -0.000603,
+     -0.001106,
+     -0.001438,
+     -0.00162,
+     -0.001665
     ],
     "rest_Cl_hartree": [
-     -3e-06,
-     -5e-06,
-     -7e-06,
      -2e-05,
-     -5.5e-05,
-     -8.1e-05,
-     -8.6e-05
+     -3.6e-05,
+     -7.8e-05,
+     -0.000252,
+     -0.000386,
+     -0.000463,
+     -0.000486
     ],
     "electron_affinity_with_rest_eV": [
-     3.4838,
-     3.4838,
-     3.485,
-     3.4906,
-     3.4951,
-     3.4968,
-     3.4971
+     3.4648,
+     3.4688,
+     3.4784,
+     3.4874,
+     3.4928,
+     3.4957,
+     3.4962
     ],
-    "note": "estimate, not a bound. Levels off: the last step (3e-7 to 1e-7) changes the electron affinity by 0.0003 eV. The rest is about a third of what it was with the old orbitals (Cl-: -0.000587 against -0.001665), and the affinity with it is the same (3.4971 against 3.4962)."
-   }
+    "note": "estimate, not a bound. Levels off with the threshold: the last step (3e-7 to 1e-7, 511 million outside determinants for Cl-) changes the electron affinity by 0.0005 eV"
+   },
+   "electron_affinity_eV": 3.4641,
+   "what": "the same orbital set and list size before quantum.settle_shells fixed the mixture of equal-energy orbitals"
   }
  },
  "selected_ci_larger_runs": {
