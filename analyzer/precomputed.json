@@ -530,7 +530,38 @@
    "E_Cl_hartree": -459.663563,
    "electron_affinity_eV": 3.4835,
    "determinants": 2000000,
-   "note": "the same run after quantum.settle_shells fixed the mixture of equal-energy orbitals. Both energies are lower than the headline values above at the same list size. The second-order threshold series above belongs to the old orbitals and has not been rerun, so the headline values are kept."
+   "note": "the same run after quantum.settle_shells fixed the mixture of equal-energy orbitals. Both energies are lower than the headline values above at the same list size. The second-order threshold series above belongs to the old orbitals and has not been rerun, so the headline values are kept.",
+   "second_order_rest": {
+    "thresholds": [
+     0.0001,
+     3e-05,
+     1e-05,
+     3e-06,
+     1e-06
+    ],
+    "rest_Cl_minus_hartree": [
+     -1.4e-05,
+     -1.8e-05,
+     -6.3e-05,
+     -0.000283,
+     -0.000481
+    ],
+    "rest_Cl_hartree": [
+     -3e-06,
+     -5e-06,
+     -7e-06,
+     -2e-05,
+     -5.5e-05
+    ],
+    "electron_affinity_with_rest_eV": [
+     3.4838,
+     3.4838,
+     3.485,
+     3.4906,
+     3.4951
+    ],
+    "note": "estimate, not a bound; not yet levelled off at 1e-6. The rest is about a third of what it was with the old orbitals at the same threshold (Cl-: -0.000481 against -0.001438)."
+   }
   }
  },
  "selected_ci_larger_runs": {
@@ -603,7 +634,42 @@
     "peak_GB": 9.2,
     "energy_hartree": -459.71814387,
     "note": "measured before settle_shells and before the fix of the leak of earlier steps' indexes"
+   },
+   "mesh_1.5_million_after_fixes": {
+    "seconds": 105,
+    "threads": 9,
+    "peak_GB": 5.4,
+    "energy_hartree": -459.71815031,
+    "note": "with settle_shells and without the leak; nine threads, so the time is not comparable with the two-thread figures"
    }
   }
+ },
+ "Cl_exponent_optimisation": {
+  "command": "FULL_CI_ORBITALS=20 python3 analyzer/optimize_exponents.py - 0.1,0.8 0.2,0.7 -",
+  "start": {
+   "d_exponents": [
+    0.2,
+    0.7
+   ],
+   "E_Cl_minus_hartree": -459.71815,
+   "E_Cl_hartree": -459.601951,
+   "electron_affinity_eV": 3.162
+  },
+  "final": {
+   "d_exponents": [
+    0.3161,
+    1.0304
+   ],
+   "E_Cl_minus_hartree": -459.722215,
+   "E_Cl_hartree": -459.607989,
+   "electron_affinity_eV": 3.1082,
+   "gradient_millihartree": [
+    -0.006,
+    0.014
+   ],
+   "evaluations": 10,
+   "seconds": 9247
+  },
+  "note": "full CI in 20 orbitals, analytic gradient, BFGS on E(Cl-) + E(Cl). Both energies fall (4.1 and 6.0 millihartree) and the electron affinity falls by 0.054 eV, further from the measured 3.6127: the sum rewards the atom more than the ion."
  }
 }
