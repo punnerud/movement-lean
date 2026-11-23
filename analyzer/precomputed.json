@@ -492,30 +492,38 @@
         3e-05,
         1e-05,
         3e-06,
-        1e-06
+        1e-06,
+        3e-07,
+        1e-07
       ],
       "rest_Cl_minus_hartree": [
         -4.5e-05,
         -0.000205,
         -0.000603,
         -0.001106,
-        -0.001438
+        -0.001438,
+        -0.00162,
+        -0.001665
       ],
       "rest_Cl_hartree": [
         -2e-05,
         -3.6e-05,
         -7.8e-05,
         -0.000252,
-        -0.000386
+        -0.000386,
+        -0.000463,
+        -0.000486
       ],
       "electron_affinity_with_rest_eV": [
         3.4648,
         3.4688,
         3.4784,
         3.4874,
-        3.4928
+        3.4928,
+        3.4957,
+        3.4962
       ],
-      "note": "estimate, not a bound; not converged with the threshold (still growing at 1e-6)"
+      "note": "estimate, not a bound. Levels off with the threshold: the last step (3e-7 to 1e-7, 511 million outside determinants for Cl-) changes the electron affinity by 0.0005 eV"
     }
   }
 }
