@@ -14,9 +14,10 @@ differences otherwise. The search is quasi-Newton (BFGS) on those derivatives.
     python3 analyzer/optimize_exponents.py - 0.1,0.8 0.4 -        # one d exponent, full CI: the small test
 
 S and P are fixed ("-" for none); the D and F values are starting points.
-With more than 16 orbitals the energies come from mesh_ci with a fixed number
+With more than 16 orbitals (or FULL_CI_ORBITALS in the environment) the energies come from mesh_ci with a fixed number
 of determinants (default 200000) instead of full CI.
 """
+import os
 import sys
 import time
 
@@ -26,6 +27,7 @@ from scipy.optimize import minimize
 import cl_affinity
 import quantum
 
+FULL_CI_ORBITALS = int(os.environ.get("FULL_CI_ORBITALS", 16))   # 20 needs about 5 GB and 6 minutes per energy
 STEP = 0.05          # step in ln(exponent) for the central difference
 CLOSED, OPEN = (2,) * 9, (2,) * 6 + (5 / 3,) * 3
 
@@ -35,7 +37,7 @@ def energies(extra_s, extra_p, extra_d, extra_f, determinants):
     out = []
     for (na, nb), occ in (((4, 4), CLOSED), ((4, 3), OPEN)):
         h, g, e_core, _ = cl_affinity.active_space(occ, extra_s, extra_p, extra_d, extra_f)
-        if h.shape[0] <= 16:
+        if h.shape[0] <= FULL_CI_ORBITALS:
             out.append(quantum.fci(h, g, na, nb, e_nuc=e_core, tol=1e-8, low_memory=True, max_vectors=4))
         else:
             import mesh_ci
@@ -52,7 +54,7 @@ def main():
     seen = {}
 
     import exponent_gradient
-    exact = 4 + 3 * len(extra_p) + len(extra_s) + 5 * nd + 7 * len(f0) <= 16     # full CI, derivative from the functions
+    exact = 4 + 3 * len(extra_p) + len(extra_s) + 5 * nd + 7 * len(f0) <= FULL_CI_ORBITALS     # full CI, derivative from the functions
 
     def both(x):
         """((E(Cl-), E(Cl)), gradient of their sum or None)."""
