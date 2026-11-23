@@ -102,7 +102,6 @@ class Mesh:
         self.wide = np.ndim(alpha) == 2
         if self.n > (128 if self.wide else 64):
             raise ValueError("at most 64 orbitals with 64-bit strings and 128 with wide ones")
-        self._f = lambda name: getattr(self.lib, name + ("_wide" if self.wide else ""))
         self.h = np.ascontiguousarray(h, dtype=np.float64)
         self.g = np.ascontiguousarray(eri, dtype=np.float64)
         self.alpha = np.ascontiguousarray(alpha, dtype=np.uint64)
@@ -111,6 +110,12 @@ class Mesh:
         self.diag = np.zeros(len(self.alpha))
         self._f("ci_diag")(self.handle, _d(self.diag))
         self.cached, self.work_saved = 0, 0.0
+
+    def _f(self, name):
+        # a method, not a lambda stored on the object: a lambda that refers to `self` makes a
+        # reference cycle, and then `del mesh` frees nothing until Python's cycle collector
+        # happens to run, so the index and plan of earlier steps (gigabytes) stay alive
+        return getattr(self.lib, name + ("_wide" if self.wide else ""))
 
     def plan(self, budget_bytes=2_000_000_000):
         """Measure, for every determinant, what it costs to find its partners,
