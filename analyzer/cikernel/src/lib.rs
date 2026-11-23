@@ -400,23 +400,19 @@ pub unsafe extern "C" fn ci_plan(handle: *mut Handle, budget_bytes: usize, saved
     count
 }
 
-/// Determinants outside the list, ranked by the energy each would bring:
-/// (sum_i H_ji c_i)^2 / (E - H_jj). Only couplings |H_ji c_i| > eps are
-/// followed. Writes at most `max_out` of the best, and the sum over all
-/// found (second-order estimate of what is missing) to `total`. Returns the
-/// number of distinct determinants found.
-/// # Safety
-/// Output arrays must hold `max_out` values.
-#[no_mangle]
-pub unsafe extern "C" fn ci_candidates(
-    handle: *const Handle, c: *const f64, energy: f64, eps: f64, max_out: usize,
-    out_a: *mut u64, out_b: *mut u64, out_gain: *mut f64, total: *mut f64, written: *mut usize,
-) -> usize {
-    let hd = &*handle;
+#[inline]
+fn bucket(a: u64, parts: u64) -> u64 {
+    (a.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32) % parts
+}
+
+/// Every determinant outside the list that the vector couples to with
+/// |H_ji c_i| > eps, with the summed coupling. With `parts` > 1 only the
+/// determinants whose alpha string falls in bucket `part` are returned, so
+/// that a large search can be done in pieces that fit in memory.
+fn gather(hd: &Handle, c: &[f64], eps: f64, parts: u64, part: u64) -> Vec<(u64, u64, f64)> {
     let ci = &hd.ci;
     let n = ci.n;
     let full = (1u64 << n) - 1;
-    let c = std::slice::from_raw_parts(c, ci.da.len());
     let mut found: Vec<(u64, u64, f64)> = (0..ci.da.len())
         .into_par_iter()
         .fold(Vec::new, |mut acc, k| {
@@ -429,12 +425,15 @@ pub unsafe extern "C" fn ci_candidates(
             let (koa, kva) = (bits_of(a, &mut oa), bits_of(!a & full, &mut va));
             let (kob, kvb) = (bits_of(b, &mut ob), bits_of(!b & full, &mut vb));
             let mut push = |a2: u64, b2: u64, v: f64| {
-                if v.abs() > eps && !ci.contains(&hd.amap, a2, b2) {
+                if v.abs() > eps && (parts == 1 || bucket(a2, parts) == part) && !ci.contains(&hd.amap, a2, b2) {
                     acc.push((a2, b2, v));
                 }
             };
             // one spin changes: singles and doubles
             for spin in 0..2 {
+                if spin == 1 && parts > 1 && bucket(a, parts) != part {
+                    continue; // these targets keep the alpha string
+                }
                 let (x, other, occ, ko, vir, kv) =
                     if spin == 0 { (a, b, &oa, koa, &va, kva) } else { (b, a, &ob, kob, &vb, kvb) };
                 for ii in 0..ko {
@@ -462,6 +461,9 @@ pub unsafe extern "C" fn ci_candidates(
                 for &p in &va[..kva] {
                     let sa = phase(a, i, p) * ck;
                     let a2 = a ^ (1u64 << i) ^ (1u64 << p);
+                    if parts > 1 && bucket(a2, parts) != part {
+                        continue;
+                    }
                     for &j in &ob[..kob] {
                         for &q in &vb[..kvb] {
                             let v = sa * ci.g(i, p, j, q);
@@ -489,6 +491,25 @@ pub unsafe extern "C" fn ci_candidates(
             _ => merged.push(e),
         }
     }
+    merged
+}
+
+/// Determinants outside the list, ranked by the energy each would bring:
+/// (sum_i H_ji c_i)^2 / (E - H_jj). Only couplings |H_ji c_i| > eps are
+/// followed. Writes at most `max_out` of the best, and the sum over all
+/// found (second-order estimate of what is missing) to `total`. Returns the
+/// number of distinct determinants found.
+/// # Safety
+/// Output arrays must hold `max_out` values.
+#[no_mangle]
+pub unsafe extern "C" fn ci_candidates(
+    handle: *const Handle, c: *const f64, energy: f64, eps: f64, max_out: usize,
+    out_a: *mut u64, out_b: *mut u64, out_gain: *mut f64, total: *mut f64, written: *mut usize,
+) -> usize {
+    let hd = &*handle;
+    let ci = &hd.ci;
+    let c = std::slice::from_raw_parts(c, ci.da.len());
+    let merged = gather(hd, c, eps, 1, 0);
     let mut gains: Vec<(f64, u64, u64)> = merged
         .par_iter()
         .map(|&(a, b, v)| (v * v / (energy - ci.diag_of(a, b)).min(-1e-6), a, b))
@@ -508,4 +529,19 @@ pub unsafe extern "C" fn ci_candidates(
     }
     *written = keep;
     count
+}
+
+/// Second-order estimate of the energy of everything outside the list,
+/// restricted to bucket `part` of `parts` (sum over all parts for the whole).
+/// Returns the number of determinants found; the sum goes to `total`.
+/// # Safety
+/// `c` must hold one value per determinant.
+#[no_mangle]
+pub unsafe extern "C" fn ci_pt2(handle: *const Handle, c: *const f64, energy: f64, eps: f64, parts: u64, part: u64, total: *mut f64) -> usize {
+    let hd = &*handle;
+    let ci = &hd.ci;
+    let c = std::slice::from_raw_parts(c, ci.da.len());
+    let merged = gather(hd, c, eps, parts.max(1), part);
+    *total = merged.par_iter().map(|&(a, b, v)| v * v / (energy - ci.diag_of(a, b)).min(-1e-6)).sum();
+    merged.len()
 }

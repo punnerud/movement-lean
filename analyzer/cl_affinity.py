@@ -46,8 +46,10 @@ def spherical_hf(S, h, eri, occupations):
     return float(0.5 * np.sum(D * (h + F))), C
 
 
-def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=(), level=None):
-    """Frozen-core full CI energy of the outer electrons of chlorine."""
+def active_space(occupations, extra_s, extra_p, extra_d, extra_f=()):
+    """Integrals for the outer electrons of chlorine in the 3s and 3p orbitals
+    plus correlating functions, with the inner ten electrons frozen.
+    Returns (h, eri, core energy, Hartree-Fock energy)."""
     funcs = functions(CL_S, CL_P)
     n_sp = len(funcs)
     extra = (functions((1.0, 1.0, 0), (1.0, 1.0, 0), extra_d) if extra_d else []) + f_functions(extra_f)
@@ -86,7 +88,13 @@ def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=
     _, U = np.linalg.eigh(A.T @ F @ A)
     A = A @ U
     m = A.shape[1]
-    ha, ga = A.T @ h_eff @ A, quantum._transform(eri, A)
+    return A.T @ h_eff @ A, quantum._transform(eri, A), e_core, e_hf
+
+
+def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=(), level=None):
+    """Frozen-core CI energy of the outer electrons of chlorine."""
+    ha, ga, e_core, e_hf = active_space(occupations, extra_s, extra_p, extra_d, extra_f)
+    m = ha.shape[0]
     if level and level < 0:
         # free mesh of determinants (Rust kernel), at most -level of them
         import mesh_ci

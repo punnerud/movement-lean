@@ -106,6 +106,27 @@ theorem tang_toennies_bounds {x : ℝ} (hx : 0 ≤ x) (n : ℕ) :
   rw [← Real.exp_add, neg_add_cancel, Real.exp_zero] at hle
   exact ⟨by linarith, by nlinarith [mul_nonneg he.le hpos]⟩
 
+/-! ### What a truncated calculation leaves out -/
+
+/-- **The second-order estimate brackets the energy.** A state of energy
+`E₀` is coupled by `c j` to outside states of energies `E j`, which are not
+coupled to each other. The lowest level `lam` then satisfies
+`lam = E₀ - Σ c j² / (E j - lam)`. It lies between `E₀` and the estimate
+`E₀ - Σ c j² / (E j - E₀)`: leaving the outside states out gives too high an
+energy, and the second-order estimate over-corrects. This is the formula the
+analyzer uses to estimate what a selected set of determinants leaves out. -/
+theorem second_order_estimate_brackets {ι : Type*} (s : Finset ι) (c E : ι → ℝ) {E₀ lam : ℝ}
+    (hgap : ∀ j ∈ s, E₀ < E j) (hlow : ∀ j ∈ s, lam < E j)
+    (hsec : lam = E₀ - ∑ j ∈ s, c j ^ 2 / (E j - lam)) :
+    E₀ - ∑ j ∈ s, c j ^ 2 / (E j - E₀) ≤ lam ∧ lam ≤ E₀ := by
+  have hpos : 0 ≤ ∑ j ∈ s, c j ^ 2 / (E j - lam) :=
+    Finset.sum_nonneg fun j hj => div_nonneg (sq_nonneg _) (by linarith [hlow j hj])
+  have hle : lam ≤ E₀ := by linarith
+  have hsum : ∑ j ∈ s, c j ^ 2 / (E j - lam) ≤ ∑ j ∈ s, c j ^ 2 / (E j - E₀) :=
+    Finset.sum_le_sum fun j hj =>
+      div_le_div_of_nonneg_left (sq_nonneg _) (by linarith [hgap j hj]) (by linarith)
+  exact ⟨by linarith, hle⟩
+
 /-! ### The ionic bond -/
 
 /-- **Where the electron jumps back.** Two ions attract with energy `K/r`.

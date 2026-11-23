@@ -318,6 +318,8 @@ Measured on chlorine with 20 orbitals, where full CI is available: 1.4 of 23 mil
 
 The list is a table with a composite key (spin-up string, spin-down string) and two sorted indexes over it, and applying the Hamiltonian is a self-join on "at most two electrons moved". The inner loops are in Rust (`analyzer/cikernel`, called from Python through ctypes). The kernel does not follow a fixed plan: one measuring pass records, for every determinant, the work it took to find its partners and how many were found, and the partner lists are then remembered where that pays most, within a memory budget. On a test problem this made each application of the Hamiltonian 7 times faster with identical results. The same choice between scanning a short list and looking up generated neighbours in a long one is made per row.
 
+**The formula for what is left out.** With the list's solution c and energy E, each outside determinant j contributes about (Σᵢ Hⱼᵢ cᵢ)² / (E − Hⱼⱼ), and the rest is the sum over j. Lean proves the idealised case (`second_order_estimate_brackets`): when the outside states are not coupled to each other, the true lowest energy lies between the list's energy and the list's energy plus this sum. Leaving states out gives too high an energy, and the estimate over-corrects. Real outside determinants are coupled to each other, so for the calculation the sum is an estimate and not a lower bound. The sum also depends on how weak a coupling is still counted: `cl_rest.py` reloads a stored state and repeats the sum for a falling threshold (10⁻⁴ down to 10⁻⁶), in partitions so memory stays bounded, until it stops changing. On a test with 800 of about 11 thousand determinants the error fell from 0.35 to 0.02 millihartree when the estimate was added.
+
 ### Magnetism: the electron cloud as a tiny superconductor
 
 A magnetic field sets the whole electron cloud circulating, and the induced current opposes the field, with no resistance. This is the same response as in a superconductor, but an atom is about a hundred times thinner than the layer needed to expel the field, so the effect is of order `(v/c)² = α²`:
@@ -417,6 +419,7 @@ The bonds and the helium–helium curve in section 10 are computed numerically. 
 | `antisymmetric_vanishes_at_contact` | Two electrons with equal spin are never at the same point (why H₂ with equal spins has no bond) |
 | `two_level_lowering` | Mixing in an excited state lowers the energy, by at most `c²/(E₁ − E₀)` |
 | `dispersion_nonpos` | The second-order energy `−Σ c²/gap` is never positive: dispersion always attracts |
+| `second_order_estimate_brackets` | The energy lies between a truncated calculation's energy and that energy plus the second-order estimate `−Σ c²/(E − E₀)` of what was left out (outside states not coupled to each other) |
 | `casimir_polder_partial_fraction`, `casimir_polder_value` | The algebra that turns two response functions into `π/(2ab(a + b))`, the origin of the `1/(wₘ + wₙ)` in `C₆` |
 | `london_formula` | With a single excited state the pair sum reduces to `¾ α² w` |
 | `tang_toennies_bounds` | The damping factor stays between 0 and 1 |

@@ -46,6 +46,8 @@ def kernel():
         lib.ci_sigma.argtypes = [ptr, dbl, dbl]
         lib.ci_plan.restype = size
         lib.ci_plan.argtypes = [ptr, size, dbl]
+        lib.ci_pt2.restype = size
+        lib.ci_pt2.argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, ctypes.c_uint64, ctypes.c_uint64, dbl]
         lib.ci_candidates.restype = size
         lib.ci_candidates.argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, size, u64, u64, dbl, dbl,
                                       ctypes.POINTER(size)]
@@ -108,6 +110,20 @@ class Mesh:
         k = written.value
         return a[:k], b[:k], gain[:k], total.value, found
 
+    def rest(self, c, energy, eps, parts=1, report=None):
+        """Second-order estimate of the energy of everything outside the list
+        that couples to `c` more strongly than `eps`, computed in `parts`
+        pieces to bound the memory. Returns (estimate, determinants looked at).
+        Lowering eps makes the estimate more complete; it is not a bound."""
+        total, found = 0.0, 0
+        for part in range(parts):
+            piece = ctypes.c_double(0.0)
+            found += self.lib.ci_pt2(self.handle, _d(c), energy, eps, parts, part, ctypes.byref(piece))
+            total += piece.value
+            if report:
+                report(part + 1, parts, total, found)
+        return total, found
+
     def solve(self, start=None, tol=1e-6, max_vectors=8, max_iter=400):
         """Lowest energy and its vector (Davidson)."""
         if start is None:
@@ -136,6 +152,22 @@ class Mesh:
             new /= np.linalg.norm(new)
             vectors.append(new); sigmas.append(self.sigma(new))
         raise RuntimeError("mesh CI did not converge")
+
+
+def rest_table(mesh, c, energy, thresholds=(1e-4, 3e-5, 1e-5, 3e-6, 1e-6), memory=3e9, report=None):
+    """The second-order estimate of what the list leaves out, for a series of
+    ever lower thresholds, so that its convergence can be seen. The work is
+    split into as many pieces as the memory allows. Returns a list of
+    (threshold, estimate, determinants looked at)."""
+    table, found = [], 0
+    for eps in thresholds:
+        expected = max(found, len(c)) * 8                  # found grows by a few times per step
+        parts = max(1, int(np.ceil(expected * 10 * 24 / memory)))
+        total, found = mesh.rest(c, energy, eps, parts)
+        table.append((eps, total, found))
+        if report:
+            report(eps, total, found, parts)
+    return table
 
 
 def save_state(path, alpha, beta, c, history):
