@@ -54,6 +54,7 @@ def outer_space(S, h, eri, occupations, frozen, e_max=E_MAX):
     in the remaining Hartree-Fock orbitals with energy below e_max.
     Returns (h, eri, energy of the frozen part)."""
     C, eps = orbitals(S, h, eri, occupations)
+    C = quantum.settle_shells(C, eps)
     core = C[:, :frozen]
     Dc = 2.0 * core @ core.T
     G = np.einsum("ijkl,kl->ij", eri, Dc) - 0.5 * np.einsum("ikjl,kl->ij", eri, Dc)

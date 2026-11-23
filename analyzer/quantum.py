@@ -705,6 +705,29 @@ def _transform(eri, W):
     return np.einsum("sl,ijks->ijkl", W, g)
 
 
+def settle_shells(A, energies, tolerance=1e-6):
+    """Orbitals (columns of A, sorted by energy) with the arbitrary parts of a
+    diagonalisation removed. Orbitals of equal energy (a p or d shell, a pi
+    pair) come out as an arbitrary mixture; it is fixed here by a rule that
+    depends only on the orbitals themselves (pivoted QR of their coefficients,
+    ties broken by position), and every orbital gets its largest coefficient
+    positive. Two things follow: the orbitals of a shell become as different
+    from each other as they can be, which makes a selected CI much shorter,
+    and a slightly different basis gives slightly different orbitals, so a
+    stored list of determinants keeps its meaning."""
+    from scipy.linalg import qr
+    A = A.copy()
+    bias = 1.0 + 1e-6 * np.arange(A.shape[0])
+    lo = 0
+    for hi in range(1, len(energies) + 1):
+        if hi == len(energies) or energies[hi] - energies[hi - 1] > tolerance:
+            if hi - lo > 1:
+                mix, _, _ = qr((A[:, lo:hi] * bias[:, None]).T, pivoting=True)
+                A[:, lo:hi] = A[:, lo:hi] @ mix
+            lo = hi
+    return A * np.sign(A[np.abs(A).argmax(axis=0), np.arange(A.shape[1])])
+
+
 def atom_sp_orbitals(Z, occupations, s_keep, p_exponents, d_exponents=(), f_exponents=()):
     """Orthonormal orbitals for an atom, with h and (pq|rs) in that basis.
 

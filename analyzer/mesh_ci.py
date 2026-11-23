@@ -344,7 +344,7 @@ def _solve_list(h, eri, n_alpha, n_beta, size, wide=None):
 
 
 def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, growth=2.0, eps=1e-4, tol=0.0,
-            report=None, store=None, plan_bytes=2_000_000_000, wide=None, refine=0, swap=0.25):
+            report=None, store=None, plan_bytes=2_000_000_000, wide=None, refine=0, swap=0.25, nearest=False):
     """Grow a list of determinants from the reference until it holds
     `max_determinants`, or until a step lowers the energy by less than `tol`,
     or until nothing more is found (then the result is full CI).
@@ -353,6 +353,12 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
     most `refine` rounds: the determinants that carry least are exchanged for
     better ones from outside (at most the fraction `swap` per round), and the
     problem is solved again. See `exchange`.
+
+    With store="content" and nearest=True, a problem that has not been solved
+    before starts from the list of the most similar one that has (same
+    numbers of orbitals and electrons, closest one-electron energies and
+    Coulomb integrals), instead of from a single determinant. The list is a
+    starting point only: it is solved again in the new integrals.
 
     Returns (energy, estimate of what is missing, history). Each history
     entry is (determinants, energy, estimate); the energy is an upper bound,
@@ -368,14 +374,23 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
     c, history = np.ones(1), []
     packed = None                                          # a compact state whose coefficients are still to be decoded
     unchanged = False                                      # the list is exactly the one in the compact file
-    if store and Path(store).exists():
-        with np.load(store) as f:
+    source = store
+    if compact and store is not None:
+        import content_cache
+        shape_key = f"{h.shape[0]}_{n_alpha}_{n_beta}"
+        descriptor = np.concatenate([np.diag(h), np.einsum("iijj->ij", eri).ravel()])
+        if nearest and not Path(store).exists():
+            found = content_cache.nearest("state", shape_key, descriptor)
+            if found:
+                source = found[0]
+    if source and Path(source).exists():
+        with np.load(source) as f:
             if "packed" in f and not wide:
                 k = min(int(f["size"]), max_determinants)
                 a, b = np.cumsum(f["alpha_steps"], dtype=np.uint64)[:k], np.cumsum(f["beta_steps"], dtype=np.uint64)[:k]
                 if k and electrons(a[0]) == n_alpha and electrons(b[0]) == n_beta:
                     alpha, beta, c = a, b, None
-                    unchanged = k == int(f["size"])
+                    unchanged = k == int(f["size"]) and source == store
                     packed = {name: f[name] for name in ("size", "energy", "head", "codes")}
             elif "packed" not in f:
                 k = min(len(f["alpha"]), max_determinants)
@@ -424,4 +439,6 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
         del mesh
     if store and compact and not unchanged:
         save_state(store, alpha, beta, c, history, mesh, energy)
+    if store and compact:
+        content_cache.describe(store, shape_key, descriptor)
     return energy + e_nuc, rest, history

@@ -75,3 +75,28 @@ def array(tag, parts, compute):
         os.replace(tmp, file)
         _trim()
     return out
+
+
+def nearest(tag, shape_key, descriptor):
+    """The stored entry of the same shape whose descriptor is closest to this
+    one: a similar problem solved before. Returns (path, distance) or None.
+    Entries are registered with `describe`."""
+    if not ENABLED or not ROOT.exists():
+        return None
+    best = None
+    for side in ROOT.glob(f"{tag}_*.{shape_key}.desc.npy"):
+        entry = side.with_name(side.name.replace(f".{shape_key}.desc.npy", ".npz"))
+        if not entry.exists():
+            continue
+        other = np.load(side)
+        if other.shape != descriptor.shape:
+            continue
+        distance = float(np.linalg.norm(other - descriptor))
+        if best is None or distance < best[1]:
+            best = (entry, distance)
+    return best
+
+
+def describe(entry, shape_key, descriptor):
+    """Register a stored entry under a descriptor, for `nearest`."""
+    np.save(Path(entry).with_name(Path(entry).name.replace(".npz", f".{shape_key}.desc.npy")), descriptor)

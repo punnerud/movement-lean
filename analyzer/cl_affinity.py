@@ -90,8 +90,9 @@ def active_space(occupations, extra_s, extra_p, extra_d, extra_f=(), frozen=5, d
     # canonical orbitals of the average field, for the CI preconditioner
     Dv = (valence * np.asarray(occupations[frozen:9], float)) @ valence.T
     F = h_eff + np.einsum("ijkl,kl->ij", eri, Dv) - 0.5 * np.einsum("ikjl,kl->ij", eri, Dv)
-    _, U = np.linalg.eigh(A.T @ F @ A)
+    energies, U = np.linalg.eigh(A.T @ F @ A)
     A = A @ U
+    A = quantum.settle_shells(A, energies)
     if details:
         return {"S": S, "h": h, "eri": eri, "occupied": occ, "valence": valence, "raw": raw, "core_density": Dc,
                 "h_eff": h_eff, "orbitals": A, "e_core": e_core, "exponents": exps, "centres": cen, "weights": W,
