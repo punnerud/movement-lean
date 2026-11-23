@@ -198,11 +198,55 @@ def save_state(path, alpha, beta, c, history):
     np.savez_compressed(path, alpha=alpha, beta=beta, c=c.astype(np.float32), history=np.array(history, dtype=float))
 
 
+def exchange(h, eri, mesh, c, energy, eps, swap=0.25, plan_bytes=2_000_000_000):
+    """One round of exchange at fixed size. Leaving determinant i out of the
+    list costs about c_i^2 (H_ii - E); taking determinant j in gains about
+    (sum_i H_ji c_i)^2 / (H_jj - E). The cheapest inside are paired with the
+    best outside and exchanged for as long as the gain exceeds the cost, at
+    most the fraction `swap` of the list. Both numbers are second-order
+    estimates, so the new list is solved and only its energy counts.
+    Returns (mesh, c, energy, rest, exchanged) or None if nothing is worth exchanging."""
+    size = len(c)
+    most = max(1, int(swap * size))
+    new_a, new_b, gain, rest, found = mesh.candidates(c, energy, eps, most)
+    for _ in range(12):
+        # a gain g comes from couplings of size about sqrt(g); the search must follow
+        # couplings well below that of the weakest gain considered, or the ranking is noise
+        needed = 0.1 * np.sqrt(-gain[-1]) if len(gain) == most else eps * 0.3
+        if eps <= needed or eps < 1e-9:
+            break
+        eps = min(needed, eps * 0.3)
+        new_a, new_b, gain, rest, found = mesh.candidates(c, energy, eps, most)
+    cost = c ** 2 * (mesh.diag - energy)
+    cheapest = np.argsort(cost)[:len(gain)]
+    worth = -gain > cost[cheapest]                         # gain is negative, best first; cost rises
+    m = int(np.argmin(worth)) if not worth.all() else len(worth)
+    if m == 0:
+        return None
+    keep = np.ones(size, bool)
+    keep[cheapest[:m]] = False
+    alpha = np.concatenate([mesh.alpha[keep], new_a[:m]])
+    beta = np.concatenate([mesh.beta[keep], new_b[:m]])
+    start = np.concatenate([c[keep], np.zeros(m)])
+    new = Mesh(h, eri, alpha, beta)
+    if plan_bytes:
+        new.plan(plan_bytes)
+    new_energy, new_c = new.solve(start=start)
+    if new_energy >= energy:
+        return None
+    return new, new_c, new_energy, rest, m
+
+
 def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, growth=2.0, eps=1e-4, tol=0.0,
-            report=None, store=None, plan_bytes=2_000_000_000, wide=None):
+            report=None, store=None, plan_bytes=2_000_000_000, wide=None, refine=0, swap=0.25):
     """Grow a list of determinants from the reference until it holds
     `max_determinants`, or until a step lowers the energy by less than `tol`,
     or until nothing more is found (then the result is full CI).
+
+    With refine > 0 the full list is then improved without growing it, in at
+    most `refine` rounds: the determinants that carry least are exchanged for
+    better ones from outside (at most the fraction `swap` per round), and the
+    problem is solved again. See `exchange`.
 
     Returns (energy, estimate of what is missing, history). Each history
     entry is (determinants, energy, estimate); the energy is an upper bound,
@@ -236,6 +280,18 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
         if report:
             report(*history[-1])
         if room <= 0 or len(new_a) == 0 or (len(history) > 1 and history[-2][1] - history[-1][1] < tol):
+            if room <= 0:
+                for _ in range(refine):
+                    better = exchange(h, eri, mesh, c, energy, step_eps, swap, plan_bytes)
+                    if better is None or energy - better[2] <= tol:
+                        break
+                    mesh, c, energy, rest, swapped = better
+                    alpha, beta = mesh.alpha, mesh.beta
+                    history.append((len(alpha), energy + e_nuc, rest))
+                    if store:
+                        save_state(store, alpha, beta, c, history)
+                    if report:
+                        report(*history[-1])
             break
         alpha = np.concatenate([alpha, new_a[:room]])
         beta = np.concatenate([beta, new_b[:room]])
