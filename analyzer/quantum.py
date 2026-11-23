@@ -775,7 +775,7 @@ def _strings(n, k):
 
 
 def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=False, blocked=False,
-        max_vectors=None, block_bytes=2e8):
+        max_vectors=None, block_bytes=2e8, return_vector=False, operator_only=False):
     """Full configuration interaction ground state in an orthonormal orbital basis.
 
     The wavefunction is a matrix C[alpha string, beta string]; the lowest
@@ -790,7 +790,9 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
     Measured on Cl- in 15 orbitals it is twice as slow as low_memory and
     uses no less memory, so low_memory remains the choice for large cases.
     `max_vectors` is the number of Davidson vectors kept before a restart;
-    the solver holds about 2 * max_vectors + 5 arrays the size of C."""
+    the solver holds about 2 * max_vectors + 5 arrays the size of C.
+    return_vector=True returns (energy, C). operator_only=True returns the
+    function C -> H C instead of solving (see `ci_expectation`)."""
     n = h.shape[0]
     occ_a, pq_a, I_a, J_a, s_a = _strings(n, n_alpha)
     occ_b, pq_b, I_b, J_b, s_b = _strings(n, n_beta)
@@ -878,6 +880,8 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
                 out[lo:hi] += (Bt @ G.reshape(m, npair * Nb).T).T
             return out
 
+    if operator_only:
+        return sigma
     restart = max_vectors or (6 if low_memory or blocked else 25)
     hd = np.diag(h)
     Jm = np.einsum("iijj->ij", eri)
@@ -917,7 +921,6 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
             add(0, x)
             m = 1
             np.subtract(Sg[0], energy * V[0], out=new)
-        del x
         denom = energy - diag
         denom[np.abs(denom) < 1e-3] = -1e-3
         new /= denom
@@ -929,7 +932,18 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
         m += 1
     else:
         raise RuntimeError("full CI did not converge")
+    if return_vector:
+        return float(energy) + e_nuc, (x / np.linalg.norm(x)).reshape(Na, Nb)
     return float(energy) + e_nuc
+
+
+def ci_expectation(h, eri, n_alpha, n_beta, C):
+    """<C| H |C> for a normalised CI vector C[alpha string, beta string] and
+    any one- and two-electron integrals in the same orbitals. With the
+    derivative of the integrals this is the derivative of the energy
+    (the vector need not be differentiated: it is at a stationary point)."""
+    sigma = fci(h, eri, n_alpha, n_beta, low_memory=True, operator_only=True)
+    return float(np.vdot(C, sigma(C)))
 
 
 def excited_strings(n, n_electrons, max_level):

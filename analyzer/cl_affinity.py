@@ -48,11 +48,12 @@ def spherical_hf(S, h, eri, occupations):
     return float(0.5 * np.sum(D * (h + F))), C
 
 
-def active_space(occupations, extra_s, extra_p, extra_d, extra_f=(), frozen=5):
+def active_space(occupations, extra_s, extra_p, extra_d, extra_f=(), frozen=5, details=False):
     """Integrals for the outer electrons of chlorine in the 3s and 3p orbitals
     plus correlating functions, with the lowest `frozen` orbitals kept doubly
     occupied (5: the inner ten electrons; 1: only 1s, so 2s and 2p correlate too).
-    Returns (h, eri, core energy, Hartree-Fock energy)."""
+    Returns (h, eri, core energy, Hartree-Fock energy); with details=True a
+    dictionary of everything on the way (for exponent_gradient.py)."""
     funcs = functions(CL_S, CL_P)
     n_sp = len(funcs)
     extra = (functions((1.0, 1.0, 0), (1.0, 1.0, 0), extra_d) if extra_d else []) + f_functions(extra_f)
@@ -81,6 +82,7 @@ def active_space(occupations, extra_s, extra_p, extra_d, extra_f=(), frozen=5):
     for k in range(n_sp, n):
         e = np.zeros(n); e[k] = 1.0; cols.append(e)
     E = np.array(cols).T
+    raw = E.copy()
     occ = C[:, :9]
     E = E - occ @ (occ.T @ S @ E)
     E = E @ quantum.orthogonalizer(E.T @ S @ E, 1e-8)
@@ -90,7 +92,10 @@ def active_space(occupations, extra_s, extra_p, extra_d, extra_f=(), frozen=5):
     F = h_eff + np.einsum("ijkl,kl->ij", eri, Dv) - 0.5 * np.einsum("ikjl,kl->ij", eri, Dv)
     _, U = np.linalg.eigh(A.T @ F @ A)
     A = A @ U
-    m = A.shape[1]
+    if details:
+        return {"S": S, "h": h, "eri": eri, "occupied": occ, "valence": valence, "raw": raw, "core_density": Dc,
+                "h_eff": h_eff, "orbitals": A, "e_core": e_core, "exponents": exps, "centres": cen, "weights": W,
+                "n_sp": n_sp}
     return A.T @ h_eff @ A, quantum._transform(eri, A), e_core, e_hf
 
 
