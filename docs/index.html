@@ -196,8 +196,8 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 <tr><td>Rotation of D₂, HD and DCl predicted from the lighter isotope</td><td>0.005 % to 0.02 %</td><td class="ok">matches</td></tr>
 <tr><td>Heat capacity of He, Ar, H₂, N₂, O₂, CO; speed of sound in air and helium</td><td>below 1 %</td><td class="ok">matches</td></tr>
 <tr><td>Helium ground state with one screening parameter</td><td>1.9 %</td><td class="ok">roughly</td></tr>
-<tr><td>Helium as two independent electrons; lithium's outer electron</td><td>37 % to 468 %</td><td class="bad">fails</td></tr>
-<tr><td>Heat capacity of Cl₂ and CO₂</td><td>14 % to 22 %</td><td class="bad">fails</td></tr>
+<tr><td>Helium as two independent electrons; lithium's outer electron</td><td>37 % to 468 %</td><td class="bad">fails, on the proved side; fixed below (0.002 % and 0.09 %)</td></tr>
+<tr><td>Heat capacity of Cl₂ and CO₂</td><td>14 % to 22 %</td><td class="bad">fails, on the proved side; with quantised vibration 0.5 % and 0.05 %</td></tr>
 </table>
 <p><strong>The failures fail in a proved direction.</strong> The simple models cannot give the measured number, but Lean proves on which side of it they must land. Helium without repulsion is a lower bound (<code>repulsion_raises_energy</code>) and the screened model an upper one: −108.8 to −77.5 eV, measured −79.0. Lithium's outer electron feels a charge between 1 and 3, so its energy lies between the two Bohr values (<code>screening_bracket</code>): 3.40 to 30.6 eV, measured 5.39. A quantised vibration holds between nothing and its classical share (<code>quantum_vibration_below_equipartition</code>, <code>gamma_vibration_bracket</code>), so the heat capacity of Cl₂ lies between 3.5 R and 4.5 R (measured 4.08 R). The collision theorems of section 2 cannot close this last gap: they give every motion an equal share, which is exactly the model that fails. The quantum of vibration is what stops the sharing, and it enters as an assumption.</p>
 <h3>Numerical quantum mechanics for several electrons</h3>
