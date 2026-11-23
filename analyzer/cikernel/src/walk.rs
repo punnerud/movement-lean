@@ -374,6 +374,18 @@ fn shorten(drift: &mut [f64; DIM], inv_mass: &[f64], tau: f64) {
     }
 }
 
+/// Settings for experiments on the walker loop (see `walk_options`): the rate limit as a multiple
+/// of sqrt(particles / tau) (0: no limit), and whether a walker whose move was rejected reacts.
+static CLAMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x3FC9_9999_9999_999A);   // 0.2
+static REACT_REJECTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Changes the settings of the walker loop for the runs that follow. The defaults are 0.2 and 0.
+#[no_mangle]
+pub extern "C" fn walk_options(clamp: f64, react_rejected: i32) {
+    CLAMP.store(clamp.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    REACT_REJECTED.store(react_rejected != 0, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// The walker loop. `evaluate` gives (ln |g|, sign, grad ln |g|, (H g)/g); particle i diffuses
 /// with the constant 1 / (2 mass_i); `start` draws a starting position. Reaction starts at step
 /// `react_from`; before it the walkers sample g^2. Returns the mean (H g)/g over the later part
@@ -404,7 +416,9 @@ where
     // (H g)/g is infinite where the guess is wrong in an essential way (at its zero surfaces, at a
     // contact with the wrong cusp). A walker there would multiply without bound, so the rate is
     // limited to 0.2 sqrt(particles / tau) around the shift; the limit goes away as tau -> 0.
-    let limit = 0.2 * (particles as f64 / tau).sqrt();
+    let clamp = f64::from_bits(CLAMP.load(std::sync::atomic::Ordering::Relaxed));
+    let react_rejected = REACT_REJECTED.load(std::sync::atomic::Ordering::Relaxed);
+    let limit = if clamp > 0.0 { clamp * (particles as f64 / tau).sqrt() } else { f64::INFINITY };
     let mut next = Vec::with_capacity(walkers + walkers / 4);
     for step in 0..warm + steps {
         let react = step >= react_from;
@@ -441,7 +455,7 @@ where
                 // reaction: multiply or die at the rate shift - local energy. A walker whose move was
                 // rejected has not advanced in time and does not react, or one stuck at a singular
                 // point of the guess would multiply for ever.
-                w.weight = if react && moved { (-tau * (0.5 * (here + old) - now)).exp() } else { 1.0 };
+                w.weight = if react && (moved || react_rejected) { (-tau * (0.5 * (here + old) - now)).exp() } else { 1.0 };
             }
         });
         if !react {

@@ -61,6 +61,8 @@ def kernel():
         lib.walk_sample.argtypes = guess + [ctypes.c_double, size, size, ctypes.c_uint64, dbl, dbl]
         lib.walk_local.argtypes = guess + [size, dbl, dbl, dbl]
         lib.walk_particles.restype = ctypes.c_int
+        lib.walk_options.restype = None
+        lib.walk_options.argtypes = [ctypes.c_double, ctypes.c_int]
         lib.walk_particles.argtypes = [size, dbl, dbl, dbl, dbl, dbl, dbl, ctypes.c_int64] + [ctypes.c_double] * 2 + [size, size, size, ctypes.c_uint64, dbl, dbl]
         _lib = lib
     return _lib

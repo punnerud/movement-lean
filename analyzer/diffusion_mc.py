@@ -30,6 +30,7 @@ is E(H3 at the saddle) - E(H) - E(H2).
     python3 analyzer/diffusion_mc.py improve    # improve the guesses of He, H2 and H3 from samples: simple and richer form,
                                                 # simplex and iterated search, and what each buys (add polish: only the last variant)
     python3 analyzer/diffusion_mc.py improved [quick] [species...]   # long runs with improved guesses (hours)
+    python3 analyzer/diffusion_mc.py steps [quick] [all]   # where the error in the time step comes from
     python3 analyzer/diffusion_mc.py gradient   # improve the guesses along the gradient, compared with the search
     python3 analyzer/diffusion_mc.py orbitals [long]   # H3 with richer orbitals: do the zero surfaces get better?
     python3 analyzer/diffusion_mc.py python     # the walker loop in numpy instead of Rust (same algorithm, slower)
@@ -624,6 +625,37 @@ REACTIONS = [("H2 -> 2 H (binding energy)", {"H": 2, "H2": -1}, 0.174476),
 STORE = Path(__file__).resolve().parent / "ci_cache" / "diffusion_mc.json"
 
 
+def step_main(args):
+    """Where does the error in the time step come from? Hydrogen with a deliberately wrong guess
+    (exponent 0.9, so the slope at the nucleus is wrong; the exact energy is -1/2) and H2 with
+    its improved guess, each at five steps, and at step 0.01 with one thing changed at a time:
+    no limit on the rate, reaction also on rejected moves, a tenth of the walkers."""
+    import mesh_ci
+    lib = mesh_ci.kernel()
+    kw = dict(duration=30.0) if "quick" in args else dict(duration=600.0, walkers=20000)
+    stored = json.loads(IMPROVED_STORE.read_text()) if IMPROVED_STORE.exists() else {}
+    cases = [("H, exponent 0.9", Guess(CASES["H"][0], 0.9), 1, -0.5)]
+    cases.append(("H, exponent 0.9 and 1.1 mixed (slope right at the nucleus)",
+                  Guess([(1, (0, 0, 0)), (0, (0, 0, 0))], (0.9, 1.1), up=[[1.0, 1.0]]), 1, -0.5))
+    if "H2" in stored:
+        cases.append(("H2, improved guess", richer(IMPROVE["H2"][1], 2)(np.array(stored["H2"]["parameters"])), 2, CASES["H2"][5]))
+    if "HeH+" in stored and "all" in args:
+        make = richer(lambda p: Guess(CASES["HeH+"][0], (p[0], p[1]), p[2], up=[[1.0, p[3]]], down=[[1.0, p[3]]]), 4)
+        cases.append(("HeH+, improved guess", make(np.array(stored["HeH+"]["parameters"])), 2, CASES["HeH+"][5]))
+    for name, guess, electrons, exact in cases:
+        print(f"{name}   (exact or published {exact:.6f})", flush=True)
+        for k, tau in enumerate((0.04, 0.02, 0.01, 0.005, 0.0025)):
+            e, s, _ = energy_rust(guess, electrons, tau, seed=k + 11, **kw)
+            print(f"  step {tau:g}: {e:.5f} ± {s:.5f}   difference {1e3 * (e - exact):+.3f} mEh", flush=True)
+        small = dict(kw, walkers=kw.get("walkers", 3000) // 10)
+        for label, clamp, rejected, use in (("no limit on the rate", 0.0, 0, kw), ("reaction also on rejected moves", 0.2, 1, kw),
+                                            ("a tenth of the walkers", 0.2, 0, small)):
+            lib.walk_options(clamp, rejected)
+            e, s, _ = energy_rust(guess, electrons, 0.01, seed=31, **use)
+            lib.walk_options(0.2, 0)
+            print(f"  step 0.01, {label}: {e:.5f} ± {s:.5f}   difference {1e3 * (e - exact):+.3f} mEh", flush=True)
+
+
 def improved_guess(name, report=None):
     """The guess of a species in CASES with the extra TERMS (for H3 also the richer orbitals),
     its parameters found by the iterated search and the simplex. Returns (make, parameters)."""
@@ -711,6 +743,8 @@ def main():
         return particles_main(quick)
     if "improve" in args:
         return improve_main("then simplex" if "polish" in args else None)
+    if "steps" in args:
+        return step_main(args)
     if "gradient" in args:
         return gradient_main()
     if "improved" in args:
