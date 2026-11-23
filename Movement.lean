@@ -8,3 +8,4 @@ import Movement.Waveguide
 import Movement.Atoms
 import Movement.Forces
 import Movement.Spectrum
+import Movement.Thermal

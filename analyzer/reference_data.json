@@ -243,14 +243,53 @@
   "D_e": 1.86e-07
  },
  "Cl_isotopes": {
-  "_source": "masses and natural abundances entered from memory, not checked against a table",
+  "_source": "NIST Atomic Weights and Isotopic Compositions (read 2026-11-23)",
   "35Cl": [
-   34.96885268,
+   34.968852682,
    0.7576
   ],
   "37Cl": [
-   36.9659026,
+   36.965902602,
    0.2424
   ]
+ },
+ "isotope_vibration_cm1": {
+  "_source": "NIST Chemistry WebBook, constants of diatomic molecules, omega_e of the ground state (read 2026-11-23)",
+  "D2": 3115.5,
+  "HD": 3813.15
+ },
+ "noble_gas_transport_300K_1atm": {
+  "_source": "NIST Chemistry WebBook, thermophysical properties of fluid systems, 300 K and 0.101325 MPa (read 2026-11-23). These are correlations fitted to measurements, not single measurements.",
+  "_columns": "Cv J/(g K), viscosity uPa s, thermal conductivity W/(m K)",
+  "He": [
+   3.1161,
+   19.93,
+   0.15597
+  ],
+  "Ne": [
+   0.61812,
+   31.844,
+   0.049211
+  ],
+  "Ar": [
+   0.31239,
+   22.741,
+   0.017837
+  ],
+  "Kr": [
+   0.14902,
+   25.481,
+   0.0094917
+  ],
+  "Xe": [
+   0.09543,
+   23.195,
+   0.0055196
+  ]
+ },
+ "solid_Cp_298K_J_per_molK": {
+  "_source": "NIST Chemistry WebBook: diamond 6.117 (Victor 1962) as printed; copper 24.47 evaluated from the printed Shomate coefficients at 298 K",
+  "Cu": 24.47,
+  "diamond": 6.117
  }
 }

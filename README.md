@@ -9,7 +9,7 @@ This repository starts from a sailor's rule of thumb:
 
 It then follows the idea down to the molecular scale (billiard-ball collisions, spinning molecules, diffusion), on to the heat equation, and across to quantum mechanics (the Schrödinger equation, Bohr's electron orbits, and a test of whether spin can be a circulation at light speed). Each step is proved formally in [Lean 4](https://lean-lang.org/) with [Mathlib](https://github.com/leanprover-community/mathlib4).
 
-The proofs are in [`Movement/`](Movement): [`Basic.lean`](Movement/Basic.lean) (sections 1–3), [`Heat.lean`](Movement/Heat.lean) (4), [`Quantum.lean`](Movement/Quantum.lean) (5) [`Bohr.lean`](Movement/Bohr.lean) (6), [`Spin.lean`](Movement/Spin.lean) (7), [`Rotation4D.lean`](Movement/Rotation4D.lean) (8), [`Waveguide.lean`](Movement/Waveguide.lean) (9) [`Atoms.lean`](Movement/Atoms.lean) (10), [`Forces.lean`](Movement/Forces.lean) (11) and [`Spectrum.lean`](Movement/Spectrum.lean) (12). There is no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
+The proofs are in [`Movement/`](Movement): [`Basic.lean`](Movement/Basic.lean) (sections 1–3), [`Heat.lean`](Movement/Heat.lean) (4), [`Quantum.lean`](Movement/Quantum.lean) (5) [`Bohr.lean`](Movement/Bohr.lean) (6), [`Spin.lean`](Movement/Spin.lean) (7), [`Rotation4D.lean`](Movement/Rotation4D.lean) (8), [`Waveguide.lean`](Movement/Waveguide.lean) (9) [`Atoms.lean`](Movement/Atoms.lean) (10), [`Forces.lean`](Movement/Forces.lean) (11), [`Spectrum.lean`](Movement/Spectrum.lean) (12) and [`Thermal.lean`](Movement/Thermal.lean) (2c, and the oscillator, transport and superconductor theorems used in 10). There is no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
 
 ---
 
@@ -51,6 +51,28 @@ A point mass `m₁` hits a body with mass `m₂` and moment of inertia `I` at le
 | `effMass_le` | `M ≤ m₂`, with equality iff `b = 0` (a central hit). A body that can spin *feels lighter*. |
 | `rot_energy_transfer` | The energy transferred is `4m₁M / (m₁+M)²`, which is maximal when `m₁` matches the **effective** mass, not the real one. |
 | `rot_share` | The share of the transferred energy that goes into rotation is `m₂b² / (I + m₂b²)`. |
+
+## 2c. Collisions carry energy from hot to cold
+
+Sections 2 and 2b say how much energy one collision can move. [`Thermal.lean`](Movement/Thermal.lean) adds which way it moves, which is the step from collisions to temperature:
+
+| Theorem | Statement |
+|---|---|
+| `collision_energy_flow` | In one collision, ball 1 gains `k·(E₂ − E₁)` plus a cross term in `u₁u₂`, with `k = 4m₁m₂/(m₁+m₂)²` the transfer fraction of section 2. |
+| `mean_energy_flow`, `energy_flows_hot_to_cold` | Over many collisions with uncorrelated velocities the cross term vanishes: energy flows to the kind with less of it, and nothing flows exactly when the mean energies are equal. |
+| `energy_gap_factor` | Each round multiplies the difference of the mean energies by `1 − 2k`, which is smaller than 1 in size unless the masses are equal. |
+| `sudden_hit_split`, `vib_share` | A sudden hit on one atom of a molecule A–B puts the share `m_B/(m_A+m_B)` into vibration: the companion of `rot_share`. |
+
+Equal mean energy for every kind of motion is what the heat capacities in section 10 count. [`analyzer/collisions.py`](analyzer/collisions.py) tries it on numbers: 200 000 balls of each of two kinds on a line, all starting with one speed, colliding in random pairs.
+
+| Masses | Energy gained in the first round: simulation, formula | Difference per round: simulation, `1 − 2k` | Mean energies at the end | Kurtosis at the end (Gaussian: 3) |
+|---|---|---|---|---|
+| 1 and 4 | −1.273, −1.280 | −0.273, −0.280 | 2.001 and 1.999 | 2.99 and 3.00 |
+| 1 and 40 | −0.186, −0.190 | 0.814, 0.810 | 1.988 and 2.012 | 3.01 and 3.00 |
+| 4 and 131 | +0.466, +0.460 | 0.767, 0.770 | 2.985 and 3.015 | 3.00 and 3.00 |
+| 1 and 1 | −2.000, −2.000 | −1.000, −1.000 | 3.000 and 1.000: never shared | 1.00 and 1.00 |
+
+Unequal masses end with equal energies and Gaussian velocities, starting from a distribution that was neither. Equal masses on a line never do: they swap velocities, so the two kinds trade their energies back and forth for ever (`energy_gap_factor` has the factor −1 exactly there). The small differences between simulation and formula are the cross term, which is zero only on average. What is still not proved is that the velocities *stay* uncorrelated, which is the assumption the whole argument rests on.
 
 ## 3. Diffusion: collisions turn ballistic motion into √n spreading
 
@@ -231,7 +253,7 @@ Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](http
 | Lithium's outer electron | `screening_bracket`: an effective charge between 1 (full screening) and 3 (none) gives an energy between the two Bohr values. | 3.40 to 30.6 eV | 5.39 eV |
 | Heat capacity of Cl₂ and CO₂ | `einstein_function_le_one`, `quantum_vibration_below_equipartition`: a quantised vibration holds between nothing and its classical share. `gamma_vibration_bracket`: so `γ` lies between the values with all vibrations active and with none. | Cl₂: 3.5 R to 4.5 R; CO₂: 3.5 R to 7.5 R | 4.08 R; 4.47 R |
 
-The simple models can be taken further without leaving one-electron equations and sums over levels. For lithium, three steps, each one radial equation with no fitted number: the inner pair as a charge cloud (4.76 eV, −12 %), the outer electron kept orthogonal to the inner orbital because two electrons of the same spin cannot share a state (5.10 eV, −5.4 %), and exchange with the inner electron of the same spin (5.35 eV, −0.8 %; measured 5.39). For Cl₂ the harmonic vibration is replaced by a direct sum over the measured vibration–rotation levels (−0.50 % becomes −0.11 %), and then by the natural mixture of ³⁵Cl and ³⁷Cl (−0.01 %). Two cautions: the isotope masses and abundances are entered from memory, and the tabulated heat capacity of a gas is itself computed from spectroscopic levels, so the last agreement shows that our sum is done correctly more than it tests nature.
+The simple models can be taken further without leaving one-electron equations and sums over levels. For lithium, three steps, each one radial equation with no fitted number: the inner pair as a charge cloud (4.76 eV, −12 %), the outer electron kept orthogonal to the inner orbital because two electrons of the same spin cannot share a state (5.10 eV, −5.4 %), and exchange with the inner electron of the same spin (5.35 eV, −0.8 %; measured 5.39). For Cl₂ the harmonic vibration is replaced by a direct sum over the measured vibration–rotation levels (−0.50 % becomes −0.11 %), and then by the natural mixture of ³⁵Cl and ³⁷Cl (−0.01 %). One caution: the tabulated heat capacity of a gas is itself computed from spectroscopic levels, so the last agreement shows that our sum is done correctly more than it tests nature.
 
 Two limits should be stated. For lithium the theorem takes the effective charge as given: that the inner electrons screen between nothing and everything is physics (the field of a spherical shell), not something proved here. And the collision theorems of sections 2 and 2b cannot close the heat-capacity gap. They are what gives each motion an equal share, which is the model that fails: a classical collision would hand a vibration its full `kT`. The quantum of vibration is what stops it, and that enters as an assumption (the energy levels), not as a consequence of collisions. Where each number actually lands inside its bracket is computed further down (variational helium, full CI for lithium, Einstein's function for the vibrations).
 
@@ -344,9 +366,30 @@ The list is a table with a composite key (spin-up string, spin-down string) and 
 
 **Exponents from derivatives instead of by hand.** The exponents of the correlating functions were chosen by hand. `exponent_gradient.py` computes the derivative of the CI energy with respect to them from the functions themselves: forward-mode automatic differentiation (dual numbers, the mechanism of PyTorch's `jvp`) through the Gaussian integrals, orbitals that follow the moving functions, and no derivative of the CI vector, since it sits at a minimum. For Cl⁻ with one d shell the result, −51.801166 mEh per unit of ln(exponent), agrees with central differences of the whole calculation (−51.801123). `optimize_exponents.py` follows these derivatives to the minimum of E(Cl⁻) + E(Cl). With a single d shell it moves the exponent from 0.40 to 0.598 in five evaluations and lowers the two energies by 10 and 16 mEh, but the electron affinity gets worse, 3.12 → 2.96 eV: the neutral atom gains more from a tight d function than the ion does, and one shell cannot serve both. A lower total energy is not a better energy difference; the difference needs a tight and a diffuse shell.
 
+### Vibrations, solids and transport: more of what collisions share
+
+Lean now has the pieces the vibration rows were using without proof:
+
+| Theorem | Statement |
+|---|---|
+| `oscillator_ground_dx`, `oscillator_ground_dxx`, `oscillator_ground_state` | `exp(−x²/2)` solves the oscillator's Schrödinger equation with energy one half quantum: the zero-point energy. |
+| `isotope_vibration_frequency` | With the same spring, the frequency goes as one over the square root of the reduced mass. |
+| `einstein_function_pos` | Einstein's function is positive; with `einstein_function_le_one` a vibration holds strictly between nothing and the classical share. |
+| `simple_transport_ratio` | In the mean-free-path picture heat conduction and viscosity have the ratio `c/m`. |
+
+| Quantity | Model | Error |
+|---|---|---|
+| Vibration of D₂ and HD from H₂ | square root of the reduced mass | −0.07 %, −0.03 % |
+| Heat capacity of copper | three classical vibrations per atom, `3R` | +1.9 % |
+| Heat capacity of diamond | the same | +308 %, **fails**: stiff bonds, vibrations mostly frozen |
+| Heat conduction / (viscosity × c_v) for He, Ne, Ar, Kr, Xe | mean-free-path picture: 1 | −60 %, **fails** |
+| the same | kinetic theory of point-like atoms: 5/2 | −0.5 % to +0.3 % |
+
+The transport row is the first test here of what collisions *carry*, and the simple picture fails by a factor 2.5 for all five gases: fast atoms carry more energy and also travel further between collisions, and the picture counts neither. The factor 5/2 is the result of the full kinetic theory, which is not derived here. The reference values are NIST correlations fitted to measurements, and such correlations may themselves lean on kinetic theory, so the agreement to half a percent is weaker evidence than it looks. Diamond is the solid counterpart of Cl₂: it lies inside the proved bracket (between nothing and `3R`), and no Einstein temperature is fitted here.
+
 ### Magnetism: the electron cloud as a tiny superconductor
 
-A magnetic field sets the whole electron cloud circulating, and the induced current opposes the field, with no resistance. This is the same response as in a superconductor, but an atom is about a hundred times thinner than the layer needed to expel the field, so the effect is of order `(v/c)² = α²`:
+A magnetic field sets the whole electron cloud circulating, and the induced current opposes the field, with no resistance. This is the same response as in a superconductor, where the field dies out exponentially over a depth `λ` (`london_decay`). An atom is 40 to 80 times thinner than that depth: `(a₀/λ)² = 4πα²·n a₀³` for an electron cloud of density `n` (`london_depth_atomic`), so the effect is of order `(v/c)² = α²`:
 
 | Quantity | Model | Error |
 |---|---|---|
@@ -566,9 +609,10 @@ The gap ratio is the smaller of two neighbouring gaps divided by the larger; it 
 
 ## What is *not* proved here
 
-- That deterministic hard-sphere collisions in a gas actually *produce* a random walk. This is the hard part of statistical mechanics.
+- That deterministic hard-sphere collisions in a gas actually *produce* a random walk, or that colliding molecules keep uncorrelated velocities (the assumption behind section 2c). This is the hard part of statistical mechanics.
+- The factor 5/2 between heat conduction and viscosity, the Lamb formula for magnetic shielding, and anything about superconductivity beyond the decay of the field: pairing, the isotope effect and the flux quantum are not here.
 - That the random-walk distribution itself converges to the heat kernel (the de Moivre–Laplace / central limit theorem). Section 4 proves that the *equation* converges and that the Gaussian solves the limit equation, not that the solutions converge.
-- Anything about the Schrödinger equation with a potential, or about measurement. Section 7 is algebra about a classical model of spin; it does not formalise quantum spin itself.
+- The Schrödinger equation with a potential, beyond two special cases: a constant potential (section 10, diffusion with reaction) and the ground state of the oscillator. Nothing about measurement. Section 7 is algebra about a classical model of spin; it does not formalise quantum spin itself.
 
 See [*Where this leads*](https://punnerud.github.io/movement-lean/#further) on the website for the connection to the Boltzmann and Navier–Stokes equations.
 

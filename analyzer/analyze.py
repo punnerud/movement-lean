@@ -273,7 +273,33 @@ for gas, cp in DATA["Cp_298K_J_per_molK"].items():
             row(G_HEAT, gas, "C_p at 298 K", "the same for the natural mixture of isotopes", "not formalised",
                 mix, cp, "J/(mol·K)", "ok", 1e-3, UNC["Cp"], base=lv,
                 fix="a quarter of the atoms are ³⁷Cl, which vibrate more slowly",
-                note="isotope masses and abundances entered from memory")
+                note="isotope masses and abundances from NIST")
+
+# vibration of the heavier isotopes from H2: the spring is the same, the reduced mass is not
+for child, w in DATA["isotope_vibration_cm1"].items():
+    if not child.startswith("_"):
+        row(G_ROT, child, "vibration wavenumber ω_e", "from H₂ by the square root of the reduced mass",
+            "isotope_vibration_frequency", VIB["H2"][0] * math.sqrt(mu("H2") / mu(child)), w, "cm⁻¹", "ok", 2e-3, 1e-5)
+
+# solids: every atom vibrates in three directions, so the classical heat capacity is 3R
+SOLID = DATA["solid_Cp_298K_J_per_molK"]
+row(G_HEAT, "Cu (solid)", "C_p at 298 K", "three classical vibrations per atom: 3R", "einstein_function_le_one",
+    3 * R_GAS, SOLID["Cu"], "J/(mol·K)", "ok", 3e-2, 5e-3)
+row(G_HEAT, "diamond", "C_p at 298 K", "three classical vibrations per atom: 3R", "einstein_function_le_one, einstein_function_pos",
+    3 * R_GAS, SOLID["diamond"], "J/(mol·K)", "limit", 0.05, 5e-3,
+    "the bonds in diamond are so stiff that its vibrations are mostly frozen at room temperature")
+
+# transport: what collisions carry. The mean-free-path picture gives conduction / (viscosity x c_v) = 1
+G_TRANS = "Transport in gases: what collisions carry"
+for gas, values in DATA["noble_gas_transport_300K_1atm"].items():
+    if gas.startswith("_"):
+        continue
+    cv, eta, kappa = values
+    ratio = kappa / (eta * 1e-6 * cv * 1e3)
+    t = row(G_TRANS, gas, "heat conduction / (viscosity × c_v)", "mean-free-path picture: 1", "simple_transport_ratio",
+            1.0, ratio, "", "limit", 0.05, 1e-2, "fast molecules carry more energy and travel further between collisions")
+    row(G_TRANS, gas, "heat conduction / (viscosity × c_v)", "kinetic theory of point-like atoms: 5/2", "not formalised",
+        2.5, ratio, "", "ok", 1e-2, 1e-2, base=t, fix="the correlation between a molecule's speed and the energy it carries")
 
 T20 = 293.15
 SOUND = DATA["sound_speed_20C_m_per_s"]
@@ -292,6 +318,8 @@ STABILITY = []            # (description, bool): qualitative conclusions that mu
 # The simple models that fail do so in a proved direction: the measured value must lie inside the bracket.
 CP = DATA["Cp_298K_J_per_molK"]
 STABILITY += [
+    ("diamond: the measured heat capacity lies between nothing and the classical 3R",
+     0 < DATA["solid_Cp_298K_J_per_molK"]["diamond"] < 3 * R_GAS),
     ("He: the measured energy lies between the model without repulsion (lower bound) and the variational one (upper bound)",
      -2 * 4 * RY_EV < he_total < -2 * (2 - 5 / 16) ** 2 * RY_EV),
     ("Li: the measured ionization energy lies between full screening (Z=1) and none (Z=3)",
