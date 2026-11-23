@@ -775,7 +775,7 @@ def _strings(n, k):
 
 
 def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=False, blocked=False,
-        max_vectors=None, block_bytes=2e8, return_vector=False, operator_only=False):
+        max_vectors=None, block_bytes=2e8, return_vector=False, operator_only=False, single=False):
     """Full configuration interaction ground state in an orthonormal orbital basis.
 
     The wavefunction is a matrix C[alpha string, beta string]; the lowest
@@ -791,6 +791,10 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
     uses no less memory, so low_memory remains the choice for large cases.
     `max_vectors` is the number of Davidson vectors kept before a restart;
     the solver holds about 2 * max_vectors + 5 arrays the size of C.
+    single=True keeps the solver's stored vectors in single precision, which
+    halves its memory. What is stored of each image is H v - shift * v, with
+    the shift at the lowest diagonal element, so the stored numbers are small
+    and their rounding does not limit the result (see the Davidson loop).
     return_vector=True returns (energy, C). operator_only=True returns the
     function C -> H C instead of solving (see `ci_expectation`)."""
     n = h.shape[0]
@@ -892,41 +896,61 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
             + 0.5 * np.einsum("ip,pq,iq->i", occ_b, same, occ_b)[None, :]
             + occ_a @ Jm @ occ_b.T)
 
-    # Davidson: the vectors and their images are kept once, in two arrays
+    # Davidson: the vectors and their images are kept once, in two arrays.
+    # A stored vector, rounded to the storage precision, is taken as the basis vector itself:
+    # its image is computed from the rounded vector, and the overlaps of the stored vectors
+    # enter the small problem, so rounding the vectors costs no accuracy. Only the images are
+    # approximate, and they are stored as (H - shift) v, which is small for a nearly converged v.
     N = Na * Nb
-    V, Sg = np.empty((restart, N)), np.empty((restart, N))
-    small = np.zeros((restart, restart))
+    kind = np.float32 if single else np.float64
+    V, Sg = np.empty((restart, N), dtype=kind), np.empty((restart, N), dtype=kind)
+    small, overlap = np.zeros((restart, restart)), np.zeros((restart, restart))
     diag = diag.ravel()
+    shift = float(diag.min())
 
     def add(m, v):
         V[m] = v
-        Sg[m] = sigma(V[m].reshape(Na, Nb)).ravel()
-        small[m, :m + 1] = small[:m + 1, m] = V[:m + 1] @ Sg[m]
+        v = V[m].astype(np.float64)
+        s = sigma(v.reshape(Na, Nb)).ravel()
+        s -= shift * v
+        for k in range(m + 1):                              # row by row: no copy of the whole array
+            small[m, k] = small[k, m] = np.dot(V[k], s)
+            overlap[m, k] = overlap[k, m] = np.dot(V[k], v)
+        Sg[m] = s
+
+    def combine(y, M):
+        out = np.zeros(N)
+        for k in range(len(y)):
+            out += y[k] * M[k]
+        return out
 
     start = np.zeros(N)
     start[np.argmin(diag)] = 1.0
     add(0, start)
     m = 1
-    energy = diag.min()
+    energy = shift
     for _ in range(max_iter):
-        w, y = np.linalg.eigh(small[:m, :m])
-        energy, y = w[0], y[:, 0]
-        new = y @ Sg[:m]
-        x = y @ V[:m]
-        new -= energy * x
+        sw, su = np.linalg.eigh(overlap[:m, :m])
+        X = su / np.sqrt(sw)
+        w, y = np.linalg.eigh(X.T @ small[:m, :m] @ X)
+        energy, y = w[0] + shift, X @ y[:, 0]
+        new = combine(y, Sg[:m])
+        x = combine(y, V[:m])
+        new -= (energy - shift) * x
         if np.linalg.norm(new) < tol:
             break
         if m >= restart:
             x /= np.linalg.norm(x)
             add(0, x)
             m = 1
-            np.subtract(Sg[0], energy * V[0], out=new)
+            new = Sg[0].astype(np.float64) - (energy - shift) * V[0]
         denom = energy - diag
         denom[np.abs(denom) < 1e-3] = -1e-3
         new /= denom
         del denom
         for _ in range(2):
-            new -= (V[:m] @ new) @ V[:m]
+            for j in range(m):                              # not `k`: that is the one-electron matrix above
+                new -= (np.dot(V[j], new) / overlap[j, j]) * V[j]
         new /= np.linalg.norm(new)
         add(m, new)
         m += 1
