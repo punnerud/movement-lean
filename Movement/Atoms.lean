@@ -54,6 +54,40 @@ theorem helium_variational (Z ζ : ℝ) :
   · nlinarith [sq_nonneg (ζ - (Z - 5 / 16))]
   · ring
 
+/-- **Leaving out a repulsion can only lower the energy.** Let `T ψ` be the
+energy of state `ψ` without some term of the energy, and `V ψ` that term. If
+`T` is never below `E₀` and `V` is never negative, the full energy is never
+below `E₀`. For helium: the electrons repel, so two independent Bohr electrons
+(`−Z²` each, in units of 2 Rydberg) give an energy *below* the true one. -/
+theorem repulsion_raises_energy {S : Type*} (T V : S → ℝ) (E₀ : ℝ)
+    (hT : ∀ ψ, E₀ ≤ T ψ) (hV : ∀ ψ, 0 ≤ V ψ) (ψ : S) : E₀ ≤ T ψ + V ψ := by
+  linarith [hT ψ, hV ψ]
+
+/-- **Helium is bracketed.** The energy without repulsion, `−Z²`, lies below
+the variational one, `−(Z − 5/16)²`; the true energy lies between them
+(`repulsion_raises_energy` below, `rayleigh_ritz_bound` above). The gap is
+`(5/8)Z − 25/256`: for helium 1.15 of the 4 units, which is why the model
+without repulsion is 38 % off. -/
+theorem helium_bracket {Z : ℝ} (hZ : 5 / 32 ≤ Z) :
+    -Z ^ 2 ≤ -(Z - 5 / 16) ^ 2 ∧ -(Z - 5 / 16) ^ 2 - -Z ^ 2 = 5 / 8 * Z - 25 / 256 := by
+  constructor
+  · nlinarith
+  · ring
+
+/-- **Screening is bracketed.** An electron that feels an effective charge
+between `Z₁` (the other electrons screen the nucleus completely) and `Z₂`
+(they do not screen at all) is bound by an energy between the two Bohr
+values `R Z²/n²`. For lithium's outer electron `Z₁ = 1`, `Z₂ = 3`, `n = 2`. -/
+theorem screening_bracket {R Z₁ Z Z₂ n : ℝ} (hR : 0 ≤ R) (hn : 0 < n) (h0 : 0 ≤ Z₁)
+    (h1 : Z₁ ≤ Z) (h2 : Z ≤ Z₂) :
+    R * Z₁ ^ 2 / n ^ 2 ≤ R * Z ^ 2 / n ^ 2 ∧ R * Z ^ 2 / n ^ 2 ≤ R * Z₂ ^ 2 / n ^ 2 := by
+  have hn2 : 0 < n ^ 2 := by positivity
+  constructor
+  · apply div_le_div_of_nonneg_right _ hn2.le
+    exact mul_le_mul_of_nonneg_left (by nlinarith) hR
+  · apply div_le_div_of_nonneg_right _ hn2.le
+    exact mul_le_mul_of_nonneg_left (by nlinarith) hR
+
 /-! ### Rotating molecules -/
 
 /-- **Reduced mass.** Two masses a distance `r` apart, rotating about their
@@ -113,5 +147,30 @@ theorem heat_capacity_ratio {f R : ℝ} (hf : f ≠ 0) (hR : R ≠ 0) :
 /-- A monatomic gas has `γ = 5/3`; a rotating diatomic gas has `γ = 7/5`. -/
 theorem gamma_values : ((3 : ℝ) + 2) / 3 = 5 / 3 ∧ ((5 : ℝ) + 2) / 5 = 7 / 5 := by
   constructor <;> norm_num
+
+/-- **A quantised vibration takes less than its classical share.** A
+vibration with quantum `hν = x·kT` holds the mean energy `kT · x/(eˣ − 1)`,
+always less than the `kT` that collisions would give a classical vibration.
+This is why counting motions fails for Cl₂ and CO₂: their vibrations are
+neither absent nor fully active. -/
+theorem quantum_vibration_below_equipartition {x : ℝ} (hx : 0 < x) :
+    x / (Real.exp x - 1) < 1 := by
+  have h := Real.add_one_lt_exp (ne_of_gt hx)
+  rw [div_lt_one (by linarith)]
+  linarith
+
+/-- **Heat capacity with vibration is bracketed.** If the vibrations add
+`v·R` with `0 ≤ v ≤ m` (`m` vibrations, each at most `R` by
+`einstein_function_le_one`), then `γ` lies between the value with all
+vibrations active and the value with none. For Cl₂ (`f = 5`, `m = 1`):
+between 9/7 and 7/5. -/
+theorem gamma_vibration_bracket {f v m : ℝ} (hf : 0 < f) (hv : 0 ≤ v) (hm : v ≤ m) :
+    (f + 2 * m + 2) / (f + 2 * m) ≤ (f + 2 * v + 2) / (f + 2 * v) ∧
+      (f + 2 * v + 2) / (f + 2 * v) ≤ (f + 2) / f := by
+  constructor
+  · rw [div_le_div_iff₀ (by linarith) (by linarith)]
+    nlinarith
+  · rw [div_le_div_iff₀ (by linarith) hf]
+    nlinarith
 
 end Movement

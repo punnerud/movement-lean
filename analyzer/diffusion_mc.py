@@ -29,6 +29,7 @@ is E(H3 at the saddle) - E(H) - E(H2).
     python3 analyzer/diffusion_mc.py charmonium [quick]  # a charm quark and antiquark with a Coulomb-like pull plus a constant one
     python3 analyzer/diffusion_mc.py improve    # improve the guesses of He, H2 and H3 from samples: simple and richer form,
                                                 # simplex and iterated search, and what each buys (add polish: only the last variant)
+    python3 analyzer/diffusion_mc.py orbitals [long]   # H3 with richer orbitals: do the zero surfaces get better?
     python3 analyzer/diffusion_mc.py python     # the walker loop in numpy instead of Rust (same algorithm, slower)
 """
 import ctypes
@@ -53,10 +54,14 @@ class Guess:
     one number or one per nucleus, meaning c s(r_iA)^m for each electron when
     n = o = 0, c s(r_ij)^o for each pair when m = n = 0, and otherwise
     c (s(r_iA)^m s(r_jA)^n + s(r_iA)^n s(r_jA)^m) s(r_ij)^o for each pair and
-    nucleus (see cikernel/src/walk.rs). The numpy `evaluate` covers the
-    default case only."""
+    nucleus (see cikernel/src/walk.rs). `kinds` gives each centre's function:
+    "s" (the default) or "x", "y", "z" for exp(-zeta r) times that coordinate
+    (a p function). A centre with charge 0 only carries a function, so an atom
+    gets a second exponent or a p function by an extra centre at its place.
+    The numpy `evaluate` covers the default case only."""
 
-    def __init__(self, nuclei, zeta, b=0.4, up=None, down=None, terms=(), scale=1.0):
+    def __init__(self, nuclei, zeta, b=0.4, up=None, down=None, terms=(), scale=1.0, kinds=None):
+        self.kinds = np.array(["sxyz".index(k) for k in kinds or "s" * len(nuclei)], np.int32)
         self.powers = np.array([t for t, _ in terms], np.int32).reshape(-1, 3)
         self.coeff = np.array([np.broadcast_to(np.asarray(c, float), (len(nuclei),)) for _, c in terms]).reshape(-1, len(nuclei))
         self.scale = scale
@@ -123,10 +128,11 @@ def _c_guess(guess, electrons):
     import mesh_ci
     guess._keep = (np.ascontiguousarray(guess.Z), np.ascontiguousarray(guess.R.ravel()), np.ascontiguousarray(guess.zeta),
                    np.ascontiguousarray(guess.up), np.ascontiguousarray(guess.down[:electrons - len(guess.up)]),
-                   np.ascontiguousarray(guess.powers), np.ascontiguousarray(guess.coeff))
-    Z, R, zeta, up, down, powers, coeff = guess._keep
+                   np.ascontiguousarray(guess.powers), np.ascontiguousarray(guess.coeff), np.ascontiguousarray(guess.kinds))
+    Z, R, zeta, up, down, powers, coeff, kinds = guess._keep
     return (len(Z), mesh_ci._d(Z), mesh_ci._d(R), mesh_ci._d(zeta), len(up), len(down), mesh_ci._d(up), mesh_ci._d(down),
-            float(guess.b), len(powers), powers.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)), mesh_ci._d(coeff), float(guess.scale))
+            float(guess.b), len(powers), powers.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)), mesh_ci._d(coeff), float(guess.scale),
+            kinds.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)))
 
 
 def sample(guess, electrons, walkers=4000, steps=600, tau=0.05, seed=1):
@@ -272,6 +278,51 @@ def richer(make, count):
         g.powers, g.coeff, g.scale = np.array(TERMS, np.int32), np.outer(p[count + 1:], on), p[count]
         return g
     return made
+
+
+def h3_orbitals(p):
+    """H3 on a line with richer orbitals: on each atom a second exponent and a p function along
+    the line, mixed in as far as the symmetry of each orbital allows. The two orbitals of the
+    equal-spin pair (one even, one odd under reflection) decide where the guess is zero.
+    p = exponents (outer, middle), b, weight of the middle atom [as the simple H3 guess], then
+    second exponents (outer, middle), p exponents (outer, middle), and the weights: even orbital
+    second-outer, second-middle, p-outer; odd orbital second-outer, p-outer, p-middle."""
+    zo, zm, b, w, z2o, z2m, zpo, zpm, a2, b2, pg, u2, pu, pb = p
+    centres = H3_NUCLEI + [(0, r) for _, r in H3_NUCLEI] * 2
+    even = [1.0, w, 1.0, a2, b2, a2, pg, 0.0, -pg]
+    odd = [1.0, 0.0, -1.0, u2, 0.0, -u2, pu, pb, pu]
+    return Guess(centres, (zo, zm, zo, z2o, z2m, z2o, zpo, zpm, zpo), b, up=[even, odd], down=[even], kinds="sssssszzz")
+
+
+H3_ORBITAL_START = (0.8, 0.8, 1.5, 1.5) + (0.0,) * 6
+
+
+def orbitals_main(long_run):
+    """H3 with the simple and the richer orbitals, both with the extra TERMS, improved by the
+    iterated search and the simplex; the richer one starts from the result of the simple one.
+    Then walkers: only the zero surfaces can change the answer."""
+    reference = CASES["H3"][5]
+    simple, start = IMPROVE["H3"][1], IMPROVE["H3"][2]
+    steps = lambda n: [0.05] * n
+    found = {}
+    for label, m, p0 in (("simple orbitals", richer(simple, 4), tuple(start) + (1.0,) + (0.0,) * len(TERMS)),
+                         ("richer orbitals", richer(h3_orbitals, 14), None)):
+        if p0 is None:                                           # warm start: the simple result, new parts switched off
+            q = found["simple orbitals"]
+            p0 = tuple(q[:4]) + H3_ORBITAL_START + tuple(q[4:])
+        t0 = time.time()
+        trace = []
+        best = improve(m, p0, 3, report=lambda *a: trace.append(a), steps=steps(len(p0)), budget=300 * len(p0), polish=True)
+        found[label] = best
+        for row in (trace[0], trace[-1]):
+            print(f"  H3, {label}, round {row[0]}: guess alone {row[2]:.4f} ± {row[3]:.4f}  spread of (H g)/g {row[4]:.3f}")
+        print(f"    parameters {np.round(best, 3)}   ({time.time() - t0:.0f} s)", flush=True)
+        t0 = time.time()
+        kw = dict(duration=200.0, walkers=20000) if long_run else dict(duration=30.0)
+        runs, e0, s0 = extrapolated(m(best), 3, (0.02, 0.01), **kw)
+        print(f"    walkers: " + ", ".join(f"step {tau:g}: {e:.5f} ± {s:.5f}" for tau, (e, s, _) in zip((0.02, 0.01), runs)) +
+              f"; step -> 0: {e0:.5f} ± {s0:.5f}   (reference {reference:.6f}, difference {1e3 * (e0 - reference):+.2f} mEh)   "
+              f"({time.time() - t0:.0f} s)", flush=True)
 
 
 def improve_main(only=None):
@@ -496,6 +547,8 @@ def main():
         return particles_main(quick)
     if "improve" in args:
         return improve_main("then simplex" if "polish" in args else None)
+    if "orbitals" in args:
+        return orbitals_main("long" in args)
     if "charmonium" in args:
         return charmonium_main(quick)
     run = energy if "python" in args else energy_rust

@@ -139,17 +139,17 @@ ie = DATA["ionization_energy_eV"]
 he_total = -(ie["He"] + ie["He+"])
 u_n = UNC["ionization_neutral"]
 he_bohr = row(G_MANY, "He", "total ground-state energy", "two independent Bohr electrons",
-              "hydrogenlike_energy", -2 * 4 * RY_EV, he_total, "eV", "limit", 0.05, u_n,
-              "ignores electron–electron repulsion")
+              "hydrogenlike_energy, repulsion_raises_energy, helium_bracket", -2 * 4 * RY_EV, he_total, "eV", "limit", 0.05, u_n,
+              "ignores electron–electron repulsion: proved to be a lower bound")
 he_var = row(G_MANY, "He", "total ground-state energy", "one screening parameter, ζ = Z − 5/16",
              "helium_variational", -2 * (2 - 5 / 16) ** 2 * RY_EV, he_total, "eV", "ok", 0.03, u_n,
              base=he_bohr, fix="average screening by the other electron")
 li_a = row(G_MANY, "Li", "first ionization energy", "Bohr, n=2, no screening (Z=3)",
-           "hydrogenlike_energy", 9 * RY_EV / 4, ie["Li"], "eV", "limit", 0.05, u_n,
-           "inner electrons screen the nucleus")
+           "hydrogenlike_energy, screening_bracket", 9 * RY_EV / 4, ie["Li"], "eV", "limit", 0.05, u_n,
+           "inner electrons screen the nucleus: the upper end of the bracket")
 li_b = row(G_MANY, "Li", "first ionization energy", "Bohr, n=2, full screening (Z=1)",
-           "hydrogenlike_energy", RY_EV / 4, ie["Li"], "eV", "limit", 0.05, u_n,
-           "the 2s electron penetrates the inner shell")
+           "hydrogenlike_energy, screening_bracket", RY_EV / 4, ie["Li"], "eV", "limit", 0.05, u_n,
+           "the 2s electron penetrates the inner shell: the lower end of the bracket")
 
 # ---------------------------------------------------------------- rotating molecules
 BE = DATA["rotational_constant_Be_cm1"]
@@ -211,7 +211,8 @@ for gas, cp in DATA["Cp_298K_J_per_molK"].items():
     f = FREEDOM[gas]
     kind = "translation only" if f == 3 else "translation + rotation"
     b = row(G_HEAT, gas, "C_p at 298 K", f"equipartition, f = {f} ({kind})",
-            "heat_capacity_ratio; rotation: rot_share", (f / 2 + 1) * R_GAS, cp, "J/(mol·K)",
+            "heat_capacity_ratio; rotation: rot_share" + ("; gamma_vibration_bracket" if gas in LIMITS else ""),
+            (f / 2 + 1) * R_GAS, cp, "J/(mol·K)",
             "limit" if gas in LIMITS else "ok", 0.02, UNC["Cp"], LIMITS.get(gas, ""))
     if gas == "H2":
         b0_h2, dist = DATA["H2_B0_cm1"], DATA["H2_centrifugal_D_cm1"]
@@ -247,6 +248,18 @@ row(G_HEAT, "He", "speed of sound at 20 °C", "ideal gas + acoustic virial coeff
 
 # ---------------------------------------------------------------- numerical quantum mechanics
 STABILITY = []            # (description, bool): qualitative conclusions that must hold
+# The simple models that fail do so in a proved direction: the measured value must lie inside the bracket.
+CP = DATA["Cp_298K_J_per_molK"]
+STABILITY += [
+    ("He: the measured energy lies between the model without repulsion (lower bound) and the variational one (upper bound)",
+     -2 * 4 * RY_EV < he_total < -2 * (2 - 5 / 16) ** 2 * RY_EV),
+    ("Li: the measured ionization energy lies between full screening (Z=1) and none (Z=3)",
+     RY_EV / 4 < ie["Li"] < 9 * RY_EV / 4),
+    ("Cl₂: the measured C_p lies between no vibration and one fully active vibration",
+     3.5 * R_GAS < CP["Cl2"] < 4.5 * R_GAS),
+    ("CO₂: the measured C_p lies between no vibration and four fully active vibrations",
+     3.5 * R_GAS < CP["CO2"] < 7.5 * R_GAS),
+]
 VARIATIONAL = []          # (description, upper value, lower value): upper >= lower must hold
 if quantum is not None:
     bench = DATA["benchmark_hartree"]
@@ -386,7 +399,7 @@ if quantum is not None:
                    ("H⁻: HF ≥ s-only CI", hm_hf, hm_s),
                    ("H⁻: s-only CI ≥ Hylleraas", hm_s, hm_hyl),
                    ("H⁻: Hylleraas ≥ exact", hm_hyl, bench["HMinus_exact"])]
-    STABILITY = [("H⁻ unbound in Hartree–Fock", hm_hf > -0.5),
+    STABILITY += [("H⁻ unbound in Hartree–Fock", hm_hf > -0.5),
                  ("H⁻ bound with correlation", hm_hyl < -0.5),
                  ("general CI solver reproduces the two-electron solver (He)",
                   abs(quantum.helium_fci_s_general() - he_s_fci) < 1e-8)]

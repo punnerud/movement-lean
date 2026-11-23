@@ -978,6 +978,75 @@
      0.0039
     ]
    }
+  },
+  "H3_richer_orbitals": {
+   "command": "python3 analyzer/diffusion_mc.py orbitals long",
+   "note": "20000 walkers, duration 200, steps 0.02 and 0.01. Richer orbitals: second exponent and p function along the line on each atom (diffusion_mc.h3_orbitals). Both guesses carry the 8 extra terms and were improved by iterated search then simplex. Reference -1.659162 is unchecked.",
+   "simple_orbitals": {
+    "spread": 0.18,
+    "guess_alone": -1.6455,
+    "step_0.02": [
+     -1.65455,
+     0.00041
+    ],
+    "step_0.01": [
+     -1.65428,
+     0.00044
+    ],
+    "step_to_zero": [
+     -1.65401,
+     0.00097
+    ]
+   },
+   "richer_orbitals": {
+    "spread": 0.098,
+    "guess_alone": -1.654,
+    "step_0.02": [
+     -1.65876,
+     0.00017
+    ],
+    "step_0.01": [
+     -1.65853,
+     0.00025
+    ],
+    "step_to_zero": [
+     -1.6583,
+     0.00054
+    ],
+    "parameters": [
+     1.213,
+     1.167,
+     0.536,
+     1.776,
+     0.747,
+     0.315,
+     1.287,
+     1.171,
+     0.203,
+     -0.025,
+     0.176,
+     1.176,
+     -0.073,
+     -0.522,
+     1.143,
+     -0.153,
+     2.198,
+     -3.139,
+     -1.045,
+     -0.086,
+     0.081,
+     -0.699,
+     0.718
+    ]
+   },
+   "barrier_millihartree": {
+    "with_richer_orbitals": [
+     15.44,
+     0.75
+    ],
+    "reference_unchecked": 15.31,
+    "note": "E(H3) from this run minus E(H) and E(H2) from the long runs"
+   }
   }
  }
 }

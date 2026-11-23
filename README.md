@@ -221,6 +221,16 @@ Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](http
 | Lithium's outer electron, with or without screening | `hydrogenlike_energy` | 37 % to 468 % | **fails**: needs many-electron theory |
 | Heat capacity of Cl₂ and CO₂ | `heat_capacity_ratio` | 14 % to 22 % | **fails**: vibrations are active |
 
+**The three failures fail in a proved direction.** The simple models at the bottom of the table cannot give the measured number, but Lean proves on which side of it they must land, and the analyzer checks that the measurement lies inside each bracket:
+
+| Model that fails | What Lean proves | Bracket | Measured |
+|---|---|---|---|
+| Helium as two independent electrons | `repulsion_raises_energy`: leaving out a repulsion gives a lower bound. `helium_bracket`: it lies below the variational upper bound by `(5/8)Z − 25/256`. | −108.8 to −77.5 eV | −79.0 eV |
+| Lithium's outer electron | `screening_bracket`: an effective charge between 1 (full screening) and 3 (none) gives an energy between the two Bohr values. | 3.40 to 30.6 eV | 5.39 eV |
+| Heat capacity of Cl₂ and CO₂ | `einstein_function_le_one`, `quantum_vibration_below_equipartition`: a quantised vibration holds between nothing and its classical share. `gamma_vibration_bracket`: so `γ` lies between the values with all vibrations active and with none. | Cl₂: 3.5 R to 4.5 R; CO₂: 3.5 R to 7.5 R | 4.08 R; 4.47 R |
+
+Two limits should be stated. For lithium the theorem takes the effective charge as given: that the inner electrons screen between nothing and everything is physics (the field of a spherical shell), not something proved here. And the collision theorems of sections 2 and 2b cannot close the heat-capacity gap. They are what gives each motion an equal share, which is the model that fails: a classical collision would hand a vibration its full `kT`. The quantum of vibration is what stops it, and that enters as an assumption (the energy levels), not as a consequence of collisions. Where each number actually lands inside its bracket is computed further down (variational helium, full CI for lithium, Einstein's function for the vibrations).
+
 ### Numerical quantum mechanics for several electrons
 
 [`analyzer/quantum.py`](analyzer/quantum.py) solves the non-relativistic Schrödinger equation numerically (numpy; about one minute, faster integrals if scipy is installed):
@@ -453,7 +463,15 @@ Three things should be said plainly:
 | H₃, richer form, iterated search | 0.213 | 2.7 |
 | H₃, richer form, search then simplex | 0.176 | 3.9 |
 
-The richer form cuts the noise of H₂ by a factor of four, which the simple form could not do with any parameters. The iterated search is the more robust of the two: on helium the simplex let the scale of the new terms run off until they vanished, and gained nothing. Where the simplex works it gets slightly further, and the search followed by a simplex polish is best or close to best in all three. For H₃ the new terms do not move the zero surfaces, so the error from them remains: the short runs with the richer guess lie 4 to 12 mEh above the reference, with error bars of 3 to 4. The improved guesses have not yet been used in long runs.
+The richer form cuts the noise of H₂ by a factor of four, which the simple form could not do with any parameters. The iterated search is the more robust of the two: on helium the simplex let the scale of the new terms run off until they vanished, and gained nothing. Where the simplex works it gets slightly further, and the search followed by a simplex polish is best or close to best in all three. For H₃ the new terms do not move the zero surfaces, so the error from them remains: the short runs with the richer guess lie 4 to 12 mEh above the reference, with error bars of 3 to 4. 
+**Richer orbitals move the zero surfaces.** For H₃ each atom gets a second exponent and a p function along the line of the molecule, mixed into the two orbitals as far as their symmetry allows (`diffusion_mc.py orbitals`). Only this part of the guess decides where it is zero. With 20 000 walkers:
+
+| H₃ at the saddle | Spread of `(H g)/g` | Walkers | Difference from reference * |
+|---|---|---|---|
+| Simple orbitals, eight extra terms | 0.180 | −1.65401(97) Eh | +5.2 mEh |
+| Richer orbitals, eight extra terms | 0.098 | −1.65830(54) | +0.9 mEh |
+
+The error from the zero surfaces falls from 5 mEh to under 1, and the noise is halved. With this value and the long runs of H and H₂ above, the barrier of H + H₂ → H₂ + H comes out at 15.4 ± 0.8 mEh against a reference of 15.3 * (the simple guess gave 21.5). The parameters were found by minimising the spread, which does not aim at the zero surfaces directly; that they improved is measured, not guaranteed.
 
 ### Where do the deviations come from?
 
