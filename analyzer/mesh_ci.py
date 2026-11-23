@@ -34,23 +34,25 @@ def kernel():
     if _lib is None:
         name = "libcikernel.dylib" if sys.platform == "darwin" else "libcikernel.so"
         path = KERNEL / "target" / "release" / name
-        source = max(p.stat().st_mtime for p in [KERNEL / "Cargo.toml", KERNEL / "src" / "lib.rs"])
+        source = max(p.stat().st_mtime for p in [KERNEL / "Cargo.toml", KERNEL / "src" / "lib.rs", KERNEL / "src" / "core.rs"])
         if not path.exists() or path.stat().st_mtime < source:
             subprocess.run(["cargo", "build", "--release", "--target-dir", "target"], cwd=KERNEL, check=True)
         lib = ctypes.CDLL(str(path))
         ptr, u64, dbl, size = ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64), ctypes.POINTER(ctypes.c_double), ctypes.c_size_t
-        lib.ci_new.restype = ptr
-        lib.ci_new.argtypes = [size, dbl, dbl, size, u64, u64]
-        lib.ci_free.argtypes = [ptr]
-        lib.ci_diag.argtypes = [ptr, dbl]
-        lib.ci_sigma.argtypes = [ptr, dbl, dbl]
-        lib.ci_plan.restype = size
-        lib.ci_plan.argtypes = [ptr, size, dbl]
-        lib.ci_pt2.restype = size
-        lib.ci_pt2.argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, ctypes.c_uint64, ctypes.c_uint64, dbl]
-        lib.ci_candidates.restype = size
-        lib.ci_candidates.argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, size, u64, u64, dbl, dbl,
-                                      ctypes.POINTER(size)]
+        for w in ("", "_wide"):                             # 64-bit and 128-bit strings
+            f = lambda name: getattr(lib, name + w)
+            f("ci_new").restype = ptr
+            f("ci_new").argtypes = [size, dbl, dbl, size, u64, u64]
+            f("ci_free").argtypes = [ptr]
+            f("ci_diag").argtypes = [ptr, dbl]
+            f("ci_sigma").argtypes = [ptr, dbl, dbl]
+            f("ci_plan").restype = size
+            f("ci_plan").argtypes = [ptr, size, dbl]
+            f("ci_pt2").restype = size
+            f("ci_pt2").argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, ctypes.c_uint64, ctypes.c_uint64, dbl]
+            f("ci_candidates").restype = size
+            f("ci_candidates").argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, size, u64, u64, dbl, dbl,
+                                           ctypes.POINTER(size)]
         _lib = lib
     return _lib
 
@@ -63,21 +65,39 @@ def _u(x):
     return x.ctypes.data_as(ctypes.POINTER(ctypes.c_uint64))
 
 
+def strings(values, wide):
+    """Bit strings (Python integers) as an array: one 64-bit word each, or
+    with wide=True two words each (lowest first), for up to 128 orbitals."""
+    mask = (1 << 64) - 1
+    if wide:
+        return np.array([[v & mask, v >> 64] for v in values], dtype=np.uint64).reshape(len(values), 2)
+    return np.array(values, dtype=np.uint64)
+
+
+def electrons(string):
+    """Number of set bits in one string of either width."""
+    return sum(bin(int(w)).count("1") for w in np.atleast_1d(string))
+
+
 class Mesh:
-    """A list of determinants with the Hamiltonian acting on it."""
+    """A list of determinants with the Hamiltonian acting on it. `alpha` and
+    `beta` are arrays of 64-bit strings, or of shape (determinants, 2) for
+    128-bit strings (needed above 64 orbitals)."""
 
     def __init__(self, h, eri, alpha, beta):
         self.lib = kernel()
         self.n = h.shape[0]
-        if self.n > 63:
-            raise ValueError("at most 63 orbitals")
+        self.wide = np.ndim(alpha) == 2
+        if self.n > (128 if self.wide else 64):
+            raise ValueError("at most 64 orbitals with 64-bit strings and 128 with wide ones")
+        self._f = lambda name: getattr(self.lib, name + ("_wide" if self.wide else ""))
         self.h = np.ascontiguousarray(h, dtype=np.float64)
         self.g = np.ascontiguousarray(eri, dtype=np.float64)
         self.alpha = np.ascontiguousarray(alpha, dtype=np.uint64)
         self.beta = np.ascontiguousarray(beta, dtype=np.uint64)
-        self.handle = self.lib.ci_new(self.n, _d(self.h), _d(self.g), len(self.alpha), _u(self.alpha), _u(self.beta))
+        self.handle = self._f("ci_new")(self.n, _d(self.h), _d(self.g), len(self.alpha), _u(self.alpha), _u(self.beta))
         self.diag = np.zeros(len(self.alpha))
-        self.lib.ci_diag(self.handle, _d(self.diag))
+        self._f("ci_diag")(self.handle, _d(self.diag))
         self.cached, self.work_saved = 0, 0.0
 
     def plan(self, budget_bytes=2_000_000_000):
@@ -85,27 +105,28 @@ class Mesh:
         and remember the partner lists where that pays, within the memory
         budget. Returns (determinants cached, share of the search work removed)."""
         saved = ctypes.c_double(0.0)
-        self.cached = self.lib.ci_plan(self.handle, int(budget_bytes), ctypes.byref(saved))
+        self.cached = self._f("ci_plan")(self.handle, int(budget_bytes), ctypes.byref(saved))
         self.work_saved = saved.value
         return self.cached, self.work_saved
 
     def __del__(self):
         if getattr(self, "handle", None):
-            self.lib.ci_free(self.handle)
+            self._f("ci_free")(self.handle)
             self.handle = None
 
     def sigma(self, c):
         out = np.empty_like(c)
-        self.lib.ci_sigma(self.handle, _d(c), _d(out))
+        self._f("ci_sigma")(self.handle, _d(c), _d(out))
         return out
 
     def candidates(self, c, energy, eps, count):
         """Up to `count` determinants outside the list, best first, with the
         energy each is estimated to bring, and the estimate summed over all
         that were found."""
-        a, b, gain = np.zeros(count, np.uint64), np.zeros(count, np.uint64), np.zeros(count)
+        shape = (count, 2) if self.wide else count
+        a, b, gain = np.zeros(shape, np.uint64), np.zeros(shape, np.uint64), np.zeros(count)
         total, written = ctypes.c_double(0.0), ctypes.c_size_t(0)
-        found = self.lib.ci_candidates(self.handle, _d(c), energy, eps, count, _u(a), _u(b), _d(gain),
+        found = self._f("ci_candidates")(self.handle, _d(c), energy, eps, count, _u(a), _u(b), _d(gain),
                                        ctypes.byref(total), ctypes.byref(written))
         k = written.value
         return a[:k], b[:k], gain[:k], total.value, found
@@ -118,7 +139,7 @@ class Mesh:
         total, found = 0.0, 0
         for part in range(parts):
             piece = ctypes.c_double(0.0)
-            found += self.lib.ci_pt2(self.handle, _d(c), energy, eps, parts, part, ctypes.byref(piece))
+            found += self._f("ci_pt2")(self.handle, _d(c), energy, eps, parts, part, ctypes.byref(piece))
             total += piece.value
             if report:
                 report(part + 1, parts, total, found)
@@ -178,7 +199,7 @@ def save_state(path, alpha, beta, c, history):
 
 
 def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, growth=2.0, eps=1e-4, tol=0.0,
-            report=None, store=None, plan_bytes=2_000_000_000):
+            report=None, store=None, plan_bytes=2_000_000_000, wide=None):
     """Grow a list of determinants from the reference until it holds
     `max_determinants`, or until a step lowers the energy by less than `tol`,
     or until nothing more is found (then the result is full CI).
@@ -187,13 +208,14 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
     entry is (determinants, energy, estimate); the energy is an upper bound,
     the estimate (second-order perturbation theory over the candidates that
     were looked at) is not."""
-    alpha = np.array([(1 << n_alpha) - 1], dtype=np.uint64)
-    beta = np.array([(1 << n_beta) - 1], dtype=np.uint64)
+    wide = h.shape[0] > 64 if wide is None else wide      # 128-bit strings; forced on only for testing
+    alpha, beta = strings([(1 << n_alpha) - 1], wide), strings([(1 << n_beta) - 1], wide)
     c, history = np.ones(1), []
     if store and Path(store).exists():
         with np.load(store) as f:
             k = min(len(f["alpha"]), max_determinants)
-            if k and bin(int(f["alpha"][0])).count("1") == n_alpha and bin(int(f["beta"][0])).count("1") == n_beta:
+            if (k and (f["alpha"].ndim == 2) == wide and electrons(f["alpha"][0]) == n_alpha
+                    and electrons(f["beta"][0]) == n_beta):
                 alpha, beta, c = f["alpha"][:k].copy(), f["beta"][:k].copy(), f["c"][:k].astype(float)
     while True:
         mesh = Mesh(h, eri, alpha, beta)
@@ -202,7 +224,7 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
         energy, c = mesh.solve(start=c)
         room = min(max(int(len(alpha) * (growth - 1.0)), 200), max_determinants - len(alpha))
         rest, step_eps = 0.0, eps
-        new_a = new_b = np.zeros(0, np.uint64)
+        new_a = new_b = strings([], wide)
         for _ in range(12):                                # look further out until enough candidates turn up
             new_a, new_b, gain, rest, found = mesh.candidates(c, energy, step_eps, max(room, 1))
             if found >= 3 * room or step_eps < 1e-9:
