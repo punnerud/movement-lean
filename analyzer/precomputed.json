@@ -484,6 +484,38 @@
     "E_Cl_minus_hartree_fock": -459.560857,
     "seconds": 6031,
     "command": "python3 analyzer/cl_affinity.py 0.15,0.6 0.1,0.4,1.2 0.15,0.4,1.0 0.3,0.8 -2000000",
-    "note": "selected CI on a free list of determinants (mesh_ci), two threads on an M3; values as printed, six decimals. Each energy is an upper bound for its species; the difference is not a bound. Smaller lists: 823296 determinants give Cl- -459.788737, Cl -459.662617."
+    "note": "selected CI on a free list of determinants (mesh_ci), two threads on an M3; values as printed, six decimals. Each energy is an upper bound for its species; the difference is not a bound. Smaller lists: 823296 determinants give Cl- -459.788737, Cl -459.662617.",
+    "second_order_rest": {
+      "command": "python3 analyzer/cl_rest.py 0.15,0.6 0.1,0.4,1.2 0.15,0.4,1.0 0.3,0.8",
+      "thresholds": [
+        0.0001,
+        3e-05,
+        1e-05,
+        3e-06,
+        1e-06
+      ],
+      "rest_Cl_minus_hartree": [
+        -4.5e-05,
+        -0.000205,
+        -0.000603,
+        -0.001106,
+        -0.001438
+      ],
+      "rest_Cl_hartree": [
+        -2e-05,
+        -3.6e-05,
+        -7.8e-05,
+        -0.000252,
+        -0.000386
+      ],
+      "electron_affinity_with_rest_eV": [
+        3.4648,
+        3.4688,
+        3.4784,
+        3.4874,
+        3.4928
+      ],
+      "note": "estimate, not a bound; not converged with the threshold (still growing at 1e-6)"
+    }
   }
 }
