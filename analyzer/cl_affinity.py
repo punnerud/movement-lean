@@ -12,6 +12,8 @@ Each species uses its own Hartree-Fock orbitals.
 
     python3 analyzer/cl_affinity.py                 # 20 orbitals, 11 GB, 7 minutes on an M3; writes analyzer/precomputed.json
     python3 analyzer/cl_affinity.py 0.25 0.3 0.6 0.5   # s', p', d, f exponents ("-" for none): test run
+    python3 analyzer/cl_affinity.py S P D F LEVEL FROZEN   # LEVEL < 0: mesh of -LEVEL determinants;
+                                                           # FROZEN orbitals stay doubly occupied (default 5)
 """
 import json
 import sys
@@ -46,9 +48,10 @@ def spherical_hf(S, h, eri, occupations):
     return float(0.5 * np.sum(D * (h + F))), C
 
 
-def active_space(occupations, extra_s, extra_p, extra_d, extra_f=()):
+def active_space(occupations, extra_s, extra_p, extra_d, extra_f=(), frozen=5):
     """Integrals for the outer electrons of chlorine in the 3s and 3p orbitals
-    plus correlating functions, with the inner ten electrons frozen.
+    plus correlating functions, with the lowest `frozen` orbitals kept doubly
+    occupied (5: the inner ten electrons; 1: only 1s, so 2s and 2p correlate too).
     Returns (h, eri, core energy, Hartree-Fock energy)."""
     funcs = functions(CL_S, CL_P)
     n_sp = len(funcs)
@@ -60,7 +63,7 @@ def active_space(occupations, extra_s, extra_p, extra_d, extra_f=()):
     e_hf, C_sp = spherical_hf(S[np.ix_(sp, sp)], h[np.ix_(sp, sp)], eri[np.ix_(sp, sp, sp, sp)], occupations)
     n = S.shape[0]
     C = np.zeros((n, 9)); C[:n_sp] = C_sp[:, :9]
-    core, valence = C[:, :5], C[:, 5:9]
+    core, valence = C[:, :frozen], C[:, frozen:9]
     Dc = 2.0 * core @ core.T
     G = np.einsum("ijkl,kl->ij", eri, Dc) - 0.5 * np.einsum("ikjl,kl->ij", eri, Dc)
     e_core = float(np.sum(Dc * (h + 0.5 * G)))
@@ -83,7 +86,7 @@ def active_space(occupations, extra_s, extra_p, extra_d, extra_f=()):
     E = E @ quantum.orthogonalizer(E.T @ S @ E, 1e-8)
     A = np.hstack([valence, E])
     # canonical orbitals of the average field, for the CI preconditioner
-    Dv = (valence * np.asarray(occupations[5:9], float)) @ valence.T
+    Dv = (valence * np.asarray(occupations[frozen:9], float)) @ valence.T
     F = h_eff + np.einsum("ijkl,kl->ij", eri, Dv) - 0.5 * np.einsum("ikjl,kl->ij", eri, Dv)
     _, U = np.linalg.eigh(A.T @ F @ A)
     A = A @ U
@@ -91,22 +94,24 @@ def active_space(occupations, extra_s, extra_p, extra_d, extra_f=()):
     return A.T @ h_eff @ A, quantum._transform(eri, A), e_core, e_hf
 
 
-def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=(), level=None):
+def valence_ci(n_alpha, n_beta, occupations, extra_s, extra_p, extra_d, extra_f=(), level=None, frozen=5):
     """Frozen-core CI energy of the outer electrons of chlorine."""
-    ha, ga, e_core, e_hf = active_space(occupations, extra_s, extra_p, extra_d, extra_f)
+    ha, ga, e_core, e_hf = active_space(occupations, extra_s, extra_p, extra_d, extra_f, frozen)
+    n_alpha, n_beta = n_alpha + 5 - frozen, n_beta + 5 - frozen
+    core_tag = "" if frozen == 5 else f"_frozen{frozen}"
     m = ha.shape[0]
     if level and level < 0:
         # free mesh of determinants (Rust kernel), at most -level of them
         import mesh_ci
         label = "_".join(",".join(f"{x:g}" for x in t) or "-" for t in (extra_s, extra_p, extra_d, extra_f))
-        store = Path(__file__).resolve().parent / "ci_cache" / f"Cl_mesh_{n_alpha}{n_beta}_{label}.npz"
+        store = Path(__file__).resolve().parent / "ci_cache" / f"Cl_mesh_{n_alpha}{n_beta}_{label}{core_tag}.npz"
         e_ci, rest, _ = mesh_ci.mesh_ci(
             ha, ga, n_alpha, n_beta, e_nuc=e_core, max_determinants=-level, store=store,
             report=lambda nd, e, r: print(f"    {nd:9d} determinants  {e:.6f}   with estimate of the rest {e + r:.6f}", flush=True))
     elif level and level > 9:
         # iterative selected CI: grow the set of strings up to `level` per spin
         label = "_".join(",".join(f"{x:g}" for x in t) or "-" for t in (extra_s, extra_p, extra_d, extra_f))
-        store = Path(__file__).resolve().parent / "ci_cache" / f"Cl_{n_alpha}{n_beta}_{label}.npz"
+        store = Path(__file__).resolve().parent / "ci_cache" / f"Cl_{n_alpha}{n_beta}_{label}{core_tag}.npz"
         e_ci, _ = quantum.iterative_ci(ha, ga, n_alpha, n_beta, e_nuc=e_core, max_strings=level, store=store,
                                        report=lambda na, nb, e: print(f"    {na:6d} x {nb:6d} strings  {e:.6f}", flush=True))
     elif level:
@@ -125,13 +130,14 @@ def main():
         extra_s, extra_p, extra_d = (parse(t) for t in sys.argv[1:4])
         extra_f = parse(sys.argv[4]) if len(sys.argv) > 4 else ()
         level = int(sys.argv[5]) if len(sys.argv) > 5 else None
+        frozen = int(sys.argv[6]) if len(sys.argv) > 6 else 5
     else:
-        extra_s, extra_p, extra_d, extra_f, level = EXTRA_S, EXTRA_P, EXTRA_D, (), None
+        extra_s, extra_p, extra_d, extra_f, level, frozen = EXTRA_S, EXTRA_P, EXTRA_D, (), None, 5
     closed = (2,) * 9
     open_ = (2,) * 6 + (5 / 3,) * 3
-    hf_m, ci_m, m = valence_ci(4, 4, closed, extra_s, extra_p, extra_d, extra_f, level)
+    hf_m, ci_m, m = valence_ci(4, 4, closed, extra_s, extra_p, extra_d, extra_f, level, frozen)
     print(f"Cl-  {m} active orbitals  HF {hf_m:.6f}  valence CI {ci_m:.6f}  ({time.time() - t0:.0f} s)", flush=True)
-    _, ci_0, _ = valence_ci(4, 3, open_, extra_s, extra_p, extra_d, extra_f, level)
+    _, ci_0, _ = valence_ci(4, 3, open_, extra_s, extra_p, extra_d, extra_f, level, frozen)
     print(f"Cl   valence CI {ci_0:.6f}  ({time.time() - t0:.0f} s)", flush=True)
     ea = (ci_0 - ci_m) * HARTREE_EV
     print(f"electron affinity {ea:.4f} eV   (measured 3.6127, Hartree-Fock about 2.58)")
