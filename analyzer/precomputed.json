@@ -600,7 +600,7 @@
    "binding_energy_eV": 8.7842,
    "binding_energy_with_rest_eV": 8.8041,
    "reference_eV": 9.905,
-   "reference_note": "entered from memory (D0 plus zero-point energy), not checked against a source",
+   "reference_note": "D0 = 78715 ± 50 cm-1 (9.7594 eV; a 2005 measurement by Tang, Hou and Ng gives 9.7543 ± 0.0010) plus the zero-point energy 1175.7 cm-1 from omega_e 2358.57 and omega_e x_e 14.324 (NIST): De 9.905 (or 9.900) eV",
    "before_settled_orbitals": {
     "E_N2_hartree": -109.34944,
     "E_N_hartree": -54.514873,
@@ -772,7 +772,7 @@
   }
  },
  "diffusion_with_reaction": {
-  "note": "Diffusion Monte Carlo written from first principles (analyzer/diffusion_mc.py, cikernel/src/walk.rs). Long runs on two threads: 20000 walkers, time steps 0.02/0.01/0.005 (times the system's time unit), straight line to step zero. Values are (energy, statistical error). References marked unchecked were entered from memory.",
+  "note": "Diffusion Monte Carlo written from first principles (analyzer/diffusion_mc.py, cikernel/src/walk.rs). Long runs on two threads: 20000 walkers, time steps 0.02/0.01/0.005 (times the system's time unit), straight line to step zero. Values are (energy, statistical error). References were checked against sources on 2026-11-23 (see diffusion_mc.py); HeH+ corrected from -2.978706 to -2.978708.",
   "electrons_hartree": {
    "H": [
     -0.50006,
@@ -795,20 +795,18 @@
    "H3+": [
     -1.34422,
     0.00074,
-    -1.343836,
-    "unchecked"
+    -1.343836, "arXiv:1105.5435"
    ],
    "HeH+": [
     -2.97747,
     0.00107,
-    -2.978706,
-    "unchecked"
+    -2.978708, "Pachucki 2012"
    ],
    "H3_saddle": [
     -1.65226,
     0.00114,
     -1.659162,
-    "unchecked; fixed zero surfaces of a simple guess, upper bound"
+    "E(H) + E(H2) + 9.61 kcal/mol (Diedrich and Anderson 1992); fixed zero surfaces of a simple guess, upper bound"
    ]
   },
   "reactions_millihartree": {
@@ -855,8 +853,7 @@
    "positronium_ion": [
     -0.260314,
     0.00075,
-    -0.26200507,
-    "unchecked"
+    -0.26200507, "Frolov"
    ]
   },
   "charmonium_GeV": {
@@ -876,7 +873,7 @@
    "1P_minus_1S_MeV": {
     "walkers": 428,
     "radial_grid": 428,
-    "measured_unchecked": 457
+    "measured": 457
    }
   },
   "guess_improvement_small_test": {
@@ -981,7 +978,7 @@
   },
   "H3_richer_orbitals": {
    "command": "python3 analyzer/diffusion_mc.py orbitals long",
-   "note": "20000 walkers, duration 200, steps 0.02 and 0.01. Richer orbitals: second exponent and p function along the line on each atom (diffusion_mc.h3_orbitals). Both guesses carry the 8 extra terms and were improved by iterated search then simplex. Reference -1.659162 is unchecked.",
+   "note": "20000 walkers, duration 200, steps 0.02 and 0.01. Richer orbitals: second exponent and p function along the line on each atom (diffusion_mc.h3_orbitals). Both guesses carry the 8 extra terms and were improved by iterated search then simplex. Reference -1.659162 = E(H) + E(H2) + 9.61 kcal/mol.",
    "simple_orbitals": {
     "spread": 0.18,
     "guess_alone": -1.6455,
@@ -1044,7 +1041,7 @@
      15.44,
      0.75
     ],
-    "reference_unchecked": 15.31,
+    "reference": 15.31,
     "note": "E(H3) from this run minus E(H) and E(H2) from the long runs"
    }
   }

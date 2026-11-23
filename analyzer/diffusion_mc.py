@@ -447,7 +447,7 @@ PARTICLES = {
                                 1 / MU_MUH, 1 / MU_MUH, -MU_MUH / 2, "exact: -reduced mass / 2"),
     "positronium ion (e- e- e+)": ((1, 1, 1), (-1, -1, 1), {(0, 2): (-0.5, 0.3, -0.12), (1, 2): (-0.5, 0.3, -0.12),
                                                             (0, 1): (0.5, 0.3, 0.0)}, 3.0, 4.0, -0.262005070,
-                                   "variational calculations; from memory, not checked"),
+                                   "variational: -0.262005070233, Frolov"),
 }
 
 
@@ -479,8 +479,9 @@ def radial_levels(mu, potential, l=0, count=2, r_max=30.0, points=20000):
 # These are the single-channel parameters (kappa = 0.52, a = 2.34 / GeV, m_c = 1.84 GeV), as quoted in
 # arXiv:1208.2186; the model's own table of levels has not been compared.
 M_C, KAPPA, A_CORNELL = 1.84, 0.52, 2.34
-# measured masses in GeV (entered from memory): spin-averaged 1S (eta_c, J/psi) and the centre of the 1P states
-MEASURED = {"1S": (3 * 3.0969 + 2.9839) / 4, "1P": 3.5253}
+# measured masses in GeV (Particle Data Group values as tabulated on Wikipedia's Quarkonium page; the PDG table itself
+# was not read): spin-averaged 1S (J/psi 3.0969, eta_c 2.9834) and the centre of the 1P states (chi_c0, chi_c1, chi_c2)
+MEASURED = {"1S": (3 * 3.0969 + 2.9834) / 4, "1P": (3.41475 + 3 * 3.51066 + 5 * 3.55620) / 9}
 
 
 def charmonium_main(quick):
@@ -525,12 +526,12 @@ CASES = {
     "He": ([(2, (0, 0, 0))], (1, 1), 2.0, None, None, -2.903724, "Pekeris, non-relativistic"),
     "H2": ([(1, (0, 0, -0.7)), (1, (0, 0, 0.7))], (1, 1), 1.19, None, None, -1.174476, "Kolos and Wolniewicz, 1.4 bohr"),
     "H3+": ([(1, (0, 0, 0)), (1, (1.65, 0, 0)), (1, (0.825, S3, 0))], (1, 1), 1.35, None, None, -1.343836,
-            "equilateral, side 1.65 bohr; from memory, not checked"),
-    "HeH+": ([(2, (0, 0, 0)), (1, (0, 0, 1.4632))], (1, 1), (2.116, 1.18), [[1.0, 0.25]], [[1.0, 0.25]], -2.978706,
-             "1.4632 bohr; from memory, not checked"),
+            "equilateral, side 1.65 bohr: -1.34383562502, quoted in arXiv:1105.5435"),
+    "HeH+": ([(2, (0, 0, 0)), (1, (0, 0, 1.4632))], (1, 1), (2.116, 1.18), [[1.0, 0.25]], [[1.0, 0.25]], -2.978708,
+             "Pachucki 2012: -2.978708311 at 1.463283 bohr (arXiv:1203.3927); run at 1.4632"),
     # three electrons: the wavefunction changes sign, the walkers stay on one side (upper bound)
     "H3": ([(1, (0, 0, -1.757)), (1, (0, 0, 0)), (1, (0, 0, 1.757))], (2, 1), 1.2, [[1.0, 1.0, 1.0], [1.0, 0.0, -1.0]],
-           [[1.0, 1.0, 1.0]], -1.659162, "linear saddle of H + H2, 1.757 bohr; from memory (barrier 9.61 kcal/mol), not checked"),
+           [[1.0, 1.0, 1.0]], -1.659162, "linear saddle of H + H2, 1.757 bohr: E(H) + E(H2) + barrier 9.61 ± 0.01 kcal/mol (Diedrich and Anderson 1992)"),
 }
 # reactions: name, {species: count} (products positive), reference in hartree
 REACTIONS = [("H2 -> 2 H (binding energy)", {"H": 2, "H2": -1}, 0.174476),
