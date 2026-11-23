@@ -511,6 +511,21 @@ Three things should be said plainly:
 | H₃, richer form, search then simplex | 0.176 | 3.9 |
 
 The richer form cuts the noise of H₂ by a factor of four, which the simple form could not do with any parameters. The iterated search is the more robust of the two: on helium the simplex let the scale of the new terms run off until they vanished, and gained nothing. Where the simplex works it gets slightly further, and the search followed by a simplex polish is best or close to best in all three. For H₃ the new terms do not move the zero surfaces, so the error from them remains: the short runs with the richer guess lie 4 to 12 mEh above the reference, with error bars of 3 to 4. 
+**Long runs with the improved guesses, and a second calculation of our own.** The six species were run again with guesses improved from samples (`diffusion_mc.py improved`; no reference value enters anywhere). Beside them stands a calculation by a different method with nothing from the literature: full CI in our own Gaussian functions (`own_reference.py`), which is an upper bound limited by its small basis. A published value is then a third opinion.
+
+| | Walkers, improved guess | Walkers, simple guess | Our full CI (upper bound) | Published | Walkers − published |
+|---|---|---|---|---|---|
+| H | −0.50000(0) | −0.50006(27) | −0.499849 | −0.5 | 0.00 mEh |
+| He | −2.90370(5) | −2.90263(69) | −2.896011 (our Hylleraas: −2.903716) | −2.903724 | +0.03 mEh |
+| H₂ | −1.17418(10) | −1.17368(44) | −1.171948 | −1.174476 | +0.29 mEh, 3.1 errors |
+| H₃⁺ | −1.34390(10) | −1.34422(74) | −1.341399 | −1.343836 | −0.06 mEh |
+| HeH⁺ | −2.97808(21) | −2.97747(107) | −2.973865 | −2.978708 | +0.62 mEh, 3.0 errors |
+| H₃ at the saddle | −1.65844(23) | −1.65226(114) | −1.655474 | −1.659162 | +0.72 mEh, 3.1 errors |
+| Binding energy of H₂ | 174.18(10) mEh | 173.6(7) | | 174.48 | −0.30 mEh |
+| Barrier of H + H₂ | 15.74(25) mEh | 21.5(1.3) | | 15.31 | +0.43 mEh |
+
+The improved guesses cut the statistical error by a factor of five to fourteen, and for hydrogen the search found the exact wavefunction. The walkers lie below our own full CI for every species, as they must. But with the noise gone, three of the six (H₂, HeH⁺, H₃) sit about three error bars above the published values, by 0.3 to 0.7 mEh. For H₃ part of this can be the zero surfaces. For H₂ and HeH⁺ it cannot, since with two electrons the answer should not depend on the guess. In HeH⁺ the energy falls steadily as the step shrinks (−2.97752, −2.97768, −2.97812), so a straight line to step zero probably lands too high; that is the likely cause and it has not been examined. Until it is, the honest accuracy of this engine is about half a millihartree, not the quoted error bars.
+
 **Following the gradient instead of searching.** The spread on a fixed set of sample points is a smooth function of the parameters, so its gradient can be followed (`diffusion_mc.py gradient`; the gradient is taken by differences, not yet by automatic differentiation). Three uses of the gradient were compared with the search at the same number of evaluations, each also with the positive parameters on a logarithmic scale. Spread on fresh sample points after three rounds:
 
 | | He (13 parameters) | H₂ (11) | H₃, richer orbitals (23) |
