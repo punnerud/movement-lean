@@ -56,6 +56,8 @@ def kernel():
                                            ctypes.POINTER(size)]
         lib.walk_run.restype = ctypes.c_int
         lib.walk_run.argtypes = [size, dbl, dbl, dbl, size, size, dbl, dbl] + [ctypes.c_double] * 2 + [size, size, size, ctypes.c_uint64, dbl, dbl]
+        lib.walk_particles.restype = ctypes.c_int
+        lib.walk_particles.argtypes = [size, dbl, dbl, dbl, dbl, dbl] + [ctypes.c_double] * 2 + [size, size, size, ctypes.c_uint64, dbl, dbl]
         _lib = lib
     return _lib
 

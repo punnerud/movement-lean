@@ -25,6 +25,7 @@ is E(H3 at the saddle) - E(H) - E(H2).
     python3 analyzer/diffusion_mc.py            # all species and reactions, long (hours on two threads)
     python3 analyzer/diffusion_mc.py H3 H3+     # only these species; results are kept in ci_cache/diffusion_mc.json
     python3 analyzer/diffusion_mc.py quick      # fewer steps
+    python3 analyzer/diffusion_mc.py particles [quick]   # nothing held fixed: positronium, hydrogen with a moving proton, ...
     python3 analyzer/diffusion_mc.py python     # the walker loop in numpy instead of Rust (same algorithm, slower)
 """
 import json
@@ -94,8 +95,14 @@ def free_walk(walkers=20000, steps=200, tau=0.01, seed=1):
 
 
 def _blocks(e):
-    blocks = e[:len(e) // 20 * 20].reshape(20, -1).mean(1)
-    return float(blocks.mean()), float(blocks.std(ddof=1) / np.sqrt(20))
+    """Mean and its statistical error. Successive steps are correlated, so the error is taken
+    from the means of long blocks; the largest value over several block lengths is used, since
+    blocks shorter than the correlation time give too small an error."""
+    errors = []
+    for count in (40, 20, 10, 5):
+        blocks = e[:len(e) // count * count].reshape(count, -1).mean(1)
+        errors.append(blocks.std(ddof=1) / np.sqrt(count))
+    return float(e.mean()), float(max(errors))
 
 
 def energy_rust(guess, electrons, tau, walkers=3000, duration=150.0, seed=1):
@@ -152,6 +159,66 @@ def energy(guess, electrons, tau, walkers=3000, duration=150.0, seed=1):
     return (*_blocks(np.array([s[0] for s in samples[warm - warm // 2:]])), float(np.mean(first)))
 
 
+def particles_energy(masses, charges, pairs, tau, length=1.0, time_unit=1.0, walkers=3000, duration=150.0, seed=1):
+    """Lowest energy of particles with the given masses and charges, Coulomb forces between
+    all pairs, nothing held fixed. pairs[(i, j)] = (a, b, c) gives the guess
+    exp(sum of (a r + c r^2) / (1 + b r)) (see cikernel/src/walk.rs). `duration` and the
+    warm-up of 20 are in units of `time_unit`. Returns (mean, error, mean of the guess alone)."""
+    import ctypes
+    import mesh_ci
+    lib = mesh_ci.kernel()
+    n = len(masses)
+    A, B, C = np.zeros((n, n)), np.zeros((n, n)), np.zeros((n, n))
+    for (i, j), (a, b, c) in pairs.items():
+        A[i, j] = A[j, i] = a
+        B[i, j] = B[j, i] = b
+        C[i, j] = C[j, i] = c
+    warm, steps = int(20.0 * time_unit / tau), int(duration * time_unit / tau)
+    out, alone = np.zeros(steps), ctypes.c_double(0.0)
+    m, q = np.array(masses, float), np.array(charges, float)
+    if lib.walk_particles(n, mesh_ci._d(m), mesh_ci._d(q), mesh_ci._d(A), mesh_ci._d(B), mesh_ci._d(C), length, tau,
+                          walkers, warm, steps, seed, mesh_ci._d(out), ctypes.byref(alone)):
+        raise ValueError("two to eight particles")
+    return (*_blocks(out), alone.value)
+
+
+def straight_line(taus, runs):
+    e, s = np.array([r[0] for r in runs]), np.array([r[1] for r in runs])
+    A = np.vstack([np.ones(len(taus)), taus]).T / s[:, None]
+    cov = np.linalg.inv(A.T @ A)
+    fit = cov @ A.T @ (e / s)
+    return float(fit[0]), float(np.sqrt(cov[0, 0]))
+
+
+M_P, M_MU = 1836.15267343, 206.7682830          # proton and muon masses in electron masses (CODATA 2018)
+MU_H, MU_MUH = M_P / (1 + M_P), M_MU * M_P / (M_MU + M_P)
+# name: masses, charges, pair functions, length, time unit, reference, source
+PARTICLES = {
+    "positronium (e- e+)": ((1, 1), (-1, 1), {(0, 1): (-0.5, 0.5, -0.2)}, 2.0, 4.0, -0.25, "exact: -1/4"),
+    "hydrogen, proton free to move": ((1, M_P), (-1, 1), {(0, 1): (-MU_H, 0.5, -0.45)}, 1.0, 1.0, -MU_H / 2,
+                                      "exact: -reduced mass / 2"),
+    "muonic hydrogen (mu- p)": ((M_MU, M_P), (-1, 1), {(0, 1): (-MU_MUH, 0.5 * MU_MUH, -0.45 * MU_MUH ** 2)},
+                                1 / MU_MUH, 1 / MU_MUH, -MU_MUH / 2, "exact: -reduced mass / 2"),
+    "positronium ion (e- e- e+)": ((1, 1, 1), (-1, -1, 1), {(0, 2): (-0.5, 0.3, -0.12), (1, 2): (-0.5, 0.3, -0.12),
+                                                            (0, 1): (0.5, 0.3, 0.0)}, 3.0, 4.0, -0.262005070,
+                                   "variational calculations; from memory, not checked"),
+}
+
+
+def particles_main(quick):
+    for name, (masses, charges, pairs, length, time_unit, reference, source) in PARTICLES.items():
+        t0 = time.time()
+        taus = [f * time_unit for f in (0.02, 0.01, 0.005)]
+        kw = dict(duration=30.0) if quick else dict(duration=600.0, walkers=20000)
+        runs = [particles_energy(masses, charges, pairs, tau, length, time_unit, seed=k + 1, **kw) for k, tau in enumerate(taus)]
+        e0, s0 = straight_line(taus, runs)
+        print(f"{name}: the guess alone {runs[-1][2]:.6g}; " +
+              ", ".join(f"step {tau:.3g}: {e:.6g} ± {s:.2g}" for tau, (e, s, _) in zip(taus, runs)) +
+              f"; step -> 0: {e0:.6g} ± {s0:.2g}   reference {reference:.6g} ({source}), "
+              f"difference {100 * (e0 - reference) / abs(reference):+.2f} % = {(e0 - reference) / s0:+.1f} errors   ({time.time() - t0:.0f} s)",
+              flush=True)
+
+
 def extrapolated(guess, electrons, taus, run=energy_rust, **kw):
     """Energies at each time step and the straight-line value at step zero."""
     runs = [run(guess, electrons, tau, seed=k + 1, **kw) for k, tau in enumerate(taus)]
@@ -187,6 +254,8 @@ STORE = Path(__file__).resolve().parent / "ci_cache" / "diffusion_mc.json"
 def main():
     args = sys.argv[1:]
     quick = "quick" in args
+    if "particles" in args:
+        return particles_main(quick)
     run = energy if "python" in args else energy_rust
     names = [a for a in args if a in CASES] or list(CASES)
     kw = dict(duration=30.0) if quick else dict(duration=150.0) if run is energy else dict(duration=600.0, walkers=20000)

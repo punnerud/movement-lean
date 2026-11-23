@@ -182,14 +182,56 @@ fn evaluate(g: &Guess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) {
     (ln, sign, grad, -0.5 * (lap + square) + v)
 }
 
-/// The drift of each electron, shortened where it is very large (next to a zero surface of the
-/// guess it grows like 1/distance, and a step tau * drift would overshoot): v becomes
-/// v (sqrt(1 + 2 v^2 tau) - 1) / (v^2 tau), which is v itself for small v^2 tau.
-fn shorten(drift: &mut [f64; DIM], electrons: usize, tau: f64) {
-    for i in 0..electrons {
-        let v2: f64 = drift[3 * i..3 * i + 3].iter().map(|t| t * t).sum();
-        if v2 * tau > 1e-12 {
-            let f = ((1.0 + 2.0 * v2 * tau).sqrt() - 1.0) / (v2 * tau);
+/// g = exp(sum over pairs u_ij(r_ij)) for particles of any mass and charge, with
+/// u(r) = (a r + c r^2) / (1 + b r): slope a at contact (the cusp, charge_i charge_j times the
+/// reduced mass), slope c / b far away. No sign changes: for particles that can be told apart,
+/// or two of a kind with opposite spins.
+struct PairGuess<'a> {
+    n: usize,
+    inv_mass: &'a [f64],
+    charge: &'a [f64],
+    a: &'a [f64],
+    b: &'a [f64],
+    c: &'a [f64],
+}
+
+fn evaluate_pairs(g: &PairGuess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) {
+    let (mut ln, mut grad, mut lap, mut v) = (0.0, [0.0; DIM], [0.0; MAX_ELECTRONS], 0.0);
+    for i in 0..g.n {
+        for j in 0..i {
+            let s = [x[3 * i] - x[3 * j], x[3 * i + 1] - x[3 * j + 1], x[3 * i + 2] - x[3 * j + 2]];
+            let r = (s[0] * s[0] + s[1] * s[1] + s[2] * s[2]).sqrt();
+            let (a, b, c) = (g.a[i * g.n + j], g.b[i * g.n + j], g.c[i * g.n + j]);
+            let q = 1.0 + b * r;
+            let top = a + 2.0 * c * r + b * c * r * r;
+            let u1 = top / (q * q);
+            let u2 = 2.0 * c / q - 2.0 * b * top / (q * q * q);
+            ln += (a * r + c * r * r) / q;
+            for k in 0..3 {
+                grad[3 * i + k] += u1 * s[k] / r;
+                grad[3 * j + k] -= u1 * s[k] / r;
+            }
+            lap[i] += u2 + 2.0 * u1 / r;
+            lap[j] += u2 + 2.0 * u1 / r;
+            v += g.charge[i] * g.charge[j] / r;
+        }
+    }
+    let mut kinetic = 0.0;
+    for i in 0..g.n {
+        let square: f64 = grad[3 * i..3 * i + 3].iter().map(|t| t * t).sum();
+        kinetic -= 0.5 * g.inv_mass[i] * (lap[i] + square);
+    }
+    (ln, 1.0, grad, kinetic + v)
+}
+
+/// The drift of each particle, shortened where it is very large (next to a zero surface of the
+/// guess it grows like 1/distance, and a step would overshoot): v becomes
+/// v (sqrt(1 + 2 v^2 t) - 1) / (v^2 t) with t = tau / mass, which is v itself for small v^2 t.
+fn shorten(drift: &mut [f64; DIM], inv_mass: &[f64], tau: f64) {
+    for (i, w) in inv_mass.iter().enumerate() {
+        let v2t: f64 = drift[3 * i..3 * i + 3].iter().map(|t| t * t).sum::<f64>() * tau * w;
+        if v2t > 1e-12 {
+            let f = ((1.0 + 2.0 * v2t).sqrt() - 1.0) / v2t;
             for k in 0..3 {
                 drift[3 * i + k] *= f;
             }
@@ -197,64 +239,35 @@ fn shorten(drift: &mut [f64; DIM], electrons: usize, tau: f64) {
     }
 }
 
-/// Runs `warm + steps` time steps of length `tau` with `walkers` walkers and writes the
-/// energy estimate of each of the last `steps` steps to `out`. The first half of the
-/// warm-up has no reaction; the mean (H g)/g over its second half goes to `guess_alone`.
-///
-/// # Safety
-/// `z` and `zeta` hold `n_nuc` values, `r` three coordinates per nucleus, `c_up` and `c_dn`
-/// `n_up` and `n_dn` rows of `n_nuc` orbital coefficients, `out` `steps` values.
-#[no_mangle]
-pub unsafe extern "C" fn walk_run(
-    n_nuc: usize, z: *const f64, r: *const f64, zeta: *const f64, n_up: usize, n_dn: usize,
-    c_up: *const f64, c_dn: *const f64, b: f64, tau: f64,
-    walkers: usize, warm: usize, steps: usize, seed: u64, out: *mut f64, guess_alone: *mut f64,
-) -> i32 {
-    let electrons = n_up + n_dn;
-    if electrons == 0 || n_up > MAX_ELECTRONS || n_dn > MAX_ELECTRONS || electrons > MAX_ELECTRONS || n_nuc == 0 {
-        return 1;
-    }
-    let z = std::slice::from_raw_parts(z, n_nuc);
-    let r = std::slice::from_raw_parts(r, 3 * n_nuc);
-    let zeta = std::slice::from_raw_parts(zeta, n_nuc);
-    let c_up = std::slice::from_raw_parts(c_up, n_up * n_nuc);
-    let c_dn = std::slice::from_raw_parts(c_dn, n_dn * n_nuc);
-    let out = std::slice::from_raw_parts_mut(out, steps);
-    let mut e_nuc = 0.0;
-    for a in 0..n_nuc {
-        for c in 0..a {
-            let d: f64 = (0..3).map(|k| (r[3 * a + k] - r[3 * c + k]).powi(2)).sum();
-            e_nuc += z[a] * z[c] / d.sqrt();
-        }
-    }
-    let g = Guess { z, r, zeta, n_up, n_dn, c_up, c_dn, b, e_nuc };
-    let n = 3 * electrons;
+/// The walker loop. `evaluate` gives (ln |g|, sign, grad ln |g|, (H g)/g); particle i diffuses
+/// with the constant 1 / (2 mass_i); `start` draws a starting position.
+#[allow(clippy::too_many_arguments)]
+fn run<E, S>(
+    evaluate: E, mut start: S, inv_mass: &[f64], tau: f64, walkers: usize, warm: usize, steps: usize,
+    seed: u64, out: &mut [f64],
+) -> f64
+where
+    E: Fn(&[f64; DIM]) -> (f64, f64, [f64; DIM], f64) + Sync,
+    S: FnMut(&mut Rng) -> [f64; DIM],
+{
+    let particles = inv_mass.len();
     let mut rng = Rng::new(seed, 0, 0);
     let mut pop: Vec<Walker> = (0..walkers)
-        .map(|_| {
-            loop {
-                let mut x = [0.0; DIM];
-                for i in 0..electrons {
-                    let a = (rng.next() % n_nuc as u64) as usize;
-                    for k in 0..3 {
-                        x[3 * i + k] = r[3 * a + k] + rng.normal();
-                    }
-                }
-                let (ln, sign, mut drift, local) = evaluate(&g, &x);
-                shorten(&mut drift, electrons, tau);
-                if sign != 0.0 && local.is_finite() {
-                    break Walker { x, ln, sign, drift, local, weight: 1.0 };
-                }
+        .map(|_| loop {
+            let x = start(&mut rng);
+            let (ln, sign, mut drift, local) = evaluate(&x);
+            shorten(&mut drift, inv_mass, tau);
+            if sign != 0.0 && local.is_finite() {
+                break Walker { x, ln, sign, drift, local, weight: 1.0 };
             }
         })
         .collect();
     let mut shift = pop.iter().map(|w| w.local).sum::<f64>() / walkers as f64;
     let (mut first, mut first_count) = (0.0, 0usize);
-    let sigma = tau.sqrt();
     // (H g)/g is infinite where the guess is wrong in an essential way (at its zero surfaces, at a
-    // nucleus with the wrong cusp). A walker there would multiply without bound, so the rate is
-    // limited to 0.2 sqrt(electrons / tau) around the shift; the limit goes away as tau -> 0.
-    let limit = 0.2 * (electrons as f64 / tau).sqrt();
+    // contact with the wrong cusp). A walker there would multiply without bound, so the rate is
+    // limited to 0.2 sqrt(particles / tau) around the shift; the limit goes away as tau -> 0.
+    let limit = 0.2 * (particles as f64 / tau).sqrt();
     let mut next = Vec::with_capacity(walkers + walkers / 4);
     for step in 0..warm + steps {
         let react = step >= warm / 2;
@@ -265,16 +278,21 @@ pub unsafe extern "C" fn walk_run(
             for w in part.iter_mut() {
                 let mut x = w.x;
                 let mut forward = 0.0;
-                for k in 0..n {
-                    let kick = sigma * rng.normal();
-                    x[k] += tau * w.drift[k] + kick;
-                    forward += kick * kick;
+                for (i, im) in inv_mass.iter().enumerate() {
+                    let sigma = (tau * im).sqrt();
+                    for k in 3 * i..3 * i + 3 {
+                        let kick = sigma * rng.normal();
+                        x[k] += tau * im * w.drift[k] + kick;
+                        forward += kick * kick / im;
+                    }
                 }
-                let (ln, sign, mut drift, local) = evaluate(&g, &x);
-                shorten(&mut drift, electrons, tau);
+                let (ln, sign, mut drift, local) = evaluate(&x);
+                shorten(&mut drift, inv_mass, tau);
                 let mut back = 0.0;
-                for k in 0..n {
-                    back += (w.x[k] - x[k] - tau * drift[k]).powi(2);
+                for (i, im) in inv_mass.iter().enumerate() {
+                    for k in 3 * i..3 * i + 3 {
+                        back += (w.x[k] - x[k] - tau * im * drift[k]).powi(2) / im;
+                    }
                 }
                 let old = now + (w.local - now).clamp(-limit, limit);
                 // a move across a surface where the guess is zero is rejected
@@ -319,6 +337,86 @@ pub unsafe extern "C" fn walk_run(
             }
         }
     }
-    *guess_alone = if first_count > 0 { first / first_count as f64 } else { f64::NAN };
+    if first_count > 0 { first / first_count as f64 } else { f64::NAN }
+}
+
+/// Electrons around fixed nuclei. Runs `warm + steps` time steps of length `tau` with `walkers`
+/// walkers and writes the energy estimate of each of the last `steps` steps to `out`. The first
+/// half of the warm-up has no reaction; the mean (H g)/g over its second half goes to `guess_alone`.
+///
+/// # Safety
+/// `z` and `zeta` hold `n_nuc` values, `r` three coordinates per nucleus, `c_up` and `c_dn`
+/// `n_up` and `n_dn` rows of `n_nuc` orbital coefficients, `out` `steps` values.
+#[no_mangle]
+pub unsafe extern "C" fn walk_run(
+    n_nuc: usize, z: *const f64, r: *const f64, zeta: *const f64, n_up: usize, n_dn: usize,
+    c_up: *const f64, c_dn: *const f64, b: f64, tau: f64,
+    walkers: usize, warm: usize, steps: usize, seed: u64, out: *mut f64, guess_alone: *mut f64,
+) -> i32 {
+    let electrons = n_up + n_dn;
+    if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 {
+        return 1;
+    }
+    let z = std::slice::from_raw_parts(z, n_nuc);
+    let r = std::slice::from_raw_parts(r, 3 * n_nuc);
+    let zeta = std::slice::from_raw_parts(zeta, n_nuc);
+    let c_up = std::slice::from_raw_parts(c_up, n_up * n_nuc);
+    let c_dn = std::slice::from_raw_parts(c_dn, n_dn * n_nuc);
+    let out = std::slice::from_raw_parts_mut(out, steps);
+    let mut e_nuc = 0.0;
+    for a in 0..n_nuc {
+        for c in 0..a {
+            let d: f64 = (0..3).map(|k| (r[3 * a + k] - r[3 * c + k]).powi(2)).sum();
+            e_nuc += z[a] * z[c] / d.sqrt();
+        }
+    }
+    let g = Guess { z, r, zeta, n_up, n_dn, c_up, c_dn, b, e_nuc };
+    let start = |rng: &mut Rng| {
+        let mut x = [0.0; DIM];
+        for i in 0..electrons {
+            let a = (rng.next() % n_nuc as u64) as usize;
+            for k in 0..3 {
+                x[3 * i + k] = r[3 * a + k] + rng.normal();
+            }
+        }
+        x
+    };
+    *guess_alone = run(|x| evaluate(&g, x), start, &vec![1.0; electrons], tau, walkers, warm, steps, seed, out);
+    0
+}
+
+/// Particles of any mass and charge with Coulomb forces between all pairs and nothing held fixed.
+/// `a`, `b`, `c` are n x n tables of the pair functions' parameters (see `PairGuess`); the
+/// walkers start within `spread` of the origin. Otherwise as `walk_run`.
+///
+/// # Safety
+/// `mass` and `charge` hold `n` values, `a`, `b`, `c` `n * n` each, `out` `steps` values.
+#[no_mangle]
+pub unsafe extern "C" fn walk_particles(
+    n: usize, mass: *const f64, charge: *const f64, a: *const f64, b: *const f64, c: *const f64,
+    spread: f64, tau: f64, walkers: usize, warm: usize, steps: usize, seed: u64, out: *mut f64,
+    guess_alone: *mut f64,
+) -> i32 {
+    if n < 2 || n > MAX_ELECTRONS {
+        return 1;
+    }
+    let inv_mass: Vec<f64> = std::slice::from_raw_parts(mass, n).iter().map(|m| 1.0 / m).collect();
+    let g = PairGuess {
+        n,
+        inv_mass: &inv_mass,
+        charge: std::slice::from_raw_parts(charge, n),
+        a: std::slice::from_raw_parts(a, n * n),
+        b: std::slice::from_raw_parts(b, n * n),
+        c: std::slice::from_raw_parts(c, n * n),
+    };
+    let out = std::slice::from_raw_parts_mut(out, steps);
+    let start = |rng: &mut Rng| {
+        let mut x = [0.0; DIM];
+        for t in x.iter_mut().take(3 * n) {
+            *t = spread * rng.normal();
+        }
+        x
+    };
+    *guess_alone = run(|x| evaluate_pairs(&g, x), start, &inv_mass, tau, walkers, warm, steps, seed, out);
     0
 }
