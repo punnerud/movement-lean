@@ -27,6 +27,7 @@ is E(H3 at the saddle) - E(H) - E(H2).
     python3 analyzer/diffusion_mc.py quick      # fewer steps
     python3 analyzer/diffusion_mc.py particles [quick]   # nothing held fixed: positronium, hydrogen with a moving proton, ...
     python3 analyzer/diffusion_mc.py charmonium [quick]  # a charm quark and antiquark with a Coulomb-like pull plus a constant one
+    python3 analyzer/diffusion_mc.py improve    # improve the guesses of He, H2 and H3 from samples, and show what it buys
     python3 analyzer/diffusion_mc.py python     # the walker loop in numpy instead of Rust (same algorithm, slower)
 """
 import json
@@ -53,8 +54,8 @@ class Guess:
         self.Z = np.array([z for z, _ in nuclei], float)
         self.R = np.array([p for _, p in nuclei], float)
         self.zeta, self.b = np.broadcast_to(np.asarray(zeta, float), (len(nuclei),)).copy(), b
-        self.e_nuc = sum(self.Z[i] * self.Z[j] / np.linalg.norm(self.R[i] - self.R[j])
-                         for i in range(len(nuclei)) for j in range(i))
+        self.e_nuc = sum(self.Z[i] * self.Z[j] / np.linalg.norm(self.R[i] - self.R[j])      # a centre with charge 0
+                         for i in range(len(nuclei)) for j in range(i) if self.Z[i] * self.Z[j])   # only carries functions
 
     def evaluate(self, x):
         """x: (walkers, electrons, 3). Returns (ln g, grad ln g, local energy (H g)/g)."""
@@ -106,6 +107,85 @@ def _blocks(e):
     return float(e.mean()), float(max(errors))
 
 
+def _c_guess(guess, electrons):
+    """The guess as the leading arguments of the kernel's walk_* functions."""
+    import mesh_ci
+    guess._keep = (np.ascontiguousarray(guess.Z), np.ascontiguousarray(guess.R.ravel()), np.ascontiguousarray(guess.zeta),
+                   np.ascontiguousarray(guess.up), np.ascontiguousarray(guess.down[:electrons - len(guess.up)]))
+    Z, R, zeta, up, down = guess._keep
+    return (len(Z), mesh_ci._d(Z), mesh_ci._d(R), mesh_ci._d(zeta), len(up), len(down), mesh_ci._d(up), mesh_ci._d(down),
+            float(guess.b))
+
+
+def sample(guess, electrons, walkers=4000, steps=600, tau=0.05, seed=1):
+    """Positions distributed as g^2 (walkers x 3 electrons) and (H g)/g there: no reaction."""
+    import mesh_ci
+    x, local = np.zeros((walkers, 3 * electrons)), np.zeros(walkers)
+    if mesh_ci.kernel().walk_sample(*_c_guess(guess, electrons), tau, walkers, steps, seed, mesh_ci._d(x), mesh_ci._d(local)):
+        raise ValueError("too many electrons for the walker loop")
+    return x, local
+
+
+def local_energies(guess, electrons, x):
+    """(H g)/g and ln |g| at the given positions."""
+    import mesh_ci
+    x = np.ascontiguousarray(x)
+    local, ln = np.zeros(len(x)), np.zeros(len(x))
+    mesh_ci.kernel().walk_local(*_c_guess(guess, electrons), len(x), mesh_ci._d(x), mesh_ci._d(local), mesh_ci._d(ln))
+    return local, ln
+
+
+def improve(make, start, electrons, rounds=3, walkers=4000, report=None):
+    """Better parameters for a guess. make(parameters) returns a Guess. The exact wavefunction has
+    (H g)/g equal to the energy everywhere, so the spread of (H g)/g over a fixed set of sample
+    points measures how wrong g is, and is minimised (Nelder-Mead). The points are samples of
+    the current g^2 and are redrawn each round. Nothing here knows the true energy."""
+    from scipy.optimize import minimize
+    p = np.array(start, float)
+    for k in range(rounds + 1):
+        x, local = sample(make(p), electrons, walkers, seed=k + 1)
+        if report:
+            report(k, p, local.mean(), local.std() / np.sqrt(walkers), local.std())
+        if k == rounds:
+            break
+
+        def spread(q):
+            try:
+                e = local_energies(make(q), electrons, x)[0]
+            except (ValueError, FloatingPointError):
+                return 1e9
+            return float(np.var(e)) if np.all(np.isfinite(e)) else 1e9
+
+        p = minimize(spread, p, method="Nelder-Mead", options={"xatol": 1e-3, "fatol": 1e-7, "maxiter": 400}).x
+    return p
+
+
+H3_NUCLEI = [(1, (0, 0, -1.757)), (1, (0, 0, 0)), (1, (0, 0, 1.757))]
+# name: electrons (up, down), make(parameters), starting parameters, what they are
+IMPROVE = {
+    "He": ((1, 1), lambda p: Guess([(2, (0, 0, 0)), (0, (0, 0, 0))], (p[0], p[1]), p[3], up=[[1.0, p[2]]], down=[[1.0, p[2]]]),
+           (2.0, 1.0, 0.0, 0.4), "two exponents, weight of the second, b"),
+    "H2": ((1, 1), lambda p: Guess([(1, (0, 0, -0.7)), (1, (0, 0, 0.7))], p[0], p[1]), (1.19, 0.4), "exponent, b"),
+    "H3": ((2, 1), lambda p: Guess(H3_NUCLEI, (p[0], p[1], p[0]), p[2], up=[[1.0, p[3], 1.0], [1.0, 0.0, -1.0]], down=[[1.0, p[3], 1.0]]),
+           (1.2, 1.2, 0.4, 1.0), "exponent outer, exponent middle, b, weight of the middle atom"),
+}
+
+
+def improve_main():
+    taus = (0.02, 0.01, 0.005)
+    for name, ((n_up, n_dn), make, start, what) in IMPROVE.items():
+        t0 = time.time()
+        show = lambda k, p, e, s, spread: print(f"  {name} round {k}: {what} = {np.round(p, 3)}  guess alone {e:.4f} ± {s:.4f}  "
+                                                f"spread of (H g)/g {spread:.3f}", flush=True)
+        best = improve(make, start, n_up + n_dn, report=show)
+        reference = CASES[name][5]
+        for label, p in (("before", start), ("after", best)):
+            runs, e0, s0 = extrapolated(make(np.array(p, float)), n_up + n_dn, taus, duration=30.0)
+            print(f"  {name} walkers with the guess {label}: {e0:.5f} ± {s0:.5f}   (reference {reference:.6f}, "
+                  f"difference {1e3 * (e0 - reference):+.2f} mEh)", flush=True)
+        print(f"  ({time.time() - t0:.0f} s)")
+
+
 def energy_rust(guess, electrons, tau, walkers=3000, duration=150.0, seed=1):
     """The same as `energy`, with the walker loop in the Rust kernel (cikernel/src/walk.rs)."""
     import ctypes
@@ -113,11 +193,7 @@ def energy_rust(guess, electrons, tau, walkers=3000, duration=150.0, seed=1):
     lib = mesh_ci.kernel()
     warm, steps = int(20.0 / tau), int(duration / tau)
     out, alone = np.zeros(steps), ctypes.c_double(0.0)
-    Z, R = np.ascontiguousarray(guess.Z), np.ascontiguousarray(guess.R.ravel())
-    up = np.ascontiguousarray(guess.up)
-    down = np.ascontiguousarray(guess.down[:electrons - len(up)])
-    if lib.walk_run(len(Z), mesh_ci._d(Z), mesh_ci._d(R), mesh_ci._d(guess.zeta), len(up), len(down), mesh_ci._d(up),
-                    mesh_ci._d(down), guess.b, tau, walkers, warm, steps, seed, mesh_ci._d(out), ctypes.byref(alone)):
+    if lib.walk_run(*_c_guess(guess, electrons), tau, walkers, warm, steps, seed, mesh_ci._d(out), ctypes.byref(alone)):
         raise ValueError("too many electrons for the walker loop")
     return (*_blocks(out), alone.value)
 
@@ -306,6 +382,8 @@ def main():
     quick = "quick" in args
     if "particles" in args:
         return particles_main(quick)
+    if "improve" in args:
+        return improve_main()
     if "charmonium" in args:
         return charmonium_main(quick)
     run = energy if "python" in args else energy_rust

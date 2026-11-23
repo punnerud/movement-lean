@@ -258,12 +258,14 @@ fn shorten(drift: &mut [f64; DIM], inv_mass: &[f64], tau: f64) {
 }
 
 /// The walker loop. `evaluate` gives (ln |g|, sign, grad ln |g|, (H g)/g); particle i diffuses
-/// with the constant 1 / (2 mass_i); `start` draws a starting position.
+/// with the constant 1 / (2 mass_i); `start` draws a starting position. Reaction starts at step
+/// `react_from`; before it the walkers sample g^2. Returns the mean (H g)/g over the later part
+/// of the reaction-free steps, and the walkers as they are at the end.
 #[allow(clippy::too_many_arguments)]
 fn run<E, S>(
     evaluate: E, mut start: S, inv_mass: &[f64], tau: f64, walkers: usize, warm: usize, steps: usize,
-    seed: u64, out: &mut [f64],
-) -> f64
+    react_from: usize, seed: u64, out: &mut [f64],
+) -> (f64, Vec<Walker>)
 where
     E: Fn(&[f64; DIM]) -> (f64, f64, [f64; DIM], f64) + Sync,
     S: FnMut(&mut Rng) -> [f64; DIM],
@@ -288,7 +290,7 @@ where
     let limit = 0.2 * (particles as f64 / tau).sqrt();
     let mut next = Vec::with_capacity(walkers + walkers / 4);
     for step in 0..warm + steps {
-        let react = step >= warm / 2;
+        let react = step >= react_from;
         let now = shift;
         // diffusion with drift, accepted or rejected so that g^2 is sampled exactly at any step
         pop.par_chunks_mut(256).enumerate().for_each(|(chunk, part)| {
@@ -355,7 +357,117 @@ where
             }
         }
     }
-    if first_count > 0 { first / first_count as f64 } else { f64::NAN }
+    (if first_count > 0 { first / first_count as f64 } else { f64::NAN }, pop)
+}
+
+/// # Safety
+/// As `walk_run`.
+#[allow(clippy::too_many_arguments)]
+unsafe fn electron_guess<'a>(
+    n_nuc: usize, z: *const f64, r: *const f64, zeta: *const f64, n_up: usize, n_dn: usize,
+    c_up: *const f64, c_dn: *const f64, b: f64,
+) -> Guess<'a> {
+    let z = std::slice::from_raw_parts(z, n_nuc);
+    let r = std::slice::from_raw_parts(r, 3 * n_nuc);
+    let mut e_nuc = 0.0;
+    for a in 0..n_nuc {
+        for c in 0..a {
+            if z[a] * z[c] != 0.0 {                           // a centre with charge 0 only carries functions
+                let d: f64 = (0..3).map(|k| (r[3 * a + k] - r[3 * c + k]).powi(2)).sum();
+                e_nuc += z[a] * z[c] / d.sqrt();
+            }
+        }
+    }
+    Guess {
+        z,
+        r,
+        zeta: std::slice::from_raw_parts(zeta, n_nuc),
+        n_up,
+        n_dn,
+        c_up: std::slice::from_raw_parts(c_up, n_up * n_nuc),
+        c_dn: std::slice::from_raw_parts(c_dn, n_dn * n_nuc),
+        b,
+        e_nuc,
+    }
+}
+
+fn electron_start<'a>(r: &'a [f64], electrons: usize) -> impl FnMut(&mut Rng) -> [f64; DIM] + 'a {
+    let n_nuc = r.len() / 3;
+    move |rng: &mut Rng| {
+        let mut x = [0.0; DIM];
+        for i in 0..electrons {
+            let a = (rng.next() % n_nuc as u64) as usize;
+            for k in 0..3 {
+                x[3 * i + k] = r[3 * a + k] + rng.normal();
+            }
+        }
+        x
+    }
+}
+
+/// Writes positions and (H g)/g of the walkers after a run without reaction to `out_x`
+/// (3 * particles per walker) and `out_local`.
+fn hand_back(pop: &[Walker], particles: usize, out_x: &mut [f64], out_local: &mut [f64]) {
+    for (k, w) in pop.iter().enumerate() {
+        out_x[3 * particles * k..3 * particles * (k + 1)].copy_from_slice(&w.x[..3 * particles]);
+        out_local[k] = w.local;
+    }
+}
+
+/// (H g)/g and ln |g| at `count` given positions.
+fn locals<E>(evaluate: E, particles: usize, count: usize, x: &[f64], out_local: &mut [f64], out_ln: &mut [f64])
+where
+    E: Fn(&[f64; DIM]) -> (f64, f64, [f64; DIM], f64) + Sync,
+{
+    out_local.par_iter_mut().zip(out_ln.par_iter_mut()).enumerate().take(count).for_each(|(k, (local, ln))| {
+        let mut p = [0.0; DIM];
+        p[..3 * particles].copy_from_slice(&x[3 * particles * k..3 * particles * (k + 1)]);
+        let e = evaluate(&p);
+        *local = e.3;
+        *ln = e.0;
+    });
+}
+
+/// Electrons around fixed nuclei, no reaction: `steps` steps, then the walkers' positions and
+/// (H g)/g. These are samples of g^2, for improving the guess.
+///
+/// # Safety
+/// As `walk_run`; `out_x` holds 3 * electrons values per walker, `out_local` one.
+#[no_mangle]
+pub unsafe extern "C" fn walk_sample(
+    n_nuc: usize, z: *const f64, r: *const f64, zeta: *const f64, n_up: usize, n_dn: usize,
+    c_up: *const f64, c_dn: *const f64, b: f64, tau: f64,
+    walkers: usize, steps: usize, seed: u64, out_x: *mut f64, out_local: *mut f64,
+) -> i32 {
+    let electrons = n_up + n_dn;
+    if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 {
+        return 1;
+    }
+    let g = electron_guess(n_nuc, z, r, zeta, n_up, n_dn, c_up, c_dn, b);
+    let pop = run(|x| evaluate(&g, x), electron_start(g.r, electrons), &vec![1.0; electrons], tau, walkers, steps, 0,
+                  usize::MAX, seed, &mut []).1;
+    hand_back(&pop, electrons, std::slice::from_raw_parts_mut(out_x, 3 * electrons * walkers),
+              std::slice::from_raw_parts_mut(out_local, walkers));
+    0
+}
+
+/// Electrons around fixed nuclei: (H g)/g and ln |g| at `count` given positions.
+///
+/// # Safety
+/// As `walk_run`; `x` holds 3 * electrons values per position, the outputs one.
+#[no_mangle]
+pub unsafe extern "C" fn walk_local(
+    n_nuc: usize, z: *const f64, r: *const f64, zeta: *const f64, n_up: usize, n_dn: usize,
+    c_up: *const f64, c_dn: *const f64, b: f64, count: usize, x: *const f64, out_local: *mut f64, out_ln: *mut f64,
+) -> i32 {
+    let electrons = n_up + n_dn;
+    if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 {
+        return 1;
+    }
+    let g = electron_guess(n_nuc, z, r, zeta, n_up, n_dn, c_up, c_dn, b);
+    locals(|x| evaluate(&g, x), electrons, count, std::slice::from_raw_parts(x, 3 * electrons * count),
+           std::slice::from_raw_parts_mut(out_local, count), std::slice::from_raw_parts_mut(out_ln, count));
+    0
 }
 
 /// Electrons around fixed nuclei. Runs `warm + steps` time steps of length `tau` with `walkers`
@@ -375,31 +487,11 @@ pub unsafe extern "C" fn walk_run(
     if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 {
         return 1;
     }
-    let z = std::slice::from_raw_parts(z, n_nuc);
-    let r = std::slice::from_raw_parts(r, 3 * n_nuc);
-    let zeta = std::slice::from_raw_parts(zeta, n_nuc);
-    let c_up = std::slice::from_raw_parts(c_up, n_up * n_nuc);
-    let c_dn = std::slice::from_raw_parts(c_dn, n_dn * n_nuc);
+    let g = electron_guess(n_nuc, z, r, zeta, n_up, n_dn, c_up, c_dn, b);
+    let r = g.r;
     let out = std::slice::from_raw_parts_mut(out, steps);
-    let mut e_nuc = 0.0;
-    for a in 0..n_nuc {
-        for c in 0..a {
-            let d: f64 = (0..3).map(|k| (r[3 * a + k] - r[3 * c + k]).powi(2)).sum();
-            e_nuc += z[a] * z[c] / d.sqrt();
-        }
-    }
-    let g = Guess { z, r, zeta, n_up, n_dn, c_up, c_dn, b, e_nuc };
-    let start = |rng: &mut Rng| {
-        let mut x = [0.0; DIM];
-        for i in 0..electrons {
-            let a = (rng.next() % n_nuc as u64) as usize;
-            for k in 0..3 {
-                x[3 * i + k] = r[3 * a + k] + rng.normal();
-            }
-        }
-        x
-    };
-    *guess_alone = run(|x| evaluate(&g, x), start, &vec![1.0; electrons], tau, walkers, warm, steps, seed, out);
+    let start = electron_start(r, electrons);
+    *guess_alone = run(|x| evaluate(&g, x), start, &vec![1.0; electrons], tau, walkers, warm, steps, warm / 2, seed, out).0;
     0
 }
 
@@ -437,6 +529,6 @@ pub unsafe extern "C" fn walk_particles(
         }
         x
     };
-    *guess_alone = run(|x| evaluate_pairs(&g, x), start, &inv_mass, tau, walkers, warm, steps, seed, out);
+    *guess_alone = run(|x| evaluate_pairs(&g, x), start, &inv_mass, tau, walkers, warm, steps, warm / 2, seed, out).0;
     0
 }
