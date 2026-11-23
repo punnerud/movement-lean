@@ -537,30 +537,38 @@
      3e-05,
      1e-05,
      3e-06,
-     1e-06
+     1e-06,
+     3e-07,
+     1e-07
     ],
     "rest_Cl_minus_hartree": [
      -1.4e-05,
      -1.8e-05,
      -6.3e-05,
      -0.000283,
-     -0.000481
+     -0.000481,
+     -0.00057,
+     -0.000587
     ],
     "rest_Cl_hartree": [
      -3e-06,
      -5e-06,
      -7e-06,
      -2e-05,
-     -5.5e-05
+     -5.5e-05,
+     -8.1e-05,
+     -8.6e-05
     ],
     "electron_affinity_with_rest_eV": [
      3.4838,
      3.4838,
      3.485,
      3.4906,
-     3.4951
+     3.4951,
+     3.4968,
+     3.4971
     ],
-    "note": "estimate, not a bound; not yet levelled off at 1e-6. The rest is about a third of what it was with the old orbitals at the same threshold (Cl-: -0.000481 against -0.001438)."
+    "note": "estimate, not a bound. Levels off: the last step (3e-7 to 1e-7) changes the electron affinity by 0.0003 eV. The rest is about a third of what it was with the old orbitals (Cl-: -0.000587 against -0.001665), and the affinity with it is the same (3.4971 against 3.4962)."
    }
   }
  },
@@ -670,6 +678,33 @@
    "evaluations": 10,
    "seconds": 9247
   },
-  "note": "full CI in 20 orbitals, analytic gradient, BFGS on E(Cl-) + E(Cl). Both energies fall (4.1 and 6.0 millihartree) and the electron affinity falls by 0.054 eV, further from the measured 3.6127: the sum rewards the atom more than the ion."
+  "note": "full CI in 20 orbitals, analytic gradient, BFGS on E(Cl-) + E(Cl). Both energies fall (4.1 and 6.0 millihartree) and the electron affinity falls by 0.054 eV, further from the measured 3.6127: the sum rewards the atom more than the ion.",
+  "one_d_exponent_by_objective": {
+   "command": "python3 analyzer/optimize_exponents.py - 0.1,0.8 0.4 - 0 sum|ion|atom",
+   "orbitals": 15,
+   "start": {
+    "d_exponent": 0.4,
+    "electron_affinity_eV": 3.1154
+   },
+   "sum": {
+    "d_exponent": 0.5983,
+    "E_Cl_minus_hartree": -459.697308,
+    "E_Cl_hartree": -459.588597,
+    "electron_affinity_eV": 2.9582
+   },
+   "ion": {
+    "d_exponent": 0.5752,
+    "E_Cl_minus_hartree": -459.697442,
+    "E_Cl_hartree": -459.588186,
+    "electron_affinity_eV": 2.973
+   },
+   "atom": {
+    "d_exponent": 0.6203,
+    "E_Cl_minus_hartree": -459.69695,
+    "E_Cl_hartree": -459.58872,
+    "electron_affinity_eV": 2.9451
+   },
+   "note": "the three optima lie within 8 % of each other and the affinities within 0.03 eV; all are 0.14 to 0.17 eV below the hand-picked start. The choice of objective is therefore not what lowers the affinity."
+  }
  }
 }

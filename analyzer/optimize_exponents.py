@@ -2,15 +2,18 @@
 """Exponents of chlorine's correlating d and f functions, found by following
 the derivative of the energy instead of being chosen by hand.
 
-The objective is E(Cl-) + E(Cl) with the inner ten electrons frozen. Both
-energies are upper bounds, so their sum is one too and can be minimised
-freely; the electron affinity (their difference) is then read off, not fitted.
+The objective is E(Cl-) + E(Cl) with the inner ten electrons frozen, or one
+of the two alone (sixth argument: sum, ion or atom). Each energy is an upper
+bound, so any of these can be minimised freely; the electron affinity (their
+difference) is then read off, not fitted. Which one is minimised matters:
+the sum rewards the atom more than the ion and lowers the affinity, the ion
+alone gives the functions the extra electron needs.
 The derivative with respect to the logarithm of each exponent is computed
 from the functions themselves by automatic differentiation
 (exponent_gradient.py) when the energies are full CI, and by central
 differences otherwise. The search is quasi-Newton (BFGS) on those derivatives.
 
-    python3 analyzer/optimize_exponents.py S P D F [determinants]
+    python3 analyzer/optimize_exponents.py S P D F [determinants [sum|ion|atom]]
     python3 analyzer/optimize_exponents.py - 0.1,0.8 0.4 -        # one d exponent, full CI: the small test
 
 S and P are fixed ("-" for none); the D and F values are starting points.
@@ -49,6 +52,8 @@ def main():
     parse = lambda t: () if t == "-" else tuple(float(x) for x in t.split(","))
     extra_s, extra_p, d0, f0 = (parse(t) for t in sys.argv[1:5])
     determinants = int(sys.argv[5]) if len(sys.argv) > 5 else 200000
+    target = sys.argv[6] if len(sys.argv) > 6 else "sum"
+    weights = {"sum": (1.0, 1.0), "ion": (1.0, 0.0), "atom": (0.0, 1.0)}[target]
     nd = len(d0)
     t0 = time.time()
     seen = {}
@@ -57,7 +62,7 @@ def main():
     exact = 4 + 3 * len(extra_p) + len(extra_s) + 5 * nd + 7 * len(f0) <= FULL_CI_ORBITALS     # full CI, derivative from the functions
 
     def both(x):
-        """((E(Cl-), E(Cl)), gradient of their sum or None)."""
+        """((E(Cl-), E(Cl)), gradient of the objective or None)."""
         key = tuple(np.round(x, 10))
         if key not in seen:
             e = np.exp(x)
@@ -65,13 +70,13 @@ def main():
             if exact:
                 em, gm, _ = exponent_gradient.energy_and_gradient(4, 4, CLOSED, extra_s, extra_p, d, f)
                 e0, g0, _ = exponent_gradient.energy_and_gradient(4, 3, OPEN, extra_s, extra_p, d, f)
-                seen[key] = ((em, e0), gm + g0)
+                seen[key] = ((em, e0), weights[0] * gm + weights[1] * g0)
             else:
                 seen[key] = (energies(extra_s, extra_p, d, f, determinants), None)
         return seen[key]
 
     def objective(x):
-        return sum(both(x)[0])
+        return float(np.dot(weights, both(x)[0]))
 
     def gradient(x):
         if exact:
@@ -87,7 +92,7 @@ def main():
     def show(x, label):
         em, e0 = both(x)[0]
         g = gradient(x)
-        print(f"{label}: exponents {np.round(np.exp(x), 4)}  E(Cl-) {em:.6f}  E(Cl) {e0:.6f}  sum {em + e0:.6f}  "
+        print(f"{label}: exponents {np.round(np.exp(x), 4)}  E(Cl-) {em:.6f}  E(Cl) {e0:.6f}  objective ({target}) {objective(x):.6f}  "
               f"dE/dln(exponent) {np.round(1e3 * g, 3)} mEh  electron affinity {(e0 - em) * cl_affinity.HARTREE_EV:.4f} eV  "
               f"({len(seen)} evaluations, {time.time() - t0:.0f} s)", flush=True)
 
