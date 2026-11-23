@@ -29,6 +29,7 @@ is E(H3 at the saddle) - E(H) - E(H2).
     python3 analyzer/diffusion_mc.py charmonium [quick]  # a charm quark and antiquark with a Coulomb-like pull plus a constant one
     python3 analyzer/diffusion_mc.py improve    # improve the guesses of He, H2 and H3 from samples: simple and richer form,
                                                 # simplex and iterated search, and what each buys (add polish: only the last variant)
+    python3 analyzer/diffusion_mc.py improved [quick] [species...]   # long runs with improved guesses (hours)
     python3 analyzer/diffusion_mc.py orbitals [long]   # H3 with richer orbitals: do the zero surfaces get better?
     python3 analyzer/diffusion_mc.py python     # the walker loop in numpy instead of Rust (same algorithm, slower)
 """
@@ -541,6 +542,58 @@ REACTIONS = [("H2 -> 2 H (binding energy)", {"H": 2, "H2": -1}, 0.174476),
 STORE = Path(__file__).resolve().parent / "ci_cache" / "diffusion_mc.json"
 
 
+def improved_guess(name, report=None):
+    """The guess of a species in CASES with the extra TERMS (for H3 also the richer orbitals),
+    its parameters found by the iterated search and the simplex. Returns (make, parameters)."""
+    nuclei = CASES[name][0]
+    simple = {"H": (lambda p: Guess(nuclei, p[0], 0.4), (0.9,)),
+              "He": IMPROVE["He"][1:3], "H2": IMPROVE["H2"][1:3], "H3": IMPROVE["H3"][1:3],
+              "H3+": (lambda p: Guess(nuclei, p[0], p[1]), (1.35, 0.4)),
+              "HeH+": (lambda p: Guess(nuclei, (p[0], p[1]), p[2], up=[[1.0, p[3]]], down=[[1.0, p[3]]]), (2.116, 1.18, 0.4, 0.25))}[name]
+    electrons = sum(CASES[name][1])
+    stages = [(richer(simple[0], len(simple[1])), tuple(simple[1]) + (1.0,) + (0.0,) * len(TERMS))]
+    if name == "H3":                                             # then the richer orbitals, started from the simple result
+        stages.append((richer(h3_orbitals, 14), None))
+    best = None
+    for make, start in stages:
+        if start is None:
+            start = tuple(best[:4]) + H3_ORBITAL_START + tuple(best[4:])
+        best = improve(make, start, electrons, report=report, steps=[0.05] * len(start), budget=300 * len(start), polish=True)
+    return make, best
+
+
+IMPROVED_STORE = STORE.with_name("diffusion_mc_improved.json")
+
+
+def improved_main(names, quick):
+    """Long runs of the species with improved guesses. Nothing here uses a reference value: the
+    parameters come from the spread of (H g)/g, the energies from the walkers."""
+    kw = dict(duration=30.0) if quick else dict(duration=600.0, walkers=20000)
+    taus = (0.02, 0.01, 0.005)
+    results = json.loads(IMPROVED_STORE.read_text()) if IMPROVED_STORE.exists() and not quick else {}
+    for name in names or list(CASES):
+        t0 = time.time()
+        trace = []
+        make, best = improved_guess(name, report=lambda *a: trace.append(a))
+        runs, e0, s0 = extrapolated(make(best), sum(CASES[name][1]), taus, **kw)
+        reference, source = CASES[name][5:]
+        results[name] = {"energy": e0, "error": s0, "steps": [list(r[:2]) for r in runs], "parameters": [float(x) for x in best],
+                         "spread": trace[-1][4], "guess_alone": trace[-1][2]}
+        print(f"{name}: spread of (H g)/g {trace[0][4]:.3f} -> {trace[-1][4]:.3f}, the guess alone {trace[-1][2]:.4f}; " +
+              ", ".join(f"step {tau:g}: {e:.5f} ± {s:.5f}" for tau, (e, s, _) in zip(taus, runs)) +
+              f"; step -> 0: {e0:.5f} ± {s0:.5f}   published {reference:.6f} ({source}), "
+              f"difference {1e3 * (e0 - reference):+.2f} mEh = {(e0 - reference) / s0:+.1f} errors   ({time.time() - t0:.0f} s)", flush=True)
+        if not quick:
+            IMPROVED_STORE.parent.mkdir(exist_ok=True)
+            IMPROVED_STORE.write_text(json.dumps(results, indent=1))
+    for name, parts, reference in REACTIONS:
+        if all(k in results for k in parts):
+            d = sum(k * results[n]["energy"] for n, k in parts.items())
+            s = np.sqrt(sum((k * results[n]["error"]) ** 2 for n, k in parts.items()))
+            print(f"{name}: {1e3 * d:.2f} ± {1e3 * s:.2f} mEh = {d * HARTREE_EV:.3f} ± {s * HARTREE_EV:.3f} eV   "
+                  f"(published {1e3 * reference:.2f} mEh)")
+
+
 def main():
     args = sys.argv[1:]
     quick = "quick" in args
@@ -548,6 +601,8 @@ def main():
         return particles_main(quick)
     if "improve" in args:
         return improve_main("then simplex" if "polish" in args else None)
+    if "improved" in args:
+        return improved_main([a for a in args if a in CASES], "quick" in args)
     if "orbitals" in args:
         return orbitals_main("long" in args)
     if "charmonium" in args:
