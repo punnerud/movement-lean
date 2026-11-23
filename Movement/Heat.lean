@@ -10,6 +10,12 @@ import Movement.Basic
   difference heat equation with diffusion coefficient `D = h² / 2τ`.
 * `second_difference_tendsto`: the discrete Laplacian converges to `f''`.
 * `heatKernel_solves`: the Gaussian `exp(-x²/4Dt)/√t` solves `∂ₜu = D ∂ₓₓu`.
+* `reactionDiffusion_solves`: with walkers that also die at a rate `c`, the
+  kernel times `exp(-c t)` solves `∂ₜu = D ∂ₓₓu - c u`.
+* `eigenstate_reaction_diffusion`, `steady_iff_shift_eq_energy`: an eigenstate
+  of `-D ∂ₓₓ + V` with energy `E`, under diffusion with death rate `V - E_T`,
+  only changes size, at the rate `E_T - E`; it is steady exactly when `E_T = E`.
+  This is what `analyzer/diffusion_mc.py` uses to find energies.
 -/
 
 namespace Movement
@@ -190,6 +196,53 @@ theorem heatKernel_solves {D t : ℝ} (hD : D ≠ 0) (ht : 0 < t) (x : ℝ) :
       D * (heatKernel D t x * (x ^ 2 / (4 * D ^ 2 * t ^ 2) - 1 / (2 * D * t))) := by
   have := ht.ne'
   field_simp
+
+/-! ### Diffusion with reaction -/
+
+/-- **Diffusion with reaction.** Walkers that diffuse and also die at the
+constant rate `c` (multiply, if `c < 0`): the heat kernel times `exp(-c t)`
+solves `∂ₜu = D · ∂ₓₓu - c · u`. Splitting a time step into a diffusion part
+and a reaction part is exact in this case. -/
+theorem reactionDiffusion_solves {D t : ℝ} (hD : D ≠ 0) (ht : 0 < t) (c x : ℝ) :
+    HasDerivAt (fun t => Real.exp (-c * t) * heatKernel D t x)
+      (D * (Real.exp (-c * t) *
+          (heatKernel D t x * (x ^ 2 / (4 * D ^ 2 * t ^ 2) - 1 / (2 * D * t))))
+        - c * (Real.exp (-c * t) * heatKernel D t x)) t := by
+  have h1 : HasDerivAt (fun t : ℝ => Real.exp (-c * t)) (Real.exp (-c * t) * (-c * 1)) t :=
+    ((hasDerivAt_id t).const_mul (-c)).exp
+  have h2 := heatKernel_dt hD ht x
+  refine (h1.mul h2).congr_deriv ?_
+  rw [heatKernel_solves hD ht x]
+  ring
+
+/-- **An eigenstate under diffusion with reaction.** Let `ψ` be an eigenstate
+of `-D ∂ₓₓ + V` with energy `E` at the point considered: `-D ψ'' + V ψ = E ψ`.
+Then `u(t) = exp(-(E - E_T) t) · ψ` solves `∂ₜu = D ∂ₓₓu - (V - E_T) u`: under
+diffusion with death rate `V - E_T` the eigenstate keeps its shape and only
+changes size, at the rate `E_T - E`. -/
+theorem eigenstate_reaction_diffusion {D V E E_T ψ ψ'' : ℝ} (h : -D * ψ'' + V * ψ = E * ψ)
+    (t : ℝ) :
+    HasDerivAt (fun t => Real.exp (-(E - E_T) * t) * ψ)
+      (D * (Real.exp (-(E - E_T) * t) * ψ'') - (V - E_T) * (Real.exp (-(E - E_T) * t) * ψ)) t := by
+  have h1 : HasDerivAt (fun t : ℝ => Real.exp (-(E - E_T) * t))
+      (Real.exp (-(E - E_T) * t) * (-(E - E_T) * 1)) t :=
+    ((hasDerivAt_id t).const_mul (-(E - E_T))).exp
+  refine (h1.mul_const ψ).congr_deriv ?_
+  linear_combination Real.exp (-(E - E_T) * t) * h
+
+/-- **The energy is the shift that keeps the population steady.** The size
+`exp(-(E - E_T) t)` of the eigenstate is the same at all times exactly when the
+shift `E_T` equals the energy `E`. -/
+theorem steady_iff_shift_eq_energy (E E_T : ℝ) :
+    (∀ t : ℝ, Real.exp (-(E - E_T) * t) = 1) ↔ E_T = E := by
+  constructor
+  · intro h
+    have h1 := h 1
+    rw [Real.exp_eq_one_iff] at h1
+    linarith
+  · rintro rfl
+    intro t
+    simp
 
 end Kernel
 

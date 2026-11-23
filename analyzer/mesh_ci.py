@@ -34,7 +34,7 @@ def kernel():
     if _lib is None:
         name = "libcikernel.dylib" if sys.platform == "darwin" else "libcikernel.so"
         path = KERNEL / "target" / "release" / name
-        source = max(p.stat().st_mtime for p in [KERNEL / "Cargo.toml", KERNEL / "src" / "lib.rs", KERNEL / "src" / "core.rs"])
+        source = max(p.stat().st_mtime for p in [KERNEL / "Cargo.toml", *(KERNEL / "src").glob("*.rs")])
         if not path.exists() or path.stat().st_mtime < source:
             subprocess.run(["cargo", "build", "--release", "--target-dir", "target"], cwd=KERNEL, check=True)
         lib = ctypes.CDLL(str(path))
@@ -54,6 +54,8 @@ def kernel():
             f("ci_candidates").restype = size
             f("ci_candidates").argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, size, u64, u64, dbl, dbl,
                                            ctypes.POINTER(size)]
+        lib.walk_run.restype = ctypes.c_int
+        lib.walk_run.argtypes = [size, dbl, dbl, size] + [ctypes.c_double] * 3 + [size, size, size, ctypes.c_uint64, dbl, dbl]
         _lib = lib
     return _lib
 

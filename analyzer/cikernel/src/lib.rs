@@ -14,6 +14,8 @@
 //! orbitals; `ci_new_wide`, ...). Across the C interface a string is one or
 //! two 64-bit words, lowest first.
 
+pub mod walk;
+
 mod narrow {
     type Bits = u64;
     include!("core.rs");
