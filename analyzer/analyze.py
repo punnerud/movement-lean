@@ -150,6 +150,17 @@ li_a = row(G_MANY, "Li", "first ionization energy", "Bohr, n=2, no screening (Z=
 li_b = row(G_MANY, "Li", "first ionization energy", "Bohr, n=2, full screening (Z=1)",
            "hydrogenlike_energy, screening_bracket", RY_EV / 4, ie["Li"], "eV", "limit", 0.05, u_n,
            "the 2s electron penetrates the inner shell: the lower end of the bracket")
+try:                       # the simple model in between: one electron in a fixed, spread-out inner shell
+    import diffusion_mc
+    _z = 3 - 5 / 16         # the inner pair as in helium_variational, with nuclear charge 3
+    _levels = diffusion_mc.radial_levels(
+        1.0, lambda r: -3 / r + 2 * (1 / r - diffusion_mc.np.exp(-2 * _z * r) * (1 / r + _z)), 0, count=2, r_max=40.0, points=20000)
+    row(G_MANY, "Li", "first ionization energy", "one electron outside a fixed inner pair (second s level)",
+        "screening_bracket, helium_variational", -_levels[1] * 2 * RY_EV, ie["Li"], "eV", "ok", 0.15, u_n, base=li_b,
+        fix="the inner pair is a cloud, not a point: the outer electron dips inside it and feels more than charge 1",
+        note="no exchange with the inner electrons, which is what Hartree–Fock adds")
+except ImportError:
+    pass
 
 # ---------------------------------------------------------------- rotating molecules
 BE = DATA["rotational_constant_Be_cm1"]

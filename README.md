@@ -218,6 +218,7 @@ Full table: [`analyzer/REPORT.md`](analyzer/REPORT.md), or [on the website](http
 | Heat capacity of He, Ar, H₂, N₂, O₂, CO | `heat_capacity_ratio` | below 1 % | matches |
 | Speed of sound in air and helium | `gamma_values` | 0.01 % to 0.05 % | matches |
 | Helium as two independent Bohr electrons | `hydrogenlike_energy`, `repulsion_raises_energy` | 38 % | **fails**, on the proved side (a lower bound): no electron repulsion. With screening 1.9 %, with Hylleraas 0.002 % |
+| Lithium's outer electron outside a fixed inner pair (a cloud, not a point; no fitted number) | `screening_bracket`, `helium_variational` | 12 % | matches roughly: lacks exchange with the inner electrons |
 | Lithium's outer electron, with or without screening | `hydrogenlike_energy`, `screening_bracket` | 37 % to 468 % | **fails**: these are the two ends of a proved bracket. Full CI gives 0.09 % |
 | Heat capacity of Cl₂ and CO₂ | `heat_capacity_ratio`, `gamma_vibration_bracket` | 14 % to 22 % | **fails**, at the lower end of a proved bracket: vibrations are active. With quantised vibration 0.5 % and 0.05 % |
 
