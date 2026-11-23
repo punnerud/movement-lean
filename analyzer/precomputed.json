@@ -697,6 +697,23 @@
     "note": "not levelled off at 1e-6; the 44-orbital set gives 3.4951 at the same threshold"
    },
    "note": "both energies are 4.1 to 4.2 millihartree below the 44-orbital ones, and the affinity moves by 0.002 eV (0.007 with the rest at 1e-6)"
+  },
+  "Cl_g_functions_small_test": {
+   "command": "python3 analyzer/cl_affinity.py - 0.1,0.8 0.4 0.5/0.8 -100000   (and with F argument 0.5 for the comparison)",
+   "determinants": 100000,
+   "without_g": {
+    "active_orbitals": 22,
+    "E_Cl_minus_hartree": -459.716813,
+    "E_Cl_hartree": -459.599878,
+    "electron_affinity_eV": 3.182
+   },
+   "with_one_g_shell": {
+    "active_orbitals": 31,
+    "E_Cl_minus_hartree": -459.728333,
+    "E_Cl_hartree": -459.608332,
+    "electron_affinity_eV": 3.2654
+   },
+   "note": "one d, one f and one g exponent, lists not converged and equally long in both sets, so the size of the effect in a large set is not settled by this"
   }
  },
  "Cl_exponent_optimisation": {

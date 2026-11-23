@@ -46,6 +46,18 @@ def f_functions(exponents, delta=0.4):
     return out
 
 
+def g_functions(exponents, delta=0.45):
+    """g functions the same way as the f functions: fourth differences of an
+    s-Gaussian on a grid with spacing delta / sqrt(exponent)."""
+    out = []
+    for a in exponents:
+        d = delta / math.sqrt(a)
+        for shape in quantum._G_SHAPES:
+            out.append([(a, (d * x, d * y, d * z), w)
+                        for (x, y, z), w in quantum._difference_lobes(shape).items()])
+    return out
+
+
 def basis(R, small=False):
     """Exponents, centres and contraction matrix W for the shared basis."""
     if small:

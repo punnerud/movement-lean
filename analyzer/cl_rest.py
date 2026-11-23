@@ -16,14 +16,16 @@ import quantum
 
 def main():
     parse = lambda t: () if t == "-" else tuple(float(x) for x in t.split(","))
-    extra = [parse(t) for t in sys.argv[1:5]]
+    extra = [parse(t) for t in sys.argv[1:4]]
+    extra_f, extra_g = cl_affinity.split_fg(sys.argv[4])
+    extra.append(extra_f)
     thresholds = parse(sys.argv[5]) if len(sys.argv) > 5 else (1e-4, 3e-5, 1e-5, 3e-6, 1e-6)
     frozen = int(sys.argv[6]) if len(sys.argv) > 6 else 5
-    core_tag = "" if frozen == 5 else f"_frozen{frozen}"
+    core_tag = ("" if frozen == 5 else f"_frozen{frozen}") + cl_affinity.state_tag(extra_g)
     label = "_".join(",".join(f"{x:g}" for x in t) or "-" for t in extra)
     results = {}
     for name, n_alpha, n_beta, occ in (("Cl-", 4, 4, (2,) * 9), ("Cl", 4, 3, (2,) * 6 + (5 / 3,) * 3)):
-        ha, ga, e_core, _ = cl_affinity.active_space(occ, *extra, frozen)
+        ha, ga, e_core, _ = cl_affinity.active_space(occ, *extra, frozen, extra_g=extra_g)
         n_alpha, n_beta = n_alpha + 5 - frozen, n_beta + 5 - frozen
         with np.load(Path(__file__).resolve().parent / "ci_cache" / f"Cl_mesh_{n_alpha}{n_beta}_{label}{core_tag}.npz") as f:
             alpha, beta, c = f["alpha"], f["beta"], f["c"].astype(float)
