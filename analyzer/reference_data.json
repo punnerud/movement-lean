@@ -1,236 +1,256 @@
 {
-  "_note": "Measured reference values, checked against: NIST Atomic Spectra Database 5.12 (ionization energies, Balmer lines), NIST Chemistry WebBook / Huber & Herzberg (diatomic constants), NIST-JANAF tables (heat capacities), JPL molecular spectroscopy catalog (CO line), NIST fluid properties (helium sound speed), NIST atomic masses, CODATA; Ciddor (air index); Czachorowski et al. 2020 (helium virial coefficients); Drake, Pachucki and others (benchmark energies).",
-  "atomic_mass_u": {
-    "1H": 1.00782503,
-    "2H": 2.01410178,
-    "4He": 4.00260325,
-    "7Li": 7.0160034,
-    "9Be": 9.0121831,
-    "11B": 11.0093054,
-    "12C": 12.0,
-    "13C": 13.0033548,
-    "14N": 14.003074,
-    "16O": 15.9949146,
-    "35Cl": 34.9688527,
-    "23Na": 22.98976928
-  },
-  "ionization_energy_eV": {
-    "H": 13.598434,
-    "He+": 54.417765,
-    "Li2+": 122.454354,
-    "Be3+": 217.718584,
-    "B4+": 340.22602,
-    "C5+": 489.993198,
-    "He": 24.587389,
-    "Li": 5.391715,
-    "Be": 9.322699
-  },
-  "balmer_air_nm": {
-    "3": 656.279,
-    "4": 486.135,
-    "5": 434.047,
-    "6": 410.174
-  },
-  "rotational_constant_Be_cm1": {
-    "H2": 60.853,
-    "D2": 30.4436,
-    "HD": 45.655,
-    "N2": 1.99824,
-    "O2": 1.44563,
-    "12C16O": 1.93128,
-    "H35Cl": 10.59341,
-    "D35Cl": 5.448794
-  },
-  "bond_length_re_angstrom": {
-    "H2": 0.74144,
-    "N2": 1.09768,
-    "O2": 1.20752,
-    "12C16O": 1.12832,
-    "H35Cl": 1.27455
-  },
-  "CO_J0_to_1_GHz": 115.271,
-  "Cp_298K_J_per_molK": {
-    "He": 20.786,
-    "Ar": 20.786,
-    "H2": 28.836,
-    "N2": 29.124,
-    "O2": 29.378,
-    "CO": 29.142,
-    "Cl2": 33.95,
-    "CO2": 37.13
-  },
-  "sound_speed_20C_m_per_s": {
-    "air": 343.2,
-    "He": 1007.89
-  },
-  "_caveats": [
-    "16O2 B_e is not tabulated directly; 1.44563 is B_0 + alpha_e/2 from the WebBook values.",
-    "Dry-air speed of sound (343.2 m/s) is from a secondary source.",
-    "Ionization energies of one-electron ions (and Li II) in NIST ASD are theoretical QED values, not direct measurements.",
-    "NIST-JANAF heat capacities are calculated from spectroscopic constants by statistical mechanics.",
-    "Balmer 'observed' wavelengths are unresolved blends of fine-structure components about 0.009 nm apart; the uncertainty used reflects that.",
-    "H2 centrifugal distortion constant (0.0471 cm^-1, Huber & Herzberg) was not re-verified.",
-    "Helium acoustic virial coefficient is interpolated between 273.15 K and 300 K.",
-    "H electron affinity 0.754195(19) eV (Lykke, Murray, Lineberger 1991) and the H- benchmark energies (HF -0.487930, exact -0.527751017 hartree) are quoted from the literature and were not re-verified online.",
-    "NaCl: omega_e from Irikura 2007; D_0 = 4.23 +/- 0.09 eV (flame photometry / thermochemistry, 1961); dipole is the equilibrium value 8.971 D (v=0 value is 9.0012 D).",
-    "NaCl ion polarizabilities 0.179 and 3.66 A^3 are the handbook values commonly used in Rittner-type models. Modern ab initio free-ion values are 0.148 and about 5.36 A^3, so the Cl- choice matters.",
-    "H2 curve benchmark energies: Pachucki, Phys. Rev. A 82, 032509 (2010).",
-    "H2 triplet (b 3Sigma_u+) energies: Kolos & Wolniewicz, J. Chem. Phys. 43, 2429 (1965), Table VII; variational upper bounds from 1965, not checked against later work.",
-    "Magnetic shielding of H (CODATA 2022) and 3He (Pachucki 2023) are theoretical values; no direct measurement of the neutral-atom shielding exists.",
-    "Helium susceptibility: measured -2.02(7)e-6 cm^3/mol (Barter, Meisenheimer, Stevenson 1960, as quoted by Puchalski, Lesiuk, Jeziorski 2023, and tabulated in the CRC Handbook); theory -1.891035(30)e-6 (same 2023 paper). No modern precise measurement was found.",
-    "Helium dispersion: measured molar polarizability 0.5172544(10) cm^3/mol (Gaiser & Fellmuth 2018, as quoted by Puchalski et al. 2020); C6 = 1.4609778 a.u. (Yan, Babb, Dalgarno, Drake 1996, theory); well depth 10.996(4) K at 5.6080(1) bohr (Cencek et al. 2012, theory). The helium dimer itself is measured to be bound by only 151.9(13.3) neV (Zeller et al. 2016).",
-    "Helium-helium curve: Born-Oppenheimer energies from Przybytek, Cencek, Jeziorski, Szalewicz 2017 (PRL 119, 123401, Table I; the 12 bohr point is the 2012 value from the same table); theory, not measurement. Hartree-Fock limit from Kobus 1993 as tabulated in arXiv:2408.03679 (two decimals in microhartree). C8, C10 and the quadrupole and octupole polarizabilities from Yan, Babb, Dalgarno, Drake 1996 (theory). The zero crossing 4.9905 bohr is not a published number: it was interpolated from the 2017 tabulated points. Second virial coefficient at 273.16 K: measured 11.9257(15) cm^3/mol (Gaiser & Fellmuth 2019, dielectric-constant gas thermometry); theory 11.92811(13) (Czachorowski et al. 2020). Dimer: measured binding 151.9(13.3) neV (Zeller et al. 2016); best theory 138.9(5) neV and mean separation 47.13(8) angstrom (Przybytek et al. 2017). The well depth 10.996 K includes small relativistic and adiabatic corrections (0.005 K), far below the model error here.",
-    "Helium-helium components at 5.6 bohr: second-order dispersion with charge overlap -15.565 cm^-1 = -22.395 K, and the sum through second order -7.716 cm^-1; reference values from Gaussian-geminal calculations (Cencek & Szalewicz 2013) as quoted in Hapka et al., J. Mol. Model. 26, 102 (2020), Table 1. Secondary source: the primary paper was not seen.",
-    "NaCl Hartree-Fock references: molecule from NIST CCCBDB, HF/aug-cc-pVQZ (r_e 2.3958 angstrom, omega_e 356 cm^-1, dipole 9.456 D at that r_e, energy -621.458927 hartree; a large basis, not the exact Hartree-Fock limit). Atoms and ions: numerical restricted Hartree-Fock from Partridge 1987 (NASA TM 89449), ions cross-checked with Lehtola 2019; this analyzer uses unrestricted Hartree-Fock for the open-shell atoms, which can lie slightly lower. The NaCl D0 of 4.23(9) eV could not be re-verified in a source during the latest check; JANAF/CODATA enthalpies give 4.222(23) eV, consistent with it."
+ "_note": "Measured reference values, checked against: NIST Atomic Spectra Database 5.12 (ionization energies, Balmer lines), NIST Chemistry WebBook / Huber & Herzberg (diatomic constants), NIST-JANAF tables (heat capacities), JPL molecular spectroscopy catalog (CO line), NIST fluid properties (helium sound speed), NIST atomic masses, CODATA; Ciddor (air index); Czachorowski et al. 2020 (helium virial coefficients); Drake, Pachucki and others (benchmark energies).",
+ "atomic_mass_u": {
+  "1H": 1.00782503,
+  "2H": 2.01410178,
+  "4He": 4.00260325,
+  "7Li": 7.0160034,
+  "9Be": 9.0121831,
+  "11B": 11.0093054,
+  "12C": 12.0,
+  "13C": 13.0033548,
+  "14N": 14.003074,
+  "16O": 15.9949146,
+  "35Cl": 34.9688527,
+  "23Na": 22.98976928
+ },
+ "ionization_energy_eV": {
+  "H": 13.598434,
+  "He+": 54.417765,
+  "Li2+": 122.454354,
+  "Be3+": 217.718584,
+  "B4+": 340.22602,
+  "C5+": 489.993198,
+  "He": 24.587389,
+  "Li": 5.391715,
+  "Be": 9.322699
+ },
+ "balmer_air_nm": {
+  "3": 656.279,
+  "4": 486.135,
+  "5": 434.047,
+  "6": 410.174
+ },
+ "rotational_constant_Be_cm1": {
+  "H2": 60.853,
+  "D2": 30.4436,
+  "HD": 45.655,
+  "N2": 1.99824,
+  "O2": 1.44563,
+  "12C16O": 1.93128,
+  "H35Cl": 10.59341,
+  "D35Cl": 5.448794
+ },
+ "bond_length_re_angstrom": {
+  "H2": 0.74144,
+  "N2": 1.09768,
+  "O2": 1.20752,
+  "12C16O": 1.12832,
+  "H35Cl": 1.27455
+ },
+ "CO_J0_to_1_GHz": 115.271,
+ "Cp_298K_J_per_molK": {
+  "He": 20.786,
+  "Ar": 20.786,
+  "H2": 28.836,
+  "N2": 29.124,
+  "O2": 29.378,
+  "CO": 29.142,
+  "Cl2": 33.95,
+  "CO2": 37.13
+ },
+ "sound_speed_20C_m_per_s": {
+  "air": 343.2,
+  "He": 1007.89
+ },
+ "_caveats": [
+  "16O2 B_e is not tabulated directly; 1.44563 is B_0 + alpha_e/2 from the WebBook values.",
+  "Dry-air speed of sound (343.2 m/s) is from a secondary source.",
+  "Ionization energies of one-electron ions (and Li II) in NIST ASD are theoretical QED values, not direct measurements.",
+  "NIST-JANAF heat capacities are calculated from spectroscopic constants by statistical mechanics.",
+  "Balmer 'observed' wavelengths are unresolved blends of fine-structure components about 0.009 nm apart; the uncertainty used reflects that.",
+  "H2 centrifugal distortion constant (0.0471 cm^-1, Huber & Herzberg) was not re-verified.",
+  "Helium acoustic virial coefficient is interpolated between 273.15 K and 300 K.",
+  "H electron affinity 0.754195(19) eV (Lykke, Murray, Lineberger 1991) and the H- benchmark energies (HF -0.487930, exact -0.527751017 hartree) are quoted from the literature and were not re-verified online.",
+  "NaCl: omega_e from Irikura 2007; D_0 = 4.23 +/- 0.09 eV (flame photometry / thermochemistry, 1961); dipole is the equilibrium value 8.971 D (v=0 value is 9.0012 D).",
+  "NaCl ion polarizabilities 0.179 and 3.66 A^3 are the handbook values commonly used in Rittner-type models. Modern ab initio free-ion values are 0.148 and about 5.36 A^3, so the Cl- choice matters.",
+  "H2 curve benchmark energies: Pachucki, Phys. Rev. A 82, 032509 (2010).",
+  "H2 triplet (b 3Sigma_u+) energies: Kolos & Wolniewicz, J. Chem. Phys. 43, 2429 (1965), Table VII; variational upper bounds from 1965, not checked against later work.",
+  "Magnetic shielding of H (CODATA 2022) and 3He (Pachucki 2023) are theoretical values; no direct measurement of the neutral-atom shielding exists.",
+  "Helium susceptibility: measured -2.02(7)e-6 cm^3/mol (Barter, Meisenheimer, Stevenson 1960, as quoted by Puchalski, Lesiuk, Jeziorski 2023, and tabulated in the CRC Handbook); theory -1.891035(30)e-6 (same 2023 paper). No modern precise measurement was found.",
+  "Helium dispersion: measured molar polarizability 0.5172544(10) cm^3/mol (Gaiser & Fellmuth 2018, as quoted by Puchalski et al. 2020); C6 = 1.4609778 a.u. (Yan, Babb, Dalgarno, Drake 1996, theory); well depth 10.996(4) K at 5.6080(1) bohr (Cencek et al. 2012, theory). The helium dimer itself is measured to be bound by only 151.9(13.3) neV (Zeller et al. 2016).",
+  "Helium-helium curve: Born-Oppenheimer energies from Przybytek, Cencek, Jeziorski, Szalewicz 2017 (PRL 119, 123401, Table I; the 12 bohr point is the 2012 value from the same table); theory, not measurement. Hartree-Fock limit from Kobus 1993 as tabulated in arXiv:2408.03679 (two decimals in microhartree). C8, C10 and the quadrupole and octupole polarizabilities from Yan, Babb, Dalgarno, Drake 1996 (theory). The zero crossing 4.9905 bohr is not a published number: it was interpolated from the 2017 tabulated points. Second virial coefficient at 273.16 K: measured 11.9257(15) cm^3/mol (Gaiser & Fellmuth 2019, dielectric-constant gas thermometry); theory 11.92811(13) (Czachorowski et al. 2020). Dimer: measured binding 151.9(13.3) neV (Zeller et al. 2016); best theory 138.9(5) neV and mean separation 47.13(8) angstrom (Przybytek et al. 2017). The well depth 10.996 K includes small relativistic and adiabatic corrections (0.005 K), far below the model error here.",
+  "Helium-helium components at 5.6 bohr: second-order dispersion with charge overlap -15.565 cm^-1 = -22.395 K, and the sum through second order -7.716 cm^-1; reference values from Gaussian-geminal calculations (Cencek & Szalewicz 2013) as quoted in Hapka et al., J. Mol. Model. 26, 102 (2020), Table 1. Secondary source: the primary paper was not seen.",
+  "NaCl Hartree-Fock references: molecule from NIST CCCBDB, HF/aug-cc-pVQZ (r_e 2.3958 angstrom, omega_e 356 cm^-1, dipole 9.456 D at that r_e, energy -621.458927 hartree; a large basis, not the exact Hartree-Fock limit). Atoms and ions: numerical restricted Hartree-Fock from Partridge 1987 (NASA TM 89449), ions cross-checked with Lehtola 2019; this analyzer uses unrestricted Hartree-Fock for the open-shell atoms, which can lie slightly lower. The NaCl D0 of 4.23(9) eV could not be re-verified in a source during the latest check; JANAF/CODATA enthalpies give 4.222(23) eV, consistent with it."
+ ],
+ "vibration_cm1": {
+  "H2": [
+   4401.21
   ],
-  "vibration_cm1": {
-    "H2": [
-      4401.21
-    ],
-    "N2": [
-      2358.57
-    ],
-    "O2": [
-      1580.19
-    ],
-    "CO": [
-      2169.81
-    ],
-    "Cl2": [
-      559.72
-    ],
-    "CO2": [
-      1333,
-      667,
-      667,
-      2349
-    ]
+  "N2": [
+   2358.57
+  ],
+  "O2": [
+   1580.19
+  ],
+  "CO": [
+   2169.81
+  ],
+  "Cl2": [
+   559.72
+  ],
+  "CO2": [
+   1333,
+   667,
+   667,
+   2349
+  ]
+ },
+ "CO_alpha_e_cm1": 0.01750441,
+ "CO_D_e_cm1": 6.1215e-06,
+ "H2_alpha_e_cm1": 3.062,
+ "H2_bond_length_angstrom": 0.74144,
+ "H2_dissociation_De_eV": 4.7483,
+ "air_index_minus_one_1e4": {
+  "3": 2.7625,
+  "4": 2.7936,
+  "5": 2.8116,
+  "6": 2.8224
+ },
+ "benchmark_hartree": {
+  "He_exact": -2.903724377,
+  "He_HF": -2.86168,
+  "LiPlus_HF": -7.236415,
+  "Be_HF": -14.573023,
+  "H2_exact": -1.174476,
+  "HMinus_HF": -0.48793,
+  "HMinus_exact": -0.527751017,
+  "Li_exact": -7.478060324,
+  "LiPlus_exact": -7.279913413,
+  "Be_exact": -14.667356
+ },
+ "relative_uncertainty": {
+  "ionization_one_electron": 1e-09,
+  "ionization_neutral": 1e-07,
+  "balmer": 5e-06,
+  "rotational_constant": 2e-05,
+  "CO_line": 5e-09,
+  "Cp": 0.001,
+  "sound_air": 0.0003,
+  "sound_He": 0.0009,
+  "H2_bond": 1e-05,
+  "H2_De": 1e-05,
+  "H2_vibration": 1e-05,
+  "electron_affinity": 2.5e-05,
+  "NaCl_De": 0.021,
+  "NaCl_dipole": 0.0001,
+  "shielding_theory": 1e-06
+ },
+ "H2_B0_cm1": 59.336,
+ "H2_centrifugal_D_cm1": 0.0471,
+ "He_acoustic_virial_cm3_per_mol": 21.97,
+ "H_electron_affinity_eV": 0.754195,
+ "H2_curve_benchmark_hartree": {
+  "1.0": -1.12453972,
+  "2.0": -1.138132957,
+  "3.0": -1.057326269,
+  "4.0": -1.016390253,
+  "6.0": -1.000835708
+ },
+ "NaCl": {
+  "r_e_angstrom": 2.3608,
+  "omega_e_cm1": 364.684,
+  "D0_eV": 4.23,
+  "dipole_debye": 8.971,
+  "Na_ionization_eV": 5.13907696,
+  "Cl_electron_affinity_eV": 3.612725,
+  "alpha_Na_plus_A3": 0.179,
+  "alpha_Cl_minus_A3": 3.66,
+  "hartree_fock_reference": {
+   "r_e_angstrom": 2.3958,
+   "omega_e_cm1": 356,
+   "dipole_debye": 9.456,
+   "energy_hartree": -621.458927
   },
-  "CO_alpha_e_cm1": 0.01750441,
-  "CO_D_e_cm1": 6.1215e-06,
-  "H2_alpha_e_cm1": 3.062,
-  "H2_bond_length_angstrom": 0.74144,
-  "H2_dissociation_De_eV": 4.7483,
-  "air_index_minus_one_1e4": {
-    "3": 2.7625,
-    "4": 2.7936,
-    "5": 2.8116,
-    "6": 2.8224
-  },
-  "benchmark_hartree": {
-    "He_exact": -2.903724377,
-    "He_HF": -2.86168,
-    "LiPlus_HF": -7.236415,
-    "Be_HF": -14.573023,
-    "H2_exact": -1.174476,
-    "HMinus_HF": -0.48793,
-    "HMinus_exact": -0.527751017,
-    "Li_exact": -7.478060324,
-    "LiPlus_exact": -7.279913413,
-    "Be_exact": -14.667356
-  },
-  "relative_uncertainty": {
-    "ionization_one_electron": 1e-09,
-    "ionization_neutral": 1e-07,
-    "balmer": 5e-06,
-    "rotational_constant": 2e-05,
-    "CO_line": 5e-09,
-    "Cp": 0.001,
-    "sound_air": 0.0003,
-    "sound_He": 0.0009,
-    "H2_bond": 1e-05,
-    "H2_De": 1e-05,
-    "H2_vibration": 1e-05,
-    "electron_affinity": 2.5e-05,
-    "NaCl_De": 0.021,
-    "NaCl_dipole": 0.0001,
-    "shielding_theory": 1e-06
-  },
-  "H2_B0_cm1": 59.336,
-  "H2_centrifugal_D_cm1": 0.0471,
-  "He_acoustic_virial_cm3_per_mol": 21.97,
-  "H_electron_affinity_eV": 0.754195,
-  "H2_curve_benchmark_hartree": {
-    "1.0": -1.12453972,
-    "2.0": -1.138132957,
-    "3.0": -1.057326269,
-    "4.0": -1.016390253,
-    "6.0": -1.000835708
-  },
-  "NaCl": {
-    "r_e_angstrom": 2.3608,
-    "omega_e_cm1": 364.684,
-    "D0_eV": 4.23,
-    "dipole_debye": 8.971,
-    "Na_ionization_eV": 5.13907696,
-    "Cl_electron_affinity_eV": 3.612725,
-    "alpha_Na_plus_A3": 0.179,
-    "alpha_Cl_minus_A3": 3.66,
-    "hartree_fock_reference": {
-      "r_e_angstrom": 2.3958,
-      "omega_e_cm1": 356,
-      "dipole_debye": 9.456,
-      "energy_hartree": -621.458927
-    },
-    "hartree_fock_limit_hartree": {
-      "Na": -161.858912,
-      "Na_plus": -161.676963,
-      "Cl": -459.482072,
-      "Cl_minus": -459.576925
-    }
-  },
-  "H2_triplet_benchmark_hartree": {
-    "1.4": -0.7841501,
-    "2.0": -0.8970636,
-    "3.0": -0.9720104,
-    "4.0": -0.9933781
-  },
-  "magnetism": {
-    "H_shielding_ppm": 17.7354,
-    "He3_shielding_ppm": 59.966512,
-    "He_susceptibility_theory_1e6_cm3_per_mol": -1.891035,
-    "He_susceptibility_measured_1e6_cm3_per_mol": -2.02,
-    "He_susceptibility_measured_uncertainty": 0.07
-  },
-  "helium_dispersion": {
-    "molar_polarizability_cm3_per_mol": 0.5172544,
-    "molar_polarizability_uncertainty": 1e-06,
-    "C6_au": 1.4609778,
-    "well_depth_K": 10.996,
-    "well_position_bohr": 5.608,
-    "C8_au": 14.11785734,
-    "C10_au": 183.6910705,
-    "quadrupole_polarizability_au": 2.445083101,
-    "octupole_polarizability_au": 10.6203286,
-    "potential_BO_K": {
-      "3.0": 3767.7341,
-      "4.0": 292.58201,
-      "5.0": -0.47114,
-      "5.6": -11.00072,
-      "6.0": -9.68079,
-      "7.0": -4.6226,
-      "9.0": -0.98971,
-      "12.0": -0.16592
-    },
-    "hartree_fock_limit_microhartree": {
-      "3.0": 13517.08,
-      "3.5": 4335.76,
-      "4.0": 1357.88,
-      "4.5": 416.54,
-      "5.0": 125.55,
-      "5.6": 29.2,
-      "6.0": 10.94,
-      "7.0": 0.92
-    },
-    "zero_crossing_bohr": 4.9905,
-    "second_virial_273.16K_cm3_per_mol": 11.9257,
-    "second_virial_uncertainty": 0.0015,
-    "second_virial_273.16K_theory": 11.92811,
-    "dimer_binding_neV": 151.9,
-    "dimer_binding_uncertainty_neV": 13.3,
-    "dimer_binding_theory_neV": 138.9,
-    "dimer_mean_separation_theory_angstrom": 47.13,
-    "dispersion_at_5.6_bohr_K": -22.395,
-    "first_and_second_order_sum_at_5.6_bohr_K": -11.102
+  "hartree_fock_limit_hartree": {
+   "Na": -161.858912,
+   "Na_plus": -161.676963,
+   "Cl": -459.482072,
+   "Cl_minus": -459.576925
   }
+ },
+ "H2_triplet_benchmark_hartree": {
+  "1.4": -0.7841501,
+  "2.0": -0.8970636,
+  "3.0": -0.9720104,
+  "4.0": -0.9933781
+ },
+ "magnetism": {
+  "H_shielding_ppm": 17.7354,
+  "He3_shielding_ppm": 59.966512,
+  "He_susceptibility_theory_1e6_cm3_per_mol": -1.891035,
+  "He_susceptibility_measured_1e6_cm3_per_mol": -2.02,
+  "He_susceptibility_measured_uncertainty": 0.07
+ },
+ "helium_dispersion": {
+  "molar_polarizability_cm3_per_mol": 0.5172544,
+  "molar_polarizability_uncertainty": 1e-06,
+  "C6_au": 1.4609778,
+  "well_depth_K": 10.996,
+  "well_position_bohr": 5.608,
+  "C8_au": 14.11785734,
+  "C10_au": 183.6910705,
+  "quadrupole_polarizability_au": 2.445083101,
+  "octupole_polarizability_au": 10.6203286,
+  "potential_BO_K": {
+   "3.0": 3767.7341,
+   "4.0": 292.58201,
+   "5.0": -0.47114,
+   "5.6": -11.00072,
+   "6.0": -9.68079,
+   "7.0": -4.6226,
+   "9.0": -0.98971,
+   "12.0": -0.16592
+  },
+  "hartree_fock_limit_microhartree": {
+   "3.0": 13517.08,
+   "3.5": 4335.76,
+   "4.0": 1357.88,
+   "4.5": 416.54,
+   "5.0": 125.55,
+   "5.6": 29.2,
+   "6.0": 10.94,
+   "7.0": 0.92
+  },
+  "zero_crossing_bohr": 4.9905,
+  "second_virial_273.16K_cm3_per_mol": 11.9257,
+  "second_virial_uncertainty": 0.0015,
+  "second_virial_273.16K_theory": 11.92811,
+  "dimer_binding_neV": 151.9,
+  "dimer_binding_uncertainty_neV": 13.3,
+  "dimer_binding_theory_neV": 138.9,
+  "dimer_mean_separation_theory_angstrom": 47.13,
+  "dispersion_at_5.6_bohr_K": -22.395,
+  "first_and_second_order_sum_at_5.6_bohr_K": -11.102
+ },
+ "Cl2_constants_cm1": {
+  "_source": "NIST Chemistry WebBook, constants of diatomic molecules, 35Cl2 X 1Sigma_g+ (read 2026-11-23)",
+  "omega_e": 559.72,
+  "omega_e_x_e": 2.675,
+  "omega_e_y_e": -0.0067,
+  "B_e": 0.24399,
+  "alpha_e": 0.00149,
+  "D_e": 1.86e-07
+ },
+ "Cl_isotopes": {
+  "_source": "masses and natural abundances entered from memory, not checked against a table",
+  "35Cl": [
+   34.96885268,
+   0.7576
+  ],
+  "37Cl": [
+   36.9659026,
+   0.2424
+  ]
+ }
 }

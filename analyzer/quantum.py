@@ -291,6 +291,35 @@ def h2_point(R):
             fci_two_electrons(S, h, eri, e_nuc=1.0 / R, triplet=True))
 
 
+def lithium_outer_electron(points=(1000, 2000), r_max=30.0):
+    """Binding energy (hartree) of lithium's outer electron in three simple one-electron models,
+    with no fitted number. The inner pair is fixed in the orbital exp(-zeta r) with
+    zeta = 3 - 5/16 (the screened charge of `helium_variational`).
+      cloud:      the outer electron feels the nucleus and the charge cloud of the inner pair,
+                  and takes the second s level;
+      orthogonal: it is also kept orthogonal to the inner orbital (two electrons of the same
+                  spin cannot be in the same state);
+      exchange:   and it has the exchange term with the inner electron of the same spin
+                  (Hartree-Fock for the outer electron, the inner pair frozen).
+    The radial equation is solved on two uniform grids and extrapolated in the square of the
+    spacing."""
+    zeta = 3 - 5 / 16
+    found = []
+    for n in points:
+        h = r_max / (n + 1)
+        r = h * np.arange(1, n + 1)
+        V = -3 / r + 2 * (1 / r - np.exp(-2 * zeta * r) * (1 / r + zeta))
+        inner = r * np.exp(-zeta * r)
+        inner /= math.sqrt(np.sum(inner * inner) * h)
+        F = np.diag(1 / h ** 2 + V) - 0.5 / h ** 2 * (np.eye(n, k=1) + np.eye(n, k=-1))
+        K = inner[:, None] / np.maximum(r[:, None], r[None, :]) * inner[None, :] * h
+        P = np.eye(n) - np.outer(inner, inner) * h
+        lowest = lambda M: float(np.linalg.eigvalsh(P @ M @ P)[0])
+        found.append((-float(np.linalg.eigvalsh(F)[1]), -lowest(F), -lowest(F - K)))
+    (a, b), ratio = found, (points[1] + 1) ** 2 / (points[0] + 1) ** 2
+    return tuple((ratio * y - x) / (ratio - 1) for x, y in zip(a, b))
+
+
 def hydrogen_atom_energy():
     """Energy of one H atom in the same atomic basis (exact value: -0.5)."""
     exps = list(H_S)

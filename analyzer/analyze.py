@@ -150,17 +150,18 @@ li_a = row(G_MANY, "Li", "first ionization energy", "Bohr, n=2, no screening (Z=
 li_b = row(G_MANY, "Li", "first ionization energy", "Bohr, n=2, full screening (Z=1)",
            "hydrogenlike_energy, screening_bracket", RY_EV / 4, ie["Li"], "eV", "limit", 0.05, u_n,
            "the 2s electron penetrates the inner shell: the lower end of the bracket")
-try:                       # the simple model in between: one electron in a fixed, spread-out inner shell
-    import diffusion_mc
-    _z = 3 - 5 / 16         # the inner pair as in helium_variational, with nuclear charge 3
-    _levels = diffusion_mc.radial_levels(
-        1.0, lambda r: -3 / r + 2 * (1 / r - diffusion_mc.np.exp(-2 * _z * r) * (1 / r + _z)), 0, count=2, r_max=40.0, points=20000)
-    row(G_MANY, "Li", "first ionization energy", "one electron outside a fixed inner pair (second s level)",
-        "screening_bracket, helium_variational", -_levels[1] * 2 * RY_EV, ie["Li"], "eV", "ok", 0.15, u_n, base=li_b,
-        fix="the inner pair is a cloud, not a point: the outer electron dips inside it and feels more than charge 1",
-        note="no exchange with the inner electrons, which is what Hartree–Fock adds")
-except ImportError:
-    pass
+if quantum:               # the simple models in between: one electron outside a fixed inner pair
+    _cloud, _orthogonal, _exchange = (2 * RY_EV * e for e in quantum.lithium_outer_electron())
+    li_c = row(G_MANY, "Li", "first ionization energy", "one electron outside a fixed inner pair (a cloud, not a point)",
+               "screening_bracket, helium_variational", _cloud, ie["Li"], "eV", "ok", 0.15, u_n, base=li_b,
+               fix="the outer electron dips inside the cloud and feels more than charge 1")
+    li_o = row(G_MANY, "Li", "first ionization energy", "the same, kept orthogonal to the inner pair",
+               "screening_bracket, helium_variational", _orthogonal, ie["Li"], "eV", "ok", 0.07, u_n, base=li_c,
+               fix="two electrons of the same spin cannot be in the same state")
+    row(G_MANY, "Li", "first ionization energy", "the same, with exchange (inner pair still fixed)",
+        "screening_bracket, helium_variational", _exchange, ie["Li"], "eV", "ok", 0.012, u_n, base=li_o,
+        fix="exchange with the inner electron of the same spin",
+        note="what remains: the inner pair does not relax, and the electrons do not avoid each other")
 
 # ---------------------------------------------------------------- rotating molecules
 BE = DATA["rotational_constant_Be_cm1"]
@@ -241,9 +242,38 @@ for gas, cp in DATA["Cp_298K_J_per_molK"].items():
             base=q, fix="the molecule stretches as it spins faster")
     elif gas in VIB:
         vib = sum(einstein(w, T0) for w in VIB[gas])
-        row(G_HEAT, gas, "C_p at 298 K", "equipartition + quantised vibration", "not formalised",
-            (f / 2 + 1 + vib) * R_GAS, cp, "J/(mol·K)", "ok", 1e-2, UNC["Cp"], base=b,
-            fix="vibrations switch on gradually (quantised)")
+        q = row(G_HEAT, gas, "C_p at 298 K", "equipartition + quantised vibration", "not formalised",
+                (f / 2 + 1 + vib) * R_GAS, cp, "J/(mol·K)", "ok", 1e-2, UNC["Cp"], base=b,
+                fix="vibrations switch on gradually (quantised)")
+        if gas == "Cl2":
+            k = DATA["Cl2_constants_cm1"]
+            iso = DATA["Cl_isotopes"]
+            m35 = iso["35Cl"][0]
+
+            def cl2_cp(m1, m2):
+                """C_p from a direct sum over the vibration-rotation levels of one isotope pair."""
+                s1 = math.sqrt(m35 * m35 / (2 * m35) / (m1 * m2 / (m1 + m2)))      # sqrt(mu(35,35) / mu)
+                z = e1 = e2 = 0.0
+                for v in range(30):
+                    x = (v + 0.5) * s1
+                    g = k["omega_e"] * x - k["omega_e_x_e"] * x * x + k["omega_e_y_e"] * x ** 3
+                    bv = k["B_e"] * s1 * s1 - k["alpha_e"] * s1 ** 3 * (v + 0.5)
+                    for j in range(400):
+                        jj = j * (j + 1)
+                        eps = HC_K * (g + bv * jj - k["D_e"] * s1 ** 4 * jj * jj) / T0
+                        w = (2 * j + 1) * math.exp(-eps)
+                        z += w; e1 += w * eps; e2 += w * eps * eps
+                return (2.5 + e2 / z - (e1 / z) ** 2) * R_GAS
+
+            lv = row(G_HEAT, gas, "C_p at 298 K", "sum over measured vibration-rotation levels (³⁵Cl₂)", "not formalised",
+                     cl2_cp(m35, m35), cp, "J/(mol·K)", "ok", 2e-3, UNC["Cp"], base=q,
+                     fix="the levels get closer higher up, and the molecule stretches as it vibrates and spins")
+            (ma, pa), (mb, pb) = iso["35Cl"], iso["37Cl"]
+            mix = pa * pa * cl2_cp(ma, ma) + 2 * pa * pb * cl2_cp(ma, mb) + pb * pb * cl2_cp(mb, mb)
+            row(G_HEAT, gas, "C_p at 298 K", "the same for the natural mixture of isotopes", "not formalised",
+                mix, cp, "J/(mol·K)", "ok", 1e-3, UNC["Cp"], base=lv,
+                fix="a quarter of the atoms are ³⁷Cl, which vibrate more slowly",
+                note="isotope masses and abundances entered from memory")
 
 T20 = 293.15
 SOUND = DATA["sound_speed_20C_m_per_s"]
