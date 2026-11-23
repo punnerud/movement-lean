@@ -651,6 +651,52 @@
     "energy_hartree": -459.71815031,
     "note": "with settle_shells and without the leak; nine threads, so the time is not comparable with the two-thread figures"
    }
+  },
+  "Cl_60_orbitals": {
+   "command": "python3 analyzer/cl_affinity.py 0.05,0.15,0.6 0.04,0.1,0.4,1.2 0.15,0.4,1.0,2.5 0.3,0.8,2.0 -2000000",
+   "what": "the 44-orbital set plus one function of each kind: diffuse s 0.05 and p 0.04, tight d 2.5 and f 2.0",
+   "active_orbitals": 60,
+   "determinants": 2000000,
+   "E_Cl_minus_hartree": -459.795781,
+   "E_Cl_hartree": -459.667682,
+   "electron_affinity_eV": 3.4857,
+   "seconds": [
+    1516,
+    3624
+   ],
+   "threads": 2,
+   "second_order_rest": {
+    "thresholds": [
+     0.0001,
+     3e-05,
+     1e-05,
+     3e-06,
+     1e-06
+    ],
+    "rest_Cl_minus_hartree": [
+     -1.7e-05,
+     -5.9e-05,
+     -0.000205,
+     -0.000534,
+     -0.000783
+    ],
+    "rest_Cl_hartree": [
+     -6e-06,
+     -8e-06,
+     -2.3e-05,
+     -0.000116,
+     -0.000201
+    ],
+    "electron_affinity_with_rest_eV": [
+     3.486,
+     3.4871,
+     3.4907,
+     3.4971,
+     3.5016
+    ],
+    "note": "not levelled off at 1e-6; the 44-orbital set gives 3.4951 at the same threshold"
+   },
+   "note": "both energies are 4.1 to 4.2 millihartree below the 44-orbital ones, and the affinity moves by 0.002 eV (0.007 with the rest at 1e-6)"
   }
  },
  "Cl_exponent_optimisation": {
