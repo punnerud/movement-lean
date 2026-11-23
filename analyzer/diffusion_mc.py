@@ -30,6 +30,7 @@ is E(H3 at the saddle) - E(H) - E(H2).
     python3 analyzer/diffusion_mc.py improve    # improve the guesses of He, H2 and H3 from samples: simple and richer form,
                                                 # simplex and iterated search, and what each buys (add polish: only the last variant)
     python3 analyzer/diffusion_mc.py improved [quick] [species...]   # long runs with improved guesses (hours)
+    python3 analyzer/diffusion_mc.py gradient   # improve the guesses along the gradient, compared with the search
     python3 analyzer/diffusion_mc.py orbitals [long]   # H3 with richer orbitals: do the zero surfaces get better?
     python3 analyzer/diffusion_mc.py python     # the walker loop in numpy instead of Rust (same algorithm, slower)
 """
@@ -217,7 +218,85 @@ def iterated(cost, start, steps, iterations=1500, starts=3, history=20, stall=15
     return best, best_cost, count
 
 
-def improve(make, start, electrons, rounds=3, walkers=4000, report=None, steps=None, budget=None, polish=False):
+class Counted:
+    """A cost function that counts its evaluations, remembers the best point and stops at a budget."""
+
+    class Spent(Exception):
+        pass
+
+    def __init__(self, cost, budget):
+        self.cost, self.budget, self.count, self.best, self.best_cost = cost, budget, 0, None, np.inf
+
+    def __call__(self, p):
+        if self.count >= self.budget:
+            raise Counted.Spent
+        self.count += 1
+        c = self.cost(np.array(p, float))
+        if c < self.best_cost:
+            self.best, self.best_cost = np.array(p, float), c
+        return c
+
+
+def slope(cost, u, h=1e-4):
+    """Gradient of cost at u by central differences. The cost here is a smooth function of the
+    parameters on a fixed set of sample points, with no noise, so differences are accurate.
+    (Automatic differentiation would give the same numbers at the price of about three
+    evaluations instead of two per parameter.)"""
+    g = np.zeros(len(u))
+    for k in range(len(u)):
+        up, down = u.copy(), u.copy()
+        up[k] += h
+        down[k] -= h
+        g[k] = (cost(up) - cost(down)) / (2 * h)
+    return g
+
+
+def by_gradient(cost, start, positive=(), budget=3000, method="normalised", rate=0.03):
+    """Minimises cost(p) along its gradient, within `budget` evaluations; returns the best point.
+    Parameters listed in `positive` are searched on a logarithmic scale (a step is then a
+    relative change, and they cannot change sign). Three ways to use the gradient:
+      "descent":    a step straight down the gradient, its length found by halving;
+      "normalised": each parameter's step is divided by the typical size of its own gradient
+                    (the rule known as Adam), so a parameter with a huge gradient and one with a
+                    tiny gradient both move at a sensible pace;
+      "curvature":  the BFGS method, which learns from successive gradients how the parameters
+                    are scaled and coupled."""
+    positive = list(positive)
+    to_u = lambda p: np.array([np.log(x) if k in positive else x for k, x in enumerate(p)])
+    to_p = lambda u: np.array([np.exp(x) if k in positive else x for k, x in enumerate(u)])
+    f = Counted(lambda u: cost(to_p(u)), budget)
+    u = to_u(np.array(start, float))
+    try:
+        now = f(u)
+        if method == "curvature":
+            from scipy.optimize import minimize
+            minimize(f, u, jac=lambda v: slope(f, v), method="BFGS", options={"gtol": 1e-9, "maxiter": 10 ** 6})
+        elif method == "normalised":
+            m, v = np.zeros(len(u)), np.zeros(len(u))
+            steps = budget // (2 * len(u) + 1)
+            for k in range(1, steps + 1):
+                g = slope(f, u)
+                m, v = 0.9 * m + 0.1 * g, 0.999 * v + 0.001 * g * g
+                u = u - rate * (1 - 0.9 * k / steps) * (m / (1 - 0.9 ** k)) / (np.sqrt(v / (1 - 0.999 ** k)) + 1e-12)
+                f(u)
+        else:
+            t = 0.1
+            while True:
+                g = slope(f, u)
+                t *= 4
+                while True:
+                    new = f(u - t * g)
+                    if new < now or t < 1e-12:
+                        break
+                    t /= 2
+                if new < now:
+                    u, now = u - t * g, new
+    except Counted.Spent:
+        pass
+    return to_p(f.best), f.count
+
+
+def improve(make, start, electrons, rounds=3, walkers=4000, report=None, steps=None, budget=None, polish=False, minimiser=None):
     """Better parameters for a guess. make(parameters) returns a Guess. The exact wavefunction has
     (H g)/g equal to the energy everywhere, so the spread of (H g)/g over a fixed set of sample
     points measures how wrong g is, and is minimised: by the simplex method of Nelder and Mead,
@@ -241,6 +320,9 @@ def improve(make, start, electrons, rounds=3, walkers=4000, report=None, steps=N
                 return 1e9
             return float(np.var(e)) if np.all(np.isfinite(e)) else 1e9
 
+        if minimiser is not None:
+            p = minimiser(spread, p)
+            continue
         simplex = lambda p, n: minimize(spread, p, method="Nelder-Mead", options={"xatol": 1e-3, "fatol": 1e-7, "maxiter": n, "maxfev": n}).x
         if steps is None:
             p = simplex(p, budget or 400)
@@ -562,6 +644,34 @@ def improved_guess(name, report=None):
     return make, best
 
 
+def gradient_main():
+    """The richer guesses of He, H2 and H3 improved four ways with the same number of evaluations:
+    search then simplex (no gradients), and the three uses of the gradient in `by_gradient`.
+    What is printed is the spread on fresh sample points, which the optimiser has not seen."""
+    simple_h3 = richer(IMPROVE["H3"][1], 4)
+    cases = {"He": (2, richer(IMPROVE["He"][1], 4), tuple(IMPROVE["He"][2]) + (1.0,) + (0.0,) * len(TERMS), (0, 1, 3, 4)),
+             "H2": (2, richer(IMPROVE["H2"][1], 2), tuple(IMPROVE["H2"][2]) + (1.0,) + (0.0,) * len(TERMS), (0, 1, 2)),
+             "H3, richer orbitals": (3, richer(h3_orbitals, 14), None, (0, 1, 2, 4, 5, 6, 7, 14))}
+    for name, (electrons, make, start, positive) in cases.items():
+        if start is None:                                        # as in `orbitals`: from the improved simple guess
+            q = improve(simple_h3, tuple(IMPROVE["H3"][2]) + (1.0,) + (0.0,) * len(TERMS), 3, steps=[0.05] * 13, budget=3900, polish=True)
+            start = tuple(q[:4]) + H3_ORBITAL_START + tuple(q[4:])
+        budget = 300 * len(start)
+        print(f"{name}: {len(start)} parameters, {budget} evaluations per round, three rounds", flush=True)
+        ways = [("search then simplex (no gradient)", dict(steps=[0.05] * len(start), budget=budget, polish=True))]
+        for method, label in (("descent", "gradient, plain descent"), ("normalised", "gradient, each parameter normalised"),
+                              ("curvature", "gradient with curvature (BFGS)")):
+            for log in (False, True):
+                ways.append((label + (", positive ones on a logarithmic scale" if log else ""),
+                             dict(minimiser=lambda f, p, method=method, log=log: by_gradient(f, p, positive if log else (), budget, method)[0])))
+        for label, kw in ways:
+            t0 = time.time()
+            trace = []
+            improve(make, start, electrons, report=lambda *a: trace.append(a), **kw)
+            print(f"  {label}: spread of (H g)/g " + " -> ".join(f"{row[4]:.3f}" for row in trace) +
+                  f"   guess alone {trace[-1][2]:.4f} ± {trace[-1][3]:.4f}   ({time.time() - t0:.0f} s)", flush=True)
+
+
 IMPROVED_STORE = STORE.with_name("diffusion_mc_improved.json")
 
 
@@ -601,6 +711,8 @@ def main():
         return particles_main(quick)
     if "improve" in args:
         return improve_main("then simplex" if "polish" in args else None)
+    if "gradient" in args:
+        return gradient_main()
     if "improved" in args:
         return improved_main([a for a in args if a in CASES], "quick" in args)
     if "orbitals" in args:

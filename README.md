@@ -465,6 +465,17 @@ Three things should be said plainly:
 | H₃, richer form, search then simplex | 0.176 | 3.9 |
 
 The richer form cuts the noise of H₂ by a factor of four, which the simple form could not do with any parameters. The iterated search is the more robust of the two: on helium the simplex let the scale of the new terms run off until they vanished, and gained nothing. Where the simplex works it gets slightly further, and the search followed by a simplex polish is best or close to best in all three. For H₃ the new terms do not move the zero surfaces, so the error from them remains: the short runs with the richer guess lie 4 to 12 mEh above the reference, with error bars of 3 to 4. 
+**Following the gradient instead of searching.** The spread on a fixed set of sample points is a smooth function of the parameters, so its gradient can be followed (`diffusion_mc.py gradient`; the gradient is taken by differences, not yet by automatic differentiation). Three uses of the gradient were compared with the search at the same number of evaluations, each also with the positive parameters on a logarithmic scale. Spread on fresh sample points after three rounds:
+
+| | He (13 parameters) | H₂ (11) | H₃, richer orbitals (23) |
+|---|---|---|---|
+| Search then simplex, no gradient | 0.086 | 0.079 | 0.098 |
+| Plain descent | 0.089 | 0.100 | 0.108 |
+| Each parameter's step normalised by its own gradient (Adam) | 0.087 | 0.096 | 0.102 |
+| Gradient with curvature (BFGS) | 0.086 | 0.083 | 0.094 |
+
+At this size the gradient buys nothing: the best gradient method and the search end at the same place, within the scatter between sample sets (about 0.005). Normalising each parameter helps plain descent but does not beat the method that learns the curvature, and the logarithmic scale changes nothing measurable. That every method stops at the same spread says the form of the guess is the limit now, not the way its parameters are found. The case for gradients is many more parameters than these, which has not been tested.
+
 **Richer orbitals move the zero surfaces.** For H₃ each atom gets a second exponent and a p function along the line of the molecule, mixed into the two orbitals as far as their symmetry allows (`diffusion_mc.py orbitals`). Only this part of the guess decides where it is zero. With 20 000 walkers:
 
 | H₃ at the saddle | Spread of `(H g)/g` | Walkers | Difference from reference |
