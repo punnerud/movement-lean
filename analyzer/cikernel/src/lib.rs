@@ -28,6 +28,11 @@ pub struct Ci {
     /// for each alpha string: the listed alpha strings one excitation away (id, hole, particle, sign)
     alpha_singles: Vec<Vec<(u32, u8, u8, f64)>>,
     g_max: f64,
+    /// for each pair of orbitals that electrons leave, the pairs they can go to,
+    /// strongest coupling first (the heat-bath ordering): see `sorted_couplings`
+    opposite: Vec<(u8, u8, f64)>,
+    same: Vec<(u8, u8, f64)>,
+    plain_search: bool,
     /// partners remembered for the determinants where finding them is costly: see `ci_plan`
     cache_start: Vec<u64>,
     cache_len: Vec<u32>,
@@ -60,6 +65,31 @@ impl Ci {
     fn g(&self, p: usize, q: usize, r: usize, s: usize) -> f64 {
         let n = self.n;
         unsafe { *self.g.get_unchecked(((p * n + q) * n + r) * n + s) }
+    }
+
+    /// Sort the double-excitation couplings by size, once. A search that only
+    /// wants couplings above a threshold then reads the front of a list and
+    /// stops, instead of trying every pair of target orbitals.
+    /// `opposite[(i*n+j)*n*n ..]`: electrons leave i (one spin) and j (other spin) for p and q.
+    /// `same[pair(i,j)*npair ..]` with i < j: both of one spin, to p < q.
+    fn sorted_couplings(&mut self) {
+        let n = self.n;
+        let this = &*self;
+        let by_size = |v: &mut Vec<(u8, u8, f64)>| v.sort_unstable_by(|x, y| y.2.abs().partial_cmp(&x.2.abs()).unwrap());
+        let opposite: Vec<(u8, u8, f64)> = (0..n * n).into_par_iter().flat_map_iter(|ij| {
+            let (i, j) = (ij / n, ij % n);
+            let mut v: Vec<(u8, u8, f64)> = (0..n * n).map(|pq| (((pq / n) as u8), ((pq % n) as u8), this.g(i, pq / n, j, pq % n))).collect();
+            by_size(&mut v);
+            v
+        }).collect();
+        let pairs: Vec<(usize, usize)> = (0..n).flat_map(|i| (i + 1..n).map(move |j| (i, j))).collect();
+        let same: Vec<(u8, u8, f64)> = pairs.par_iter().flat_map_iter(|&(i, j)| {
+            let mut v: Vec<(u8, u8, f64)> = pairs.iter().map(|&(p, q)| (p as u8, q as u8, this.g(i, p, j, q) - this.g(i, q, j, p))).collect();
+            by_size(&mut v);
+            v
+        }).collect();
+        self.opposite = opposite;
+        self.same = same;
     }
 
     fn diag_of(&self, a: u64, b: u64) -> f64 {
@@ -270,8 +300,12 @@ fn build(n: usize, h: &[f64], g: &[f64], da: &[u64], db: &[u64]) -> (Ci, HashMap
     let mut ci = Ci {
         n, h: h.to_vec(), g: g.to_vec(), da: da.to_vec(), db: db.to_vec(), aid, bid,
         diag: Vec::new(), rows, cols, alpha_singles, g_max,
+        opposite: Vec::new(), same: Vec::new(), plain_search: std::env::var("CI_PLAIN_SEARCH").is_ok(),
         cache_start: vec![NOT_CACHED; da.len()], cache_len: vec![0; da.len()], cache_j: Vec::new(), cache_v: Vec::new(),
     };
+    if !ci.plain_search {
+        ci.sorted_couplings();
+    }
     ci.diag = (0..da.len()).into_par_iter().map(|k| ci.diag_of(ci.da[k], ci.db[k])).collect();
     (ci, amap)
 }
@@ -443,6 +477,9 @@ fn gather(hd: &Handle, c: &[f64], eps: f64, parts: u64, part: u64) -> Vec<(u64, 
                         let s1 = phase(x, i, p);
                         let v = s1 * ci.single(x, other, i, p) * ck;
                         if spin == 0 { push(x1, other, v) } else { push(other, x1, v) }
+                        if !ci.plain_search {
+                            continue;
+                        }
                         for jj in ii + 1..ko {
                             for bb in aa + 1..kv {
                                 let (j, q) = (occ[jj], vir[bb]);
@@ -455,8 +492,52 @@ fn gather(hd: &Handle, c: &[f64], eps: f64, parts: u64, part: u64) -> Vec<(u64, 
                         }
                     }
                 }
+                if !ci.plain_search {
+                    let npair = n * (n - 1) / 2;
+                    for ii in 0..ko {
+                        for jj in ii + 1..ko {
+                            let (i, j) = (occ[ii], occ[jj]);
+                            let at = (i * (2 * n - i - 1) / 2 + j - i - 1) * npair;
+                            for &(p, q, w) in &ci.same[at..at + npair] {
+                                if (w * ck).abs() <= eps {
+                                    break;
+                                }
+                                let (p, q) = (p as usize, q as usize);
+                                if x >> p & 1 == 1 || x >> q & 1 == 1 {
+                                    continue;
+                                }
+                                let x1 = x ^ (1u64 << i) ^ (1u64 << p);
+                                let v = phase(x, i, p) * phase(x1, j, q) * w * ck;
+                                let x2 = x1 ^ (1u64 << j) ^ (1u64 << q);
+                                if spin == 0 { push(x2, other, v) } else { push(other, x2, v) }
+                            }
+                        }
+                    }
+                }
             }
             // one electron of each spin moves
+            if !ci.plain_search {
+                for &i in &oa[..koa] {
+                    for &j in &ob[..kob] {
+                        let at = (i * n + j) * n * n;
+                        for &(p, q, w) in &ci.opposite[at..at + n * n] {
+                            if (w * ck).abs() <= eps {
+                                break;
+                            }
+                            let (p, q) = (p as usize, q as usize);
+                            if a >> p & 1 == 1 || b >> q & 1 == 1 {
+                                continue;
+                            }
+                            let a2 = a ^ (1u64 << i) ^ (1u64 << p);
+                            if parts > 1 && bucket(a2, parts) != part {
+                                continue;
+                            }
+                            push(a2, b ^ (1u64 << j) ^ (1u64 << q), phase(a, i, p) * ck * w * phase(b, j, q));
+                        }
+                    }
+                }
+                return acc;
+            }
             for &i in &oa[..koa] {
                 for &p in &va[..kva] {
                     let sa = phase(a, i, p) * ck;
