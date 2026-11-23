@@ -403,35 +403,68 @@ pub unsafe extern "C" fn ci_plan(handle: *mut Handle, budget_bytes: usize, saved
         chosen[k] = true;
         work_saved += measured[k].0 - measured[k].1 as u64;
     }
-    let lists: Vec<Option<(Vec<u32>, Vec<f64>)>> = {
-        let ci = &*ci;
-        (0..nd)
-            .into_par_iter()
-            .map(|k| {
-                if !chosen[k] {
-                    return None;
-                }
-                let (mut js, mut vs) = (Vec::with_capacity(measured[k].1 as usize), Vec::with_capacity(measured[k].1 as usize));
-                ci.partners(k, &mut |j, v| {
-                    js.push(j);
-                    vs.push(v);
-                });
-                Some((js, vs))
-            })
-            .collect()
-    };
+    // the stored lists go straight into two flat arrays of known size
+    let total: usize = (0..nd).filter(|&k| chosen[k]).map(|k| measured[k].1 as usize).sum();
+    let (mut flat_j, mut flat_v) = (vec![0u32; total], vec![0f64; total]);
     let mut count = 0;
-    for (k, l) in lists.into_iter().enumerate() {
-        if let Some((js, vs)) = l {
-            ci.cache_start[k] = ci.cache_j.len() as u64;
-            ci.cache_len[k] = js.len() as u32;
-            ci.cache_j.extend(js);
-            ci.cache_v.extend(vs);
+    {
+        let (mut rest_j, mut rest_v, mut at) = (&mut flat_j[..], &mut flat_v[..], 0usize);
+        let mut pieces: Vec<(usize, &mut [u32], &mut [f64])> = Vec::new();
+        for k in 0..nd {
+            if !chosen[k] {
+                continue;
+            }
+            let len = measured[k].1 as usize;
+            let (js, tail_j) = rest_j.split_at_mut(len);
+            let (vs, tail_v) = rest_v.split_at_mut(len);
+            rest_j = tail_j;
+            rest_v = tail_v;
+            ci.cache_start[k] = at as u64;
+            ci.cache_len[k] = len as u32;
+            at += len;
             count += 1;
+            pieces.push((k, js, vs));
         }
+        let ci = &*ci;
+        pieces.into_par_iter().for_each(|(k, js, vs)| {
+            let mut at = 0;
+            ci.partners(k, &mut |j, v| {
+                js[at] = j;
+                vs[at] = v;
+                at += 1;
+            });
+        });
     }
+    ci.cache_j = flat_j;
+    ci.cache_v = flat_v;
     *saved = if work_all > 0 { work_saved as f64 / work_all as f64 } else { 0.0 };
     count
+}
+
+/// Sort by determinant and add up the entries of each determinant, in place.
+fn compact(v: &mut Vec<(u64, u64, f64)>, parallel: bool) {
+    if parallel {
+        v.par_sort_unstable_by(|x, y| (x.0, x.1).cmp(&(y.0, y.1)));
+    } else {
+        v.sort_unstable_by(|x, y| (x.0, x.1).cmp(&(y.0, y.1)));
+    }
+    v.dedup_by(|later, kept| {
+        let same = later.0 == kept.0 && later.1 == kept.1;
+        if same {
+            kept.2 += later.2;
+        }
+        same
+    });
+}
+
+/// Compact a growing list when it has doubled since the last time, so that
+/// the many contributions to one determinant do not pile up in memory.
+fn tidy(mut state: (Vec<(u64, u64, f64)>, usize)) -> (Vec<(u64, u64, f64)>, usize) {
+    if state.0.len() > 2 * state.1 + (1 << 20) {
+        compact(&mut state.0, false);
+        state.1 = state.0.len();
+    }
+    state
 }
 
 #[inline]
@@ -447,9 +480,7 @@ fn gather(hd: &Handle, c: &[f64], eps: f64, parts: u64, part: u64) -> Vec<(u64, 
     let ci = &hd.ci;
     let n = ci.n;
     let full = (1u64 << n) - 1;
-    let mut found: Vec<(u64, u64, f64)> = (0..ci.da.len())
-        .into_par_iter()
-        .fold(Vec::new, |mut acc, k| {
+    let scan = |mut acc: Vec<(u64, u64, f64)>, k: usize| -> Vec<(u64, u64, f64)> {
             let ck = c[k];
             if ck.abs() * 4.0 * ci.g_max.max(1.0) < eps {
                 return acc;
@@ -556,23 +587,20 @@ fn gather(hd: &Handle, c: &[f64], eps: f64, parts: u64, part: u64) -> Vec<(u64, 
                 }
             }
             acc
-        })
-        .reduce(Vec::new, |mut x, mut y| {
-            if x.len() < y.len() {
+    };
+    let (mut found, _) = (0..ci.da.len())
+        .into_par_iter()
+        .fold(|| (Vec::new(), 0usize), |(acc, mark), k| tidy((scan(acc, k), mark)))
+        .reduce(|| (Vec::new(), 0usize), |mut x, mut y| {
+            if x.0.len() < y.0.len() {
                 std::mem::swap(&mut x, &mut y);
             }
-            x.append(&mut y);
-            x
+            x.0.append(&mut y.0);
+            x.0.shrink_to_fit();
+            tidy((x.0, x.1.max(y.1)))
         });
-    found.par_sort_unstable_by(|x, y| (x.0, x.1).cmp(&(y.0, y.1)));
-    let mut merged: Vec<(u64, u64, f64)> = Vec::new();
-    for e in found {
-        match merged.last_mut() {
-            Some(last) if last.0 == e.0 && last.1 == e.1 => last.2 += e.2,
-            _ => merged.push(e),
-        }
-    }
-    merged
+    compact(&mut found, true);
+    found
 }
 
 /// Determinants outside the list, ranked by the energy each would bring:
@@ -590,23 +618,20 @@ pub unsafe extern "C" fn ci_candidates(
     let hd = &*handle;
     let ci = &hd.ci;
     let c = std::slice::from_raw_parts(c, ci.da.len());
-    let merged = gather(hd, c, eps, 1, 0);
-    let mut gains: Vec<(f64, u64, u64)> = merged
-        .par_iter()
-        .map(|&(a, b, v)| (v * v / (energy - ci.diag_of(a, b)).min(-1e-6), a, b))
-        .collect();
-    *total = gains.par_iter().map(|e| e.0).sum();
+    let mut gains = gather(hd, c, eps, 1, 0);
+    gains.par_iter_mut().for_each(|e| e.2 = e.2 * e.2 / (energy - ci.diag_of(e.0, e.1)).min(-1e-6));
+    *total = gains.par_iter().map(|e| e.2).sum();
     let count = gains.len();
     let keep = max_out.min(count);
     if keep > 0 && keep < count {
-        gains.select_nth_unstable_by(keep - 1, |x, y| x.0.partial_cmp(&y.0).unwrap());
+        gains.select_nth_unstable_by(keep - 1, |x, y| x.2.partial_cmp(&y.2).unwrap());
     }
     gains.truncate(keep);
-    gains.par_sort_unstable_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
+    gains.par_sort_unstable_by(|x, y| x.2.partial_cmp(&y.2).unwrap());
     for (k, e) in gains.iter().enumerate() {
-        *out_gain.add(k) = e.0;
-        *out_a.add(k) = e.1;
-        *out_b.add(k) = e.2;
+        *out_gain.add(k) = e.2;
+        *out_a.add(k) = e.0;
+        *out_b.add(k) = e.1;
     }
     *written = keep;
     count
