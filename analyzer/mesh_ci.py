@@ -55,7 +55,7 @@ def kernel():
             f("ci_candidates").argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, size, u64, u64, dbl, dbl,
                                            ctypes.POINTER(size)]
         lib.walk_run.restype = ctypes.c_int
-        lib.walk_run.argtypes = [size, dbl, dbl, size] + [ctypes.c_double] * 3 + [size, size, size, ctypes.c_uint64, dbl, dbl]
+        lib.walk_run.argtypes = [size, dbl, dbl, dbl, size, size, dbl, dbl] + [ctypes.c_double] * 2 + [size, size, size, ctypes.c_uint64, dbl, dbl]
         _lib = lib
     return _lib
 

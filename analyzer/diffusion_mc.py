@@ -15,13 +15,22 @@ rate becomes E_T - (H g)/g, which stays finite when g has the right cusps.
 For two electrons of opposite spin the ground state has no nodes, so the
 result does not depend on g: only the statistical noise does. The remaining
 error is the finite time step, removed by repeating with smaller steps.
+With more electrons the wavefunction changes sign. The walkers are then kept
+on one side of the surfaces where g is zero, and the result is the lowest
+energy with those surfaces: an upper bound that depends on g.
 
-    python3 analyzer/diffusion_mc.py            # free walk, H, He, H2 (about ten minutes)
+Reactions are differences of such energies: the barrier of H + H2 -> H2 + H
+is E(H3 at the saddle) - E(H) - E(H2).
+
+    python3 analyzer/diffusion_mc.py            # all species and reactions, long (hours on two threads)
+    python3 analyzer/diffusion_mc.py H3 H3+     # only these species; results are kept in ci_cache/diffusion_mc.json
     python3 analyzer/diffusion_mc.py quick      # fewer steps
     python3 analyzer/diffusion_mc.py python     # the walker loop in numpy instead of Rust (same algorithm, slower)
 """
+import json
 import sys
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -29,13 +38,19 @@ HARTREE_EV = 27.211386245981
 
 
 class Guess:
-    """g = prod_i phi(r_i) * exp(u(r_12)), phi(r) = sum over nuclei of
-    exp(-zeta |r - R|), u(r) = r / (2 (1 + b r)). One or two electrons."""
+    """g = det(up orbitals) det(down orbitals) exp(sum over pairs u(r_ij)).
+    An orbital is sum over nuclei c_A exp(-zeta_A |r - R_A|); `up` and `down`
+    list the coefficients c of each occupied orbital (default: one orbital
+    with all c = 1, for one or two electrons). u(r) = a r / (1 + b r) with
+    a = 1/2 for opposite spins and 1/4 for equal ones. `zeta` is one number
+    or one per nucleus. The numpy `evaluate` covers the default case only."""
 
-    def __init__(self, nuclei, zeta, b=0.4):
+    def __init__(self, nuclei, zeta, b=0.4, up=None, down=None):
+        self.up = np.array(up if up is not None else [[1.0] * len(nuclei)], float)
+        self.down = np.array(down if down is not None else [[1.0] * len(nuclei)], float).reshape(-1, len(nuclei))
         self.Z = np.array([z for z, _ in nuclei], float)
         self.R = np.array([p for _, p in nuclei], float)
-        self.zeta, self.b = zeta, b
+        self.zeta, self.b = np.broadcast_to(np.asarray(zeta, float), (len(nuclei),)).copy(), b
         self.e_nuc = sum(self.Z[i] * self.Z[j] / np.linalg.norm(self.R[i] - self.R[j])
                          for i in range(len(nuclei)) for j in range(i))
 
@@ -63,6 +78,12 @@ class Guess:
         return ln, grad, -0.5 * (lap + (grad ** 2).sum(-1)).sum(-1) + V
 
 
+def shorten(drift, tau):
+    """The drift of each electron, shortened where it is very large (see cikernel/src/walk.rs)."""
+    v2 = (drift ** 2).sum(-1, keepdims=True) * tau
+    return drift * np.where(v2 > 1e-12, (np.sqrt(1 + 2 * v2) - 1) / np.maximum(v2, 1e-300), 1.0)
+
+
 def free_walk(walkers=20000, steps=200, tau=0.01, seed=1):
     """No guess, no potential: <x^2> must be 2 D t per direction (Lean: `einstein_relation`)."""
     rng = np.random.default_rng(seed)
@@ -85,9 +106,11 @@ def energy_rust(guess, electrons, tau, walkers=3000, duration=150.0, seed=1):
     warm, steps = int(20.0 / tau), int(duration / tau)
     out, alone = np.zeros(steps), ctypes.c_double(0.0)
     Z, R = np.ascontiguousarray(guess.Z), np.ascontiguousarray(guess.R.ravel())
-    if lib.walk_run(len(Z), mesh_ci._d(Z), mesh_ci._d(R), electrons, guess.zeta, guess.b, tau, walkers, warm, steps,
-                    seed, mesh_ci._d(out), ctypes.byref(alone)):
-        raise ValueError("one or two electrons only")
+    up = np.ascontiguousarray(guess.up)
+    down = np.ascontiguousarray(guess.down[:electrons - len(up)])
+    if lib.walk_run(len(Z), mesh_ci._d(Z), mesh_ci._d(R), mesh_ci._d(guess.zeta), len(up), len(down), mesh_ci._d(up),
+                    mesh_ci._d(down), guess.b, tau, walkers, warm, steps, seed, mesh_ci._d(out), ctypes.byref(alone)):
+        raise ValueError("too many electrons for the walker loop")
     return (*_blocks(out), alone.value)
 
 
@@ -98,24 +121,28 @@ def energy(guess, electrons, tau, walkers=3000, duration=150.0, seed=1):
     rng = np.random.default_rng(seed)
     x = rng.normal(0.0, 1.0, (walkers, electrons, 3)) + guess.R[rng.integers(len(guess.R), size=(walkers, electrons))]
     ln, drift, local = guess.evaluate(x)
+    drift = shorten(drift, tau)
     shift = local.mean()
     samples, first = [], []
     for step in range(warm + steps):
         # diffusion with drift, accepted or rejected so that g^2 is sampled exactly at any step
         new = x + tau * drift + rng.normal(0.0, np.sqrt(tau), x.shape)
         ln2, drift2, local2 = guess.evaluate(new)
+        drift2 = shorten(drift2, tau)
         forward = ((new - x - tau * drift) ** 2).sum((1, 2))
         back = ((x - new - tau * drift2) ** 2).sum((1, 2))
         accept = np.log(rng.random(walkers)) < 2 * (ln2 - ln) + (forward - back) / (2 * tau)
-        old_local = local.copy()
+        limit = 0.2 * np.sqrt(electrons / tau)                   # see cikernel/src/walk.rs
+        old_local = np.clip(local, shift - limit, shift + limit)
         x[accept], ln[accept], drift[accept], local[accept] = new[accept], ln2[accept], drift2[accept], local2[accept]
         if step < warm // 2:                                     # no reaction yet: this samples the guess alone
             if step >= warm // 4:
                 first.append(local.mean())
             continue
         # reaction: multiply or die at the rate shift - local energy
-        weight = np.exp(-tau * (0.5 * (local + old_local) - shift))
-        samples.append((np.sum(weight * local) / np.sum(weight), weight.mean()))
+        here = np.clip(local, shift - limit, shift + limit)
+        weight = np.where(accept, np.exp(-tau * (0.5 * (here + old_local) - shift)), 1.0)   # no move, no reaction
+        samples.append((np.sum(weight * here) / np.sum(weight), weight.mean()))
         copies = np.floor(weight * walkers / weight.sum() + rng.random(walkers)).astype(int)
         keep = np.repeat(np.arange(walkers), copies)
         if len(keep) != walkers:                                 # hold the population at its size
@@ -135,29 +162,58 @@ def extrapolated(guess, electrons, taus, run=energy_rust, **kw):
     return runs, float(fit[0]), float(np.sqrt(cov[0, 0]))
 
 
-CASES = [("H atom", [(1, (0, 0, 0))], 1, 0.9, -0.5, "exact"),
-         ("He atom", [(2, (0, 0, 0))], 2, 2.0, -2.903724, "Pekeris, non-relativistic"),
-         ("H2 at 1.4 bohr", [(1, (0, 0, -0.7)), (1, (0, 0, 0.7))], 2, 1.19, -1.174476, "Kolos and Wolniewicz")]
+S3 = 1.65 * np.sqrt(3) / 2
+# name: nuclei, electrons (up, down), zeta, orbitals up / down (None: one orbital, all coefficients 1), reference, source
+CASES = {
+    "H": ([(1, (0, 0, 0))], (1, 0), 0.9, None, None, -0.5, "exact"),
+    "He": ([(2, (0, 0, 0))], (1, 1), 2.0, None, None, -2.903724, "Pekeris, non-relativistic"),
+    "H2": ([(1, (0, 0, -0.7)), (1, (0, 0, 0.7))], (1, 1), 1.19, None, None, -1.174476, "Kolos and Wolniewicz, 1.4 bohr"),
+    "H3+": ([(1, (0, 0, 0)), (1, (1.65, 0, 0)), (1, (0.825, S3, 0))], (1, 1), 1.35, None, None, -1.343836,
+            "equilateral, side 1.65 bohr; from memory, not checked"),
+    "HeH+": ([(2, (0, 0, 0)), (1, (0, 0, 1.4632))], (1, 1), (2.116, 1.18), [[1.0, 0.25]], [[1.0, 0.25]], -2.978706,
+             "1.4632 bohr; from memory, not checked"),
+    # three electrons: the wavefunction changes sign, the walkers stay on one side (upper bound)
+    "H3": ([(1, (0, 0, -1.757)), (1, (0, 0, 0)), (1, (0, 0, 1.757))], (2, 1), 1.2, [[1.0, 1.0, 1.0], [1.0, 0.0, -1.0]],
+           [[1.0, 1.0, 1.0]], -1.659162, "linear saddle of H + H2, 1.757 bohr; from memory (barrier 9.61 kcal/mol), not checked"),
+}
+# reactions: name, {species: count} (products positive), reference in hartree
+REACTIONS = [("H2 -> 2 H (binding energy)", {"H": 2, "H2": -1}, 0.174476),
+             ("H + H2 -> H3 (barrier of the exchange reaction)", {"H3": 1, "H": -1, "H2": -1}, 0.015314),
+             ("H3+ -> H2 + H+ (proton leaves)", {"H2": 1, "H3+": -1}, 0.169360),
+             ("HeH+ -> He + H+ (proton leaves)", {"He": 1, "HeH+": -1}, 0.074982)]
+STORE = Path(__file__).resolve().parent / "ci_cache" / "diffusion_mc.json"
 
 
 def main():
-    quick = "quick" in sys.argv[1:]
-    run = energy if "python" in sys.argv[1:] else energy_rust
+    args = sys.argv[1:]
+    quick = "quick" in args
+    run = energy if "python" in args else energy_rust
+    names = [a for a in args if a in CASES] or list(CASES)
     kw = dict(duration=30.0) if quick else dict(duration=150.0) if run is energy else dict(duration=600.0, walkers=20000)
     got, want = free_walk()
     print(f"free walk: <x^2 + y^2 + z^2>/3 = {got:.4f}, 2 D t = {want:.4f}")
     taus = (0.02, 0.01, 0.005)
-    results = {}
-    for name, nuclei, electrons, zeta, reference, source in CASES:
+    results = json.loads(STORE.read_text()) if STORE.exists() and not quick else {}
+    for name in names:
+        nuclei, (n_up, n_dn), zeta, up, down, reference, source = CASES[name]
+        if run is energy and (up is not None or n_up > 1):
+            continue                                             # the numpy loop has the simple guess only
         t0 = time.time()
-        runs, e0, s0 = extrapolated(Guess(nuclei, zeta), electrons, taus, run=run, **kw)
+        runs, e0, s0 = extrapolated(Guess(nuclei, zeta, up=up, down=down), n_up + n_dn, taus, run=run, **kw)
         results[name] = (e0, s0)
         print(f"{name}: the guess alone {runs[-1][2]:.4f}; " +
               ", ".join(f"step {tau:g}: {e:.5f} ± {s:.5f}" for tau, (e, s, _) in zip(taus, runs)) +
               f"; step -> 0: {e0:.5f} ± {s0:.5f}   reference {reference:.6f} ({source}), "
               f"difference {1e3 * (e0 - reference):+.2f} mEh   ({time.time() - t0:.0f} s)", flush=True)
-    d, s = 2 * results["H atom"][0] - results["H2 at 1.4 bohr"][0], np.hypot(2 * results["H atom"][1], results["H2 at 1.4 bohr"][1])
-    print(f"H2 binding energy: {d * HARTREE_EV:.4f} ± {s * HARTREE_EV:.4f} eV   (2 x 0.5 - reference: {(1.174476 - 1) * HARTREE_EV:.4f})")
+        if not quick:
+            STORE.parent.mkdir(exist_ok=True)
+            STORE.write_text(json.dumps(results, indent=1))
+    for name, parts, reference in REACTIONS:
+        if all(s in results for s in parts):
+            d = sum(k * results[s][0] for s, k in parts.items())
+            s = np.sqrt(sum((k * results[s][1]) ** 2 for s, k in parts.items()))
+            print(f"{name}: {1e3 * d:.2f} ± {1e3 * s:.2f} mEh = {d * HARTREE_EV:.3f} ± {s * HARTREE_EV:.3f} eV   "
+                  f"(reference {1e3 * reference:.2f} mEh)")
 
 
 if __name__ == "__main__":
