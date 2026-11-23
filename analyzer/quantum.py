@@ -774,7 +774,8 @@ def _strings(n, k):
     return occ, np.array(pq), np.array(I), np.array(J), np.array(sign)
 
 
-def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=False):
+def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=False, blocked=False,
+        max_vectors=None, block_bytes=2e8):
     """Full configuration interaction ground state in an orthonormal orbital basis.
 
     The wavefunction is a matrix C[alpha string, beta string]; the lowest
@@ -782,7 +783,14 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
     With low_memory=True (needs scipy) the work array of size
     orbitals^2 x determinants is avoided: the same-spin parts become two
     dense matrices over strings, and the opposite-spin part is applied one
-    orbital pair at a time through sparse matrices."""
+    orbital pair at a time through sparse matrices.
+    With blocked=True (needs scipy) the work array is built for a block of
+    spin-up strings at a time (about `block_bytes` each for the two arrays),
+    using that (pq|rs) is the same for pq and qp: the form used by PySCF.
+    Measured on Cl- in 15 orbitals it is twice as slow as low_memory and
+    uses no less memory, so low_memory remains the choice for large cases.
+    `max_vectors` is the number of Davidson vectors kept before a restart;
+    the solver holds about 2 * max_vectors + 5 arrays the size of C."""
     n = h.shape[0]
     occ_a, pq_a, I_a, J_a, s_a = _strings(n, n_alpha)
     occ_b, pq_b, I_b, J_b, s_b = _strings(n, n_beta)
@@ -840,7 +848,37 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
                 out[I_a[lo:hi]] += (M @ T.T).T
             return out
 
-    restart = 8 if low_memory else 25
+    if blocked:
+        from scipy import sparse
+        iu = np.triu_indices(n)
+        pair = np.zeros((n, n), dtype=np.int64)
+        pair[iu] = pair[iu[1], iu[0]] = np.arange(len(iu[0]))
+        npair = len(iu[0])
+        kP = k[iu]
+        gP = 0.5 * eri[iu[0], iu[1]][:, iu[0], iu[1]]
+        # rows (J, P): <I| E_pq + E_qp |J>, so a block of J is a slice of rows
+        P_a, P_b = pair.ravel()[pq_a], pair.ravel()[pq_b]
+        A = sparse.csr_matrix((s_a, (J_a * npair + P_a, I_a)), shape=(Na * npair, Na))
+        B = sparse.csr_matrix((s_b, (P_b * Nb + J_b, I_b)), shape=(npair * Nb, Nb))
+        At, Bt = A.T.tocsr(), B.T.tocsr()
+        blk = int(max(1, min(Na, block_bytes // (8 * npair * Nb))))
+
+        def sigma(C):                                      # noqa: F811
+            out = np.zeros((Na, Nb))
+            for lo in range(0, Na, blk):
+                hi = min(Na, lo + blk)
+                m = hi - lo
+                Cb = C[lo:hi]
+                D = (A[lo * npair:hi * npair] @ C).reshape(m, npair, Nb)
+                D += (B @ Cb.T).T.reshape(m, npair, Nb)
+                G = np.matmul(gP, D)
+                del D
+                G += kP[None, :, None] * Cb[:, None, :]
+                out += At[:, lo * npair:hi * npair] @ G.reshape(m * npair, Nb)
+                out[lo:hi] += (Bt @ G.reshape(m, npair * Nb).T).T
+            return out
+
+    restart = max_vectors or (6 if low_memory or blocked else 25)
     hd = np.diag(h)
     Jm = np.einsum("iijj->ij", eri)
     Km = np.einsum("ijji->ij", eri)
@@ -850,32 +888,45 @@ def fci(h, eri, n_alpha, n_beta, e_nuc=0.0, tol=1e-7, max_iter=200, low_memory=F
             + 0.5 * np.einsum("ip,pq,iq->i", occ_b, same, occ_b)[None, :]
             + occ_a @ Jm @ occ_b.T)
 
-    start = np.zeros((Na, Nb))
-    start.flat[np.argmin(diag)] = 1.0
-    vectors, sigmas = [start], [sigma(start)]
+    # Davidson: the vectors and their images are kept once, in two arrays
+    N = Na * Nb
+    V, Sg = np.empty((restart, N)), np.empty((restart, N))
+    small = np.zeros((restart, restart))
+    diag = diag.ravel()
+
+    def add(m, v):
+        V[m] = v
+        Sg[m] = sigma(V[m].reshape(Na, Nb)).ravel()
+        small[m, :m + 1] = small[:m + 1, m] = V[:m + 1] @ Sg[m]
+
+    start = np.zeros(N)
+    start[np.argmin(diag)] = 1.0
+    add(0, start)
+    m = 1
     energy = diag.min()
     for _ in range(max_iter):
-        V = np.array([v.ravel() for v in vectors])
-        Sg = np.array([s.ravel() for s in sigmas])
-        w, y = np.linalg.eigh(V @ Sg.T)
+        w, y = np.linalg.eigh(small[:m, :m])
         energy, y = w[0], y[:, 0]
-        x = (y @ V).reshape(Na, Nb)
-        residual = (y @ Sg).reshape(Na, Nb) - energy * x
-        if np.linalg.norm(residual) < tol:
+        new = y @ Sg[:m]
+        x = y @ V[:m]
+        new -= energy * x
+        if np.linalg.norm(new) < tol:
             break
-        if len(vectors) >= restart:
+        if m >= restart:
             x /= np.linalg.norm(x)
-            vectors, sigmas = [x], [sigma(x)]
-            residual = sigmas[0] - energy * x
+            add(0, x)
+            m = 1
+            np.subtract(Sg[0], energy * V[0], out=new)
+        del x
         denom = energy - diag
         denom[np.abs(denom) < 1e-3] = -1e-3
-        new = residual / denom
-        for v in vectors:
-            new -= np.vdot(v, new) * v
-        for v in vectors:
-            new -= np.vdot(v, new) * v
+        new /= denom
+        del denom
+        for _ in range(2):
+            new -= (V[:m] @ new) @ V[:m]
         new /= np.linalg.norm(new)
-        vectors.append(new); sigmas.append(sigma(new))
+        add(m, new)
+        m += 1
     else:
         raise RuntimeError("full CI did not converge")
     return float(energy) + e_nuc
