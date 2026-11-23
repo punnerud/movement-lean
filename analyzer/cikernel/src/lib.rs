@@ -25,7 +25,7 @@ mod wide {
 }
 
 macro_rules! export {
-    ($m:ident, $new:ident, $free:ident, $diag:ident, $sigma:ident, $plan:ident, $candidates:ident, $pt2:ident) => {
+    ($m:ident, $new:ident, $free:ident, $diag:ident, $sigma:ident, $plan:ident, $candidates:ident, $pt2:ident, $rdm1:ident) => {
         #[no_mangle]
         pub unsafe extern "C" fn $new(n: usize, h: *const f64, g: *const f64, nd: usize, da: *const u64, db: *const u64) -> *mut $m::Handle {
             $m::ci_new(n, h, g, nd, da, db)
@@ -57,8 +57,12 @@ macro_rules! export {
         pub unsafe extern "C" fn $pt2(handle: *const $m::Handle, c: *const f64, energy: f64, eps: f64, parts: u64, part: u64, total: *mut f64) -> usize {
             $m::ci_pt2(handle, c, energy, eps, parts, part, total)
         }
+        #[no_mangle]
+        pub unsafe extern "C" fn $rdm1(handle: *const $m::Handle, c: *const f64, out: *mut f64) {
+            $m::ci_rdm1(handle, c, out)
+        }
     };
 }
 
-export!(narrow, ci_new, ci_free, ci_diag, ci_sigma, ci_plan, ci_candidates, ci_pt2);
-export!(wide, ci_new_wide, ci_free_wide, ci_diag_wide, ci_sigma_wide, ci_plan_wide, ci_candidates_wide, ci_pt2_wide);
+export!(narrow, ci_new, ci_free, ci_diag, ci_sigma, ci_plan, ci_candidates, ci_pt2, ci_rdm1);
+export!(wide, ci_new_wide, ci_free_wide, ci_diag_wide, ci_sigma_wide, ci_plan_wide, ci_candidates_wide, ci_pt2_wide, ci_rdm1_wide);

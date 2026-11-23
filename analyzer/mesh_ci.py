@@ -46,6 +46,7 @@ def kernel():
             f("ci_free").argtypes = [ptr]
             f("ci_diag").argtypes = [ptr, dbl]
             f("ci_sigma").argtypes = [ptr, dbl, dbl]
+            f("ci_rdm1").argtypes = [ptr, dbl, dbl]
             f("ci_plan").restype = size
             f("ci_plan").argtypes = [ptr, size, dbl]
             f("ci_pt2").restype = size
@@ -117,6 +118,12 @@ class Mesh:
     def sigma(self, c):
         out = np.empty_like(c)
         self._f("ci_sigma")(self.handle, _d(c), _d(out))
+        return out
+
+    def density(self, c):
+        """One-particle density matrix <c| a+_p a_q |c>, both spins added."""
+        out = np.zeros((self.n, self.n))
+        self._f("ci_rdm1")(self.handle, _d(np.ascontiguousarray(c, dtype=np.float64)), _d(out))
         return out
 
     def candidates(self, c, energy, eps, count):
@@ -235,6 +242,47 @@ def exchange(h, eri, mesh, c, energy, eps, swap=0.25, plan_bytes=2_000_000_000):
     if new_energy >= energy:
         return None
     return new, new_c, new_energy, rest, m
+
+
+def natural_orbitals(h, eri, n_alpha, n_beta, pilot=20000, rounds=1, keep=0.0, report=None, wide=None):
+    """Orbitals learned from a small run. A pilot list of `pilot` determinants
+    is solved, the one-particle density matrix of its wavefunction is
+    diagonalised, and the orbitals are rotated to its eigenvectors (the
+    natural orbitals), most occupied first. In these orbitals a list of a
+    given size reaches a lower energy. Repeating (`rounds`) learns from the
+    improved wavefunction. Orbitals occupied by less than `keep` electrons are
+    dropped. Returns (h, eri, rotation, occupations) in the new orbitals."""
+    import quantum
+    U_total = np.eye(h.shape[0])
+    occupation = None
+    for _ in range(rounds):
+        mesh, c = _solve_list(h, eri, n_alpha, n_beta, pilot, wide)
+        gamma = mesh.density(c)
+        del mesh
+        occupation, U = np.linalg.eigh(0.5 * (gamma + gamma.T))
+        order = np.argsort(-occupation)
+        occupation, U = occupation[order], U[:, order]
+        if report:
+            report(occupation)
+        h, eri = U.T @ h @ U, quantum._transform(eri, U)
+        U_total = U_total @ U
+    if keep > 0.0:
+        m = max(int(np.sum(occupation >= keep)), n_alpha + 1)
+        h, eri, U_total, occupation = h[:m, :m], np.ascontiguousarray(eri[:m, :m, :m, :m]), U_total[:, :m], occupation[:m]
+    return h, eri, U_total, occupation
+
+
+def _solve_list(h, eri, n_alpha, n_beta, size, wide=None):
+    """Grow a list to `size` determinants and return (mesh, coefficients)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "pilot.npz"
+        mesh_ci(h, eri, n_alpha, n_beta, max_determinants=size, store=path, wide=wide, plan_bytes=0)
+        with np.load(path) as f:
+            alpha, beta, c = f["alpha"], f["beta"], f["c"].astype(float)
+    mesh = Mesh(h, eri, alpha, beta)
+    _, c = mesh.solve(start=c)
+    return mesh, c
 
 
 def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, growth=2.0, eps=1e-4, tol=0.0,

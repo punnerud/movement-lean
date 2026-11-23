@@ -624,6 +624,53 @@ fn gather(hd: &Handle, c: &[f64], eps: f64, parts: u64, part: u64) -> Vec<(Bits,
     found
 }
 
+/// One-particle density matrix of the vector, both spins added:
+/// out[p*n+q] = <c| a+_p a_q |c>. Its eigenvectors are the natural orbitals.
+pub unsafe fn ci_rdm1(handle: *const Handle, c: *const f64, out: *mut f64) {
+    let ci = &(*handle).ci;
+    let n = ci.n;
+    let c = std::slice::from_raw_parts(c, ci.da.len());
+    let full = full_mask(n);
+    let total = (0..ci.da.len())
+        .into_par_iter()
+        .fold(|| vec![0.0f64; n * n], |mut acc, k| {
+            let (a, b, ck) = (ci.da[k], ci.db[k], c[k]);
+            let (mut occ, mut vir) = ([0usize; WIDTH], [0usize; WIDTH]);
+            for (x, partners) in [(a, &ci.cols[ci.bid[k] as usize]), (b, &ci.rows[ci.aid[k] as usize])] {
+                let ko = bits_of(x, &mut occ);
+                let kv = bits_of(!x & full, &mut vir);
+                for &i in &occ[..ko] {
+                    acc[i * n + i] += ck * ck;
+                }
+                if partners.len() <= ko * kv {
+                    for &(x2, j) in partners.iter() {
+                        let d = x ^ x2;
+                        if d.count_ones() == 2 {
+                            let (i, p) = ((x & d).trailing_zeros() as usize, (x2 & d).trailing_zeros() as usize);
+                            acc[p * n + i] += phase(x, i, p) * ck * c[j as usize];
+                        }
+                    }
+                } else {
+                    for &i in &occ[..ko] {
+                        for &p in &vir[..kv] {
+                            if let Some(j) = Ci::find(partners, x ^ (ONE << i) ^ (ONE << p)) {
+                                acc[p * n + i] += phase(x, i, p) * ck * c[j as usize];
+                            }
+                        }
+                    }
+                }
+            }
+            acc
+        })
+        .reduce(|| vec![0.0f64; n * n], |mut x, y| {
+            for (u, v) in x.iter_mut().zip(&y) {
+                *u += v;
+            }
+            x
+        });
+    std::slice::from_raw_parts_mut(out, n * n).copy_from_slice(&total);
+}
+
 /// Determinants outside the list, ranked by the energy each would bring:
 /// (sum_i H_ji c_i)^2 / (E - H_jj). Only couplings |H_ji c_i| > eps are
 /// followed. Writes at most `max_out` of the best, and the sum over all
