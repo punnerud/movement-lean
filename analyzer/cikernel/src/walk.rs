@@ -184,8 +184,11 @@ fn evaluate(g: &Guess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) {
 
 /// g = exp(sum over pairs u_ij(r_ij)) for particles of any mass and charge, with
 /// u(r) = (a r + c r^2) / (1 + b r): slope a at contact (the cusp, charge_i charge_j times the
-/// reduced mass), slope c / b far away. No sign changes: for particles that can be told apart,
-/// or two of a kind with opposite spins.
+/// reduced mass), slope c / b far away. The force between a pair is charge_i charge_j / r plus
+/// `linear`_ij r (a constant pull, as between quarks). For particles that can be told apart, or
+/// two of a kind with opposite spins. With `odd` set to a pair (i, j), g is multiplied by
+/// z_i - z_j: the lowest state that is odd under reflection, whose zero surface z_i = z_j is
+/// exact by symmetry (the P state of two particles).
 struct PairGuess<'a> {
     n: usize,
     inv_mass: &'a [f64],
@@ -193,6 +196,8 @@ struct PairGuess<'a> {
     a: &'a [f64],
     b: &'a [f64],
     c: &'a [f64],
+    linear: &'a [f64],
+    odd: Option<(usize, usize)>,
 }
 
 fn evaluate_pairs(g: &PairGuess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) {
@@ -213,15 +218,28 @@ fn evaluate_pairs(g: &PairGuess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) 
             }
             lap[i] += u2 + 2.0 * u1 / r;
             lap[j] += u2 + 2.0 * u1 / r;
-            v += g.charge[i] * g.charge[j] / r;
+            v += g.charge[i] * g.charge[j] / r + g.linear[i * g.n + j] * r;
         }
+    }
+    let mut sign = 1.0;
+    if let Some((i, j)) = g.odd {
+        let z = x[3 * i + 2] - x[3 * j + 2];
+        if z == 0.0 {
+            return (f64::NEG_INFINITY, 0.0, grad, 0.0);
+        }
+        ln += z.abs().ln();
+        sign = z.signum();
+        grad[3 * i + 2] += 1.0 / z;
+        grad[3 * j + 2] -= 1.0 / z;
+        lap[i] -= 1.0 / (z * z);
+        lap[j] -= 1.0 / (z * z);
     }
     let mut kinetic = 0.0;
     for i in 0..g.n {
         let square: f64 = grad[3 * i..3 * i + 3].iter().map(|t| t * t).sum();
         kinetic -= 0.5 * g.inv_mass[i] * (lap[i] + square);
     }
-    (ln, 1.0, grad, kinetic + v)
+    (ln, sign, grad, kinetic + v)
 }
 
 /// The drift of each particle, shortened where it is very large (next to a zero surface of the
@@ -385,16 +403,16 @@ pub unsafe extern "C" fn walk_run(
     0
 }
 
-/// Particles of any mass and charge with Coulomb forces between all pairs and nothing held fixed.
-/// `a`, `b`, `c` are n x n tables of the pair functions' parameters (see `PairGuess`); the
-/// walkers start within `spread` of the origin. Otherwise as `walk_run`.
+/// Particles of any mass and charge, nothing held fixed. `a`, `b`, `c` and `linear` are n x n
+/// tables (see `PairGuess`); `odd` is -1 or i * n + j for the pair whose z-difference multiplies
+/// the guess; the walkers start within `spread` of the origin. Otherwise as `walk_run`.
 ///
 /// # Safety
-/// `mass` and `charge` hold `n` values, `a`, `b`, `c` `n * n` each, `out` `steps` values.
+/// `mass` and `charge` hold `n` values, `a`, `b`, `c`, `linear` `n * n` each, `out` `steps` values.
 #[no_mangle]
 pub unsafe extern "C" fn walk_particles(
     n: usize, mass: *const f64, charge: *const f64, a: *const f64, b: *const f64, c: *const f64,
-    spread: f64, tau: f64, walkers: usize, warm: usize, steps: usize, seed: u64, out: *mut f64,
+    linear: *const f64, odd: i64, spread: f64, tau: f64, walkers: usize, warm: usize, steps: usize, seed: u64, out: *mut f64,
     guess_alone: *mut f64,
 ) -> i32 {
     if n < 2 || n > MAX_ELECTRONS {
@@ -408,6 +426,8 @@ pub unsafe extern "C" fn walk_particles(
         a: std::slice::from_raw_parts(a, n * n),
         b: std::slice::from_raw_parts(b, n * n),
         c: std::slice::from_raw_parts(c, n * n),
+        linear: std::slice::from_raw_parts(linear, n * n),
+        odd: if odd < 0 { None } else { Some((odd as usize / n, odd as usize % n)) },
     };
     let out = std::slice::from_raw_parts_mut(out, steps);
     let start = |rng: &mut Rng| {

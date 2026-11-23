@@ -26,6 +26,7 @@ is E(H3 at the saddle) - E(H) - E(H2).
     python3 analyzer/diffusion_mc.py H3 H3+     # only these species; results are kept in ci_cache/diffusion_mc.json
     python3 analyzer/diffusion_mc.py quick      # fewer steps
     python3 analyzer/diffusion_mc.py particles [quick]   # nothing held fixed: positronium, hydrogen with a moving proton, ...
+    python3 analyzer/diffusion_mc.py charmonium [quick]  # a charm quark and antiquark with a Coulomb-like pull plus a constant one
     python3 analyzer/diffusion_mc.py python     # the walker loop in numpy instead of Rust (same algorithm, slower)
 """
 import json
@@ -159,9 +160,11 @@ def energy(guess, electrons, tau, walkers=3000, duration=150.0, seed=1):
     return (*_blocks(np.array([s[0] for s in samples[warm - warm // 2:]])), float(np.mean(first)))
 
 
-def particles_energy(masses, charges, pairs, tau, length=1.0, time_unit=1.0, walkers=3000, duration=150.0, seed=1):
-    """Lowest energy of particles with the given masses and charges, Coulomb forces between
-    all pairs, nothing held fixed. pairs[(i, j)] = (a, b, c) gives the guess
+def particles_energy(masses, charges, pairs, tau, length=1.0, time_unit=1.0, walkers=3000, duration=150.0, seed=1,
+                     linear=None, odd=None):
+    """Lowest energy of particles with the given masses and charges, nothing held fixed. The
+    force between a pair is charge_i charge_j / r plus linear[(i, j)] r. With odd=(i, j) the
+    guess is multiplied by z_i - z_j: the lowest state odd under reflection (a P state). pairs[(i, j)] = (a, b, c) gives the guess
     exp(sum of (a r + c r^2) / (1 + b r)) (see cikernel/src/walk.rs). `duration` and the
     warm-up of 20 are in units of `time_unit`. Returns (mean, error, mean of the guess alone)."""
     import ctypes
@@ -173,10 +176,14 @@ def particles_energy(masses, charges, pairs, tau, length=1.0, time_unit=1.0, wal
         A[i, j] = A[j, i] = a
         B[i, j] = B[j, i] = b
         C[i, j] = C[j, i] = c
+    L = np.zeros((n, n))
+    for (i, j), k in (linear or {}).items():
+        L[i, j] = L[j, i] = k
     warm, steps = int(20.0 * time_unit / tau), int(duration * time_unit / tau)
     out, alone = np.zeros(steps), ctypes.c_double(0.0)
     m, q = np.array(masses, float), np.array(charges, float)
-    if lib.walk_particles(n, mesh_ci._d(m), mesh_ci._d(q), mesh_ci._d(A), mesh_ci._d(B), mesh_ci._d(C), length, tau,
+    if lib.walk_particles(n, mesh_ci._d(m), mesh_ci._d(q), mesh_ci._d(A), mesh_ci._d(B), mesh_ci._d(C), mesh_ci._d(L),
+                          -1 if odd is None else odd[0] * n + odd[1], length, tau,
                           walkers, warm, steps, seed, mesh_ci._d(out), ctypes.byref(alone)):
         raise ValueError("two to eight particles")
     return (*_blocks(out), alone.value)
@@ -219,6 +226,49 @@ def particles_main(quick):
               flush=True)
 
 
+def radial_levels(mu, potential, l=0, count=2, r_max=30.0, points=20000):
+    """Lowest energies of two particles with reduced mass mu and angular momentum l, from the
+    radial equation on a grid: the independent check of the walkers."""
+    from scipy.linalg import eigh_tridiagonal
+    h = r_max / (points + 1)
+    r = h * np.arange(1, points + 1)
+    diagonal = 1.0 / (mu * h * h) + potential(r) + l * (l + 1) / (2 * mu * r * r)
+    return eigh_tridiagonal(diagonal, np.full(points - 1, -0.5 / (mu * h * h)), select="i", select_range=(0, count - 1))[0]
+
+
+# The Cornell model of charmonium (Eichten et al.): V = -KAPPA / r + r / A^2, in GeV and 1/GeV.
+# These are the single-channel parameters (kappa = 0.52, a = 2.34 / GeV, m_c = 1.84 GeV), as quoted in
+# arXiv:1208.2186; the model's own table of levels has not been compared.
+M_C, KAPPA, A_CORNELL = 1.84, 0.52, 2.34
+# measured masses in GeV (entered from memory): spin-averaged 1S (eta_c, J/psi) and the centre of the 1P states
+MEASURED = {"1S": (3 * 3.0969 + 2.9839) / 4, "1P": 3.5253}
+
+
+def charmonium_main(quick):
+    sigma, mu = 1.0 / A_CORNELL ** 2, M_C / 2
+    V = lambda r: -KAPPA / r + sigma * r
+    grid = {"1S": radial_levels(mu, V, 0)[0], "1P": radial_levels(mu, V, 1)[0]}
+    check = radial_levels(1.0, lambda r: -1.0 / r, 0, r_max=60.0)[0], radial_levels(1.0, lambda r: -1.0 / r, 1, r_max=60.0)[0]
+    print(f"radial grid on hydrogen: 1s {check[0]:.6f} (exact -0.5), 2p {check[1]:.6f} (exact -0.125)")
+    q = np.sqrt(KAPPA)
+    kw = dict(duration=30.0) if quick else dict(duration=300.0, walkers=20000)
+    found = {}
+    for state, odd, (b, c) in (("1S", None, (0.5, -0.5)), ("1P", (0, 1), (0.5, -0.4))):
+        t0 = time.time()
+        taus = [f * 4.0 for f in (0.02, 0.01, 0.005)]
+        runs = [particles_energy((M_C, M_C), (q, -q), {(0, 1): (-KAPPA * mu, b, c)}, tau, 2.0, 4.0, seed=k + 1,
+                                 linear={(0, 1): sigma}, odd=odd, **kw) for k, tau in enumerate(taus)]
+        e0, s0 = straight_line(taus, runs)
+        found[state] = (e0, s0)
+        print(f"{state}: the guess alone {runs[-1][2]:.4f}; " + ", ".join(f"step {tau:g}: {e:.4f} ± {s:.4f}" for tau, (e, s, _) in zip(taus, runs)) +
+              f"; step -> 0: {e0:.4f} ± {s0:.4f} GeV   radial grid {grid[state]:.4f}, difference {1e3 * (e0 - grid[state]):+.1f} MeV "
+              f"= {(e0 - grid[state]) / s0:+.1f} errors   ({time.time() - t0:.0f} s)", flush=True)
+    # the model's absolute masses need its additive constant, which is not entered here; the
+    # difference between two states does not depend on it
+    d, s = found["1P"][0] - found["1S"][0], np.hypot(found["1P"][1], found["1S"][1])
+    print(f"1P - 1S: {1e3 * d:.0f} ± {1e3 * s:.0f} MeV   (radial grid {1e3 * (grid['1P'] - grid['1S']):.0f}, measured {1e3 * (MEASURED['1P'] - MEASURED['1S']):.0f})")
+
+
 def extrapolated(guess, electrons, taus, run=energy_rust, **kw):
     """Energies at each time step and the straight-line value at step zero."""
     runs = [run(guess, electrons, tau, seed=k + 1, **kw) for k, tau in enumerate(taus)]
@@ -256,6 +306,8 @@ def main():
     quick = "quick" in args
     if "particles" in args:
         return particles_main(quick)
+    if "charmonium" in args:
+        return charmonium_main(quick)
     run = energy if "python" in args else energy_rust
     names = [a for a in args if a in CASES] or list(CASES)
     kw = dict(duration=30.0) if quick else dict(duration=150.0) if run is energy else dict(duration=600.0, walkers=20000)
