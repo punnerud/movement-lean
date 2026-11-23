@@ -315,6 +315,9 @@ struct PairGuess<'a> {
     c: &'a [f64],
     linear: &'a [f64],
     odd: Option<(usize, usize)>,
+    /// (i, j, k, kappa): g is multiplied by exp(-kappa r_ik) + exp(-kappa r_jk), particle k
+    /// belonging to i and to j alike (the light particle of a molecule with two nuclei).
+    shared: Option<(usize, usize, usize, f64)>,
 }
 
 fn evaluate_pairs(g: &PairGuess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) {
@@ -351,6 +354,40 @@ fn evaluate_pairs(g: &PairGuess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) 
         lap[i] -= 1.0 / (z * z);
         lap[j] -= 1.0 / (z * z);
     }
+    if let Some((i, j, k, kappa)) = g.shared {
+        // f = e_i + e_j with e = exp(-kappa r): the Laplacian of f over f is the weighted sum of
+        // kappa^2 - 2 kappa / r, and the Laplacian of ln f is that minus the squared slope of ln f.
+        let (mut n, mut r, mut w) = ([[0.0; 3]; 2], [0.0; 2], [0.0; 2]);
+        for (t, &c) in [i, j].iter().enumerate() {
+            for d in 0..3 {
+                n[t][d] = x[3 * k + d] - x[3 * c + d];
+            }
+            r[t] = (n[t][0] * n[t][0] + n[t][1] * n[t][1] + n[t][2] * n[t][2]).sqrt();
+            for d in 0..3 {
+                n[t][d] /= r[t];
+            }
+        }
+        let low = r[0].min(r[1]);
+        let e = [(-kappa * (r[0] - low)).exp(), (-kappa * (r[1] - low)).exp()];
+        let f = e[0] + e[1];
+        ln += f.ln() - kappa * low;
+        let mut own = [0.0; 3];
+        let mut mean = 0.0;
+        for (t, &c) in [i, j].iter().enumerate() {
+            w[t] = e[t] / f;
+            let part = w[t] * (kappa * kappa - 2.0 * kappa / r[t]);
+            mean += part;
+            lap[c] += part - kappa * kappa * w[t] * w[t];
+            for d in 0..3 {
+                grad[3 * c + d] += kappa * w[t] * n[t][d];
+                own[d] -= kappa * w[t] * n[t][d];
+            }
+        }
+        lap[k] += mean - (own[0] * own[0] + own[1] * own[1] + own[2] * own[2]);
+        for d in 0..3 {
+            grad[3 * k + d] += own[d];
+        }
+    }
     let mut kinetic = 0.0;
     for i in 0..g.n {
         let square: f64 = grad[3 * i..3 * i + 3].iter().map(|t| t * t).sum();
@@ -384,6 +421,17 @@ static REACT_REJECTED: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 pub extern "C" fn walk_options(clamp: f64, react_rejected: i32) {
     CLAMP.store(clamp.to_bits(), std::sync::atomic::Ordering::Relaxed);
     REACT_REJECTED.store(react_rejected != 0, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The shared factor of the particle guess (see `PairGuess`), for the runs that follow:
+/// `code` is -1 for none or (i * 8 + j) * 8 + k.
+static SHARED: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(-1);
+static SHARED_KAPPA: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[no_mangle]
+pub extern "C" fn walk_shared(code: i64, kappa: f64) {
+    SHARED.store(code, std::sync::atomic::Ordering::Relaxed);
+    SHARED_KAPPA.store(kappa.to_bits(), std::sync::atomic::Ordering::Relaxed);
 }
 
 /// The walker loop. `evaluate` gives (ln |g|, sign, grad ln |g|, (H g)/g); particle i diffuses
@@ -659,6 +707,15 @@ pub unsafe extern "C" fn walk_particles(
         c: std::slice::from_raw_parts(c, n * n),
         linear: std::slice::from_raw_parts(linear, n * n),
         odd: if odd < 0 { None } else { Some((odd as usize / n, odd as usize % n)) },
+        shared: match SHARED.load(std::sync::atomic::Ordering::Relaxed) {
+            code if code >= 0 && (code as usize / 64).max(code as usize / 8 % 8).max(code as usize % 8) < n => Some((
+                code as usize / 64,
+                code as usize / 8 % 8,
+                code as usize % 8,
+                f64::from_bits(SHARED_KAPPA.load(std::sync::atomic::Ordering::Relaxed)),
+            )),
+            _ => None,
+        },
     };
     let out = std::slice::from_raw_parts_mut(out, steps);
     let start = |rng: &mut Rng| {
