@@ -47,9 +47,20 @@ impl Rng {
 pub const MAX_ELECTRONS: usize = 8;
 const DIM: usize = 3 * MAX_ELECTRONS;
 
-/// g = det(up orbitals) * det(down orbitals) * exp(sum over pairs u(r_ij)).
+/// Most centres when the guess has extra terms (the distances are kept in fixed arrays).
+pub const MAX_CENTRES: usize = 16;
+
+/// g = det(up orbitals) * det(down orbitals) * exp(sum over pairs u(r_ij) + extra terms).
 /// Orbital k of a spin is sum over nuclei c[k][A] exp(-zeta_A |r - R_A|);
 /// u(r) = a r / (1 + b r) with a = 1/2 for opposite spins and 1/4 for equal ones.
+///
+/// The extra terms are powers of the scaled distances s(r) = r / (1 + scale r), which run from
+/// 0 to 1 / scale. Term t has powers (m, n, o) and one coefficient per centre A:
+///   n = o = 0:   coeff[t][A] sum over electrons i of s(r_iA)^m
+///   m = n = 0:   coeff[t][0] sum over pairs of s(r_ij)^o
+///   otherwise:   coeff[t][A] sum over pairs of (s(r_iA)^m s(r_jA)^n + s(r_iA)^n s(r_jA)^m) s(r_ij)^o
+/// The last kind lets the pull between two electrons depend on where they are relative to a
+/// nucleus. Powers of 1 change the slopes at contact (the cusps) and are normally left out.
 struct Guess<'a> {
     z: &'a [f64],
     r: &'a [f64],
@@ -60,6 +71,95 @@ struct Guess<'a> {
     c_dn: &'a [f64],
     b: f64,
     e_nuc: f64,
+    powers: &'a [i32],
+    coeff: &'a [f64],
+    scale: f64,
+}
+
+/// s^m and its first and second derivatives with respect to r, for s = r / (1 + scale r).
+fn power(r: f64, scale: f64, m: i32) -> (f64, f64, f64) {
+    if m == 0 {
+        return (1.0, 0.0, 0.0);
+    }
+    let q = 1.0 + scale * r;
+    let (s, s1, s2) = (r / q, 1.0 / (q * q), -2.0 * scale / (q * q * q));
+    let low = s.powi(m - 1);
+    let lower = if m >= 2 { (m * (m - 1)) as f64 * s.powi(m - 2) } else { 0.0 };
+    (low * s, m as f64 * low * s1, lower * s1 * s1 + m as f64 * low * s2)
+}
+
+/// Adds the extra terms of the guess to ln g, its gradient and its Laplacian.
+fn extra_terms(g: &Guess, x: &[f64; DIM], ln: &mut f64, grad: &mut [f64; DIM], lap: &mut f64) {
+    let (n_nuc, n) = (g.z.len(), g.n_up + g.n_dn);
+    let mut unit = [[[0.0; 3]; MAX_CENTRES]; MAX_ELECTRONS];
+    let mut dist = [[0.0; MAX_CENTRES]; MAX_ELECTRONS];
+    for i in 0..n {
+        for a in 0..n_nuc {
+            let d = [x[3 * i] - g.r[3 * a], x[3 * i + 1] - g.r[3 * a + 1], x[3 * i + 2] - g.r[3 * a + 2]];
+            let r = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            dist[i][a] = r;
+            unit[i][a] = [d[0] / r, d[1] / r, d[2] / r];
+        }
+    }
+    for (t, p) in g.powers.chunks(3).enumerate() {
+        let (m, nn, o) = (p[0], p[1], p[2]);
+        let c = &g.coeff[t * n_nuc..(t + 1) * n_nuc];
+        if nn == 0 && o == 0 {
+            for a in 0..n_nuc {
+                if c[a] == 0.0 {
+                    continue;
+                }
+                for i in 0..n {
+                    let (f, f1, f2) = power(dist[i][a], g.scale, m);
+                    *ln += c[a] * f;
+                    for k in 0..3 {
+                        grad[3 * i + k] += c[a] * f1 * unit[i][a][k];
+                    }
+                    *lap += c[a] * (f2 + 2.0 * f1 / dist[i][a]);
+                }
+            }
+            continue;
+        }
+        for i in 0..n {
+            for j in 0..i {
+                let s = [x[3 * i] - x[3 * j], x[3 * i + 1] - x[3 * j + 1], x[3 * i + 2] - x[3 * j + 2]];
+                let r = (s[0] * s[0] + s[1] * s[1] + s[2] * s[2]).sqrt();
+                let s = [s[0] / r, s[1] / r, s[2] / r];
+                let (q, q1, q2) = power(r, g.scale, o);
+                if m == 0 && nn == 0 {
+                    *ln += c[0] * q;
+                    for k in 0..3 {
+                        grad[3 * i + k] += c[0] * q1 * s[k];
+                        grad[3 * j + k] -= c[0] * q1 * s[k];
+                    }
+                    *lap += 2.0 * c[0] * (q2 + 2.0 * q1 / r);
+                    continue;
+                }
+                for a in 0..n_nuc {
+                    if c[a] == 0.0 {
+                        continue;
+                    }
+                    let (mi, mi1, mi2) = power(dist[i][a], g.scale, m);
+                    let (ni, ni1, ni2) = power(dist[i][a], g.scale, nn);
+                    let (mj, mj1, mj2) = power(dist[j][a], g.scale, m);
+                    let (nj, nj1, nj2) = power(dist[j][a], g.scale, nn);
+                    let p = mi * nj + ni * mj;
+                    let (pi, pii) = (mi1 * nj + ni1 * mj, mi2 * nj + ni2 * mj);
+                    let (pj, pjj) = (mi * nj1 + ni * mj1, mi * nj2 + ni * mj2);
+                    *ln += c[a] * p * q;
+                    let (mut ci, mut cj) = (0.0, 0.0);
+                    for k in 0..3 {
+                        grad[3 * i + k] += c[a] * (pi * q * unit[i][a][k] + p * q1 * s[k]);
+                        grad[3 * j + k] += c[a] * (pj * q * unit[j][a][k] - p * q1 * s[k]);
+                        ci += unit[i][a][k] * s[k];
+                        cj += unit[j][a][k] * s[k];
+                    }
+                    *lap += c[a] * (q * (pii + 2.0 * pi / dist[i][a] + pjj + 2.0 * pj / dist[j][a])
+                        + 2.0 * p * (q2 + 2.0 * q1 / r) + 2.0 * q1 * (pi * ci - pj * cj));
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -177,6 +277,9 @@ fn evaluate(g: &Guess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) {
             lap += 2.0 * (-2.0 * a * g.b / (q * q * q) + 2.0 * u1 / r);
             v += 1.0 / r;
         }
+    }
+    if !g.powers.is_empty() {
+        extra_terms(g, x, &mut ln, &mut grad, &mut lap);
     }
     let square: f64 = grad[..3 * n].iter().map(|t| t * t).sum();
     (ln, sign, grad, -0.5 * (lap + square) + v)
@@ -365,7 +468,7 @@ where
 #[allow(clippy::too_many_arguments)]
 unsafe fn electron_guess<'a>(
     n_nuc: usize, z: *const f64, r: *const f64, zeta: *const f64, n_up: usize, n_dn: usize,
-    c_up: *const f64, c_dn: *const f64, b: f64,
+    c_up: *const f64, c_dn: *const f64, b: f64, n_terms: usize, powers: *const i32, coeff: *const f64, scale: f64,
 ) -> Guess<'a> {
     let z = std::slice::from_raw_parts(z, n_nuc);
     let r = std::slice::from_raw_parts(r, 3 * n_nuc);
@@ -388,6 +491,9 @@ unsafe fn electron_guess<'a>(
         c_dn: std::slice::from_raw_parts(c_dn, n_dn * n_nuc),
         b,
         e_nuc,
+        powers: if n_terms > 0 { std::slice::from_raw_parts(powers, 3 * n_terms) } else { &[] },
+        coeff: if n_terms > 0 { std::slice::from_raw_parts(coeff, n_terms * n_nuc) } else { &[] },
+        scale,
     }
 }
 
@@ -436,14 +542,15 @@ where
 #[no_mangle]
 pub unsafe extern "C" fn walk_sample(
     n_nuc: usize, z: *const f64, r: *const f64, zeta: *const f64, n_up: usize, n_dn: usize,
-    c_up: *const f64, c_dn: *const f64, b: f64, tau: f64,
+    c_up: *const f64, c_dn: *const f64, b: f64,
+    n_terms: usize, powers: *const i32, coeff: *const f64, scale: f64, tau: f64,
     walkers: usize, steps: usize, seed: u64, out_x: *mut f64, out_local: *mut f64,
 ) -> i32 {
     let electrons = n_up + n_dn;
-    if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 {
+    if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 || (n_terms > 0 && n_nuc > MAX_CENTRES) {
         return 1;
     }
-    let g = electron_guess(n_nuc, z, r, zeta, n_up, n_dn, c_up, c_dn, b);
+    let g = electron_guess(n_nuc, z, r, zeta, n_up, n_dn, c_up, c_dn, b, n_terms, powers, coeff, scale);
     let pop = run(|x| evaluate(&g, x), electron_start(g.r, electrons), &vec![1.0; electrons], tau, walkers, steps, 0,
                   usize::MAX, seed, &mut []).1;
     hand_back(&pop, electrons, std::slice::from_raw_parts_mut(out_x, 3 * electrons * walkers),
@@ -458,13 +565,14 @@ pub unsafe extern "C" fn walk_sample(
 #[no_mangle]
 pub unsafe extern "C" fn walk_local(
     n_nuc: usize, z: *const f64, r: *const f64, zeta: *const f64, n_up: usize, n_dn: usize,
-    c_up: *const f64, c_dn: *const f64, b: f64, count: usize, x: *const f64, out_local: *mut f64, out_ln: *mut f64,
+    c_up: *const f64, c_dn: *const f64, b: f64,
+    n_terms: usize, powers: *const i32, coeff: *const f64, scale: f64, count: usize, x: *const f64, out_local: *mut f64, out_ln: *mut f64,
 ) -> i32 {
     let electrons = n_up + n_dn;
-    if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 {
+    if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 || (n_terms > 0 && n_nuc > MAX_CENTRES) {
         return 1;
     }
-    let g = electron_guess(n_nuc, z, r, zeta, n_up, n_dn, c_up, c_dn, b);
+    let g = electron_guess(n_nuc, z, r, zeta, n_up, n_dn, c_up, c_dn, b, n_terms, powers, coeff, scale);
     locals(|x| evaluate(&g, x), electrons, count, std::slice::from_raw_parts(x, 3 * electrons * count),
            std::slice::from_raw_parts_mut(out_local, count), std::slice::from_raw_parts_mut(out_ln, count));
     0
@@ -476,18 +584,20 @@ pub unsafe extern "C" fn walk_local(
 ///
 /// # Safety
 /// `z` and `zeta` hold `n_nuc` values, `r` three coordinates per nucleus, `c_up` and `c_dn`
-/// `n_up` and `n_dn` rows of `n_nuc` orbital coefficients, `out` `steps` values.
+/// `n_up` and `n_dn` rows of `n_nuc` orbital coefficients, `powers` three values and `coeff`
+/// `n_nuc` values per extra term, `out` `steps` values.
 #[no_mangle]
 pub unsafe extern "C" fn walk_run(
     n_nuc: usize, z: *const f64, r: *const f64, zeta: *const f64, n_up: usize, n_dn: usize,
-    c_up: *const f64, c_dn: *const f64, b: f64, tau: f64,
+    c_up: *const f64, c_dn: *const f64, b: f64,
+    n_terms: usize, powers: *const i32, coeff: *const f64, scale: f64, tau: f64,
     walkers: usize, warm: usize, steps: usize, seed: u64, out: *mut f64, guess_alone: *mut f64,
 ) -> i32 {
     let electrons = n_up + n_dn;
-    if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 {
+    if electrons == 0 || electrons > MAX_ELECTRONS || n_nuc == 0 || (n_terms > 0 && n_nuc > MAX_CENTRES) {
         return 1;
     }
-    let g = electron_guess(n_nuc, z, r, zeta, n_up, n_dn, c_up, c_dn, b);
+    let g = electron_guess(n_nuc, z, r, zeta, n_up, n_dn, c_up, c_dn, b, n_terms, powers, coeff, scale);
     let r = g.r;
     let out = std::slice::from_raw_parts_mut(out, steps);
     let start = electron_start(r, electrons);

@@ -27,9 +27,11 @@ is E(H3 at the saddle) - E(H) - E(H2).
     python3 analyzer/diffusion_mc.py quick      # fewer steps
     python3 analyzer/diffusion_mc.py particles [quick]   # nothing held fixed: positronium, hydrogen with a moving proton, ...
     python3 analyzer/diffusion_mc.py charmonium [quick]  # a charm quark and antiquark with a Coulomb-like pull plus a constant one
-    python3 analyzer/diffusion_mc.py improve    # improve the guesses of He, H2 and H3 from samples, and show what it buys
+    python3 analyzer/diffusion_mc.py improve    # improve the guesses of He, H2 and H3 from samples: simple and richer form,
+                                                # simplex and iterated search, and what each buys (add polish: only the last variant)
     python3 analyzer/diffusion_mc.py python     # the walker loop in numpy instead of Rust (same algorithm, slower)
 """
+import ctypes
 import json
 import sys
 import time
@@ -46,9 +48,18 @@ class Guess:
     list the coefficients c of each occupied orbital (default: one orbital
     with all c = 1, for one or two electrons). u(r) = a r / (1 + b r) with
     a = 1/2 for opposite spins and 1/4 for equal ones. `zeta` is one number
-    or one per nucleus. The numpy `evaluate` covers the default case only."""
+    or one per nucleus. `terms` adds powers of the scaled distances
+    s(r) = r / (1 + scale r) to the exponent: a list of ((m, n, o), c) with c
+    one number or one per nucleus, meaning c s(r_iA)^m for each electron when
+    n = o = 0, c s(r_ij)^o for each pair when m = n = 0, and otherwise
+    c (s(r_iA)^m s(r_jA)^n + s(r_iA)^n s(r_jA)^m) s(r_ij)^o for each pair and
+    nucleus (see cikernel/src/walk.rs). The numpy `evaluate` covers the
+    default case only."""
 
-    def __init__(self, nuclei, zeta, b=0.4, up=None, down=None):
+    def __init__(self, nuclei, zeta, b=0.4, up=None, down=None, terms=(), scale=1.0):
+        self.powers = np.array([t for t, _ in terms], np.int32).reshape(-1, 3)
+        self.coeff = np.array([np.broadcast_to(np.asarray(c, float), (len(nuclei),)) for _, c in terms]).reshape(-1, len(nuclei))
+        self.scale = scale
         self.up = np.array(up if up is not None else [[1.0] * len(nuclei)], float)
         self.down = np.array(down if down is not None else [[1.0] * len(nuclei)], float).reshape(-1, len(nuclei))
         self.Z = np.array([z for z, _ in nuclei], float)
@@ -111,10 +122,11 @@ def _c_guess(guess, electrons):
     """The guess as the leading arguments of the kernel's walk_* functions."""
     import mesh_ci
     guess._keep = (np.ascontiguousarray(guess.Z), np.ascontiguousarray(guess.R.ravel()), np.ascontiguousarray(guess.zeta),
-                   np.ascontiguousarray(guess.up), np.ascontiguousarray(guess.down[:electrons - len(guess.up)]))
-    Z, R, zeta, up, down = guess._keep
+                   np.ascontiguousarray(guess.up), np.ascontiguousarray(guess.down[:electrons - len(guess.up)]),
+                   np.ascontiguousarray(guess.powers), np.ascontiguousarray(guess.coeff))
+    Z, R, zeta, up, down, powers, coeff = guess._keep
     return (len(Z), mesh_ci._d(Z), mesh_ci._d(R), mesh_ci._d(zeta), len(up), len(down), mesh_ci._d(up), mesh_ci._d(down),
-            float(guess.b))
+            float(guess.b), len(powers), powers.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)), mesh_ci._d(coeff), float(guess.scale))
 
 
 def sample(guess, electrons, walkers=4000, steps=600, tau=0.05, seed=1):
@@ -135,11 +147,77 @@ def local_energies(guess, electrons, x):
     return local, ln
 
 
-def improve(make, start, electrons, rounds=3, walkers=4000, report=None):
+def check_derivatives(guess, electrons, points=200, h=1e-4):
+    """Largest difference between (H g)/g from the kernel and the same from differences of
+    ln g (which uses none of the kernel's derivative formulas), over sample points."""
+    x = sample(guess, electrons, points, steps=200)[0]
+    local, ln = local_energies(guess, electrons, x)
+    lap, square = np.zeros(points), np.zeros(points)
+    for k in range(3 * electrons):
+        step = np.zeros(3 * electrons)
+        step[k] = h
+        up, down = local_energies(guess, electrons, x + step)[1], local_energies(guess, electrons, x - step)[1]
+        lap += (up - 2 * ln + down) / h ** 2
+        square += ((up - down) / (2 * h)) ** 2
+    r = x.reshape(points, electrons, 1, 3) - guess.R
+    V = -(guess.Z / np.linalg.norm(r, axis=-1)).sum((1, 2)) + guess.e_nuc
+    for i in range(electrons):
+        for j in range(i):
+            V += 1.0 / np.linalg.norm(x[:, 3 * i:3 * i + 3] - x[:, 3 * j:3 * j + 3], axis=1)
+    return float(np.abs(-0.5 * (lap + square) + V - local).max())
+
+
+def iterated(cost, start, steps, iterations=1500, starts=3, history=20, stall=150, seed=0):
+    """Minimises cost(p) the way the MPEE route optimiser works (github.com/punnerud/mpee,
+    crates/brooom): many cheap moves instead of a few careful ones.
+      - a move changes one parameter (or, one time in four, all of them a little);
+      - a move is kept if it is no worse than now, or no worse than `history` moves ago
+        (late acceptance: the search can walk through a slightly worse stretch);
+      - the size of the moves of each parameter grows when they succeed and shrinks when not;
+      - after `stall` moves without a new best, the search is kicked away from the best point;
+      - several starts: the first from `start` itself, the others from kicked copies of the best;
+      - the best point ever seen is what is returned, so the result is never worse than `start`.
+    Returns (best parameters, best cost, number of cost evaluations)."""
+    rng = np.random.default_rng(seed)
+    best, best_cost, count = np.array(start, float), cost(np.array(start, float)), 1
+    steps = np.array(steps, float)
+    for attempt in range(starts):
+        size = steps.copy()
+        p = best + (3 * size * rng.normal(size=len(best)) if attempt else 0)
+        now = cost(p)
+        past, since = [now] * history, 0
+        for it in range(iterations):
+            if since >= stall:
+                p, size, since = best + 3 * steps * rng.normal(size=len(best)), steps.copy(), 0
+                now = cost(p)
+                past = [now] * history
+            k = rng.integers(len(p)) if rng.random() < 0.75 else None
+            q = p.copy()
+            if k is None:
+                q += 0.3 * size * rng.normal(size=len(p))
+            else:
+                q[k] += size[k] * rng.normal()
+            new = cost(q)
+            count += 1
+            if k is not None:
+                size[k] *= 1.3 if new < now else 0.85
+            if new <= now or new <= past[it % history]:
+                p, now = q, new
+            past[it % history] = now
+            since += 1
+            if now < best_cost:
+                best, best_cost, since = p.copy(), now, 0
+    return best, best_cost, count
+
+
+def improve(make, start, electrons, rounds=3, walkers=4000, report=None, steps=None, budget=None, polish=False):
     """Better parameters for a guess. make(parameters) returns a Guess. The exact wavefunction has
     (H g)/g equal to the energy everywhere, so the spread of (H g)/g over a fixed set of sample
-    points measures how wrong g is, and is minimised (Nelder-Mead). The points are samples of
-    the current g^2 and are redrawn each round. Nothing here knows the true energy."""
+    points measures how wrong g is, and is minimised: by the simplex method of Nelder and Mead,
+    or, when `steps` gives a first move size for each parameter, by `iterated` (with `polish`:
+    followed by the simplex method from the point it found). The points are
+    samples of the current g^2 and are redrawn each round, each round starting from the result
+    of the one before. Nothing here knows the true energy."""
     from scipy.optimize import minimize
     p = np.array(start, float)
     for k in range(rounds + 1):
@@ -152,11 +230,19 @@ def improve(make, start, electrons, rounds=3, walkers=4000, report=None):
         def spread(q):
             try:
                 e = local_energies(make(q), electrons, x)[0]
-            except (ValueError, FloatingPointError):
+            except (ValueError, FloatingPointError, AssertionError):
                 return 1e9
             return float(np.var(e)) if np.all(np.isfinite(e)) else 1e9
 
-        p = minimize(spread, p, method="Nelder-Mead", options={"xatol": 1e-3, "fatol": 1e-7, "maxiter": 400}).x
+        simplex = lambda p, n: minimize(spread, p, method="Nelder-Mead", options={"xatol": 1e-3, "fatol": 1e-7, "maxiter": n, "maxfev": n}).x
+        if steps is None:
+            p = simplex(p, budget or 400)
+        elif polish:                                             # two thirds of the evaluations to the search, one third to the polish
+            found = iterated(spread, p, steps, iterations=(budget or 4500) // 3, starts=2, seed=k)[0]
+            polished = simplex(found, (budget or 4500) // 3)
+            p = polished if spread(polished) <= spread(found) else found
+        else:
+            p = iterated(spread, p, steps, iterations=(budget or 4500) // 3, seed=k)[0]
     return p
 
 
@@ -171,24 +257,51 @@ IMPROVE = {
 }
 
 
-def improve_main():
+# the extra terms of the richer guess: powers (m, n, o) of the scaled distances electron-nucleus,
+# electron-nucleus, electron-electron (see Guess). No power is 1, so the slopes at contact stay.
+TERMS = ((2, 0, 0), (3, 0, 0), (4, 0, 0), (0, 0, 2), (0, 0, 3), (0, 0, 4), (2, 2, 0), (2, 0, 2))
+
+
+def richer(make, count):
+    """make(parameters) with the extra TERMS: the parameters are followed by the scale of the
+    distances and one coefficient per term (the same on every nucleus with a charge)."""
+    def made(p):
+        assert min(p[count], *np.atleast_1d(make(p[:count]).zeta), make(p[:count]).b) > 0.05
+        g = make(p[:count])
+        on = (g.Z > 0).astype(float)
+        g.powers, g.coeff, g.scale = np.array(TERMS, np.int32), np.outer(p[count + 1:], on), p[count]
+        return g
+    return made
+
+
+def improve_main(only=None):
+    """Three ways to improve each guess: the simple form, the richer form with the simplex method,
+    and the richer form with the iterated search. All get the same number of evaluations."""
     taus = (0.02, 0.01, 0.005)
     for name, ((n_up, n_dn), make, start, what) in IMPROVE.items():
-        t0 = time.time()
-        show = lambda k, p, e, s, spread: print(f"  {name} round {k}: {what} = {np.round(p, 3)}  guess alone {e:.4f} ± {s:.4f}  "
-                                                f"spread of (H g)/g {spread:.3f}", flush=True)
-        best = improve(make, start, n_up + n_dn, report=show)
         reference = CASES[name][5]
-        for label, p in (("before", start), ("after", best)):
-            runs, e0, s0 = extrapolated(make(np.array(p, float)), n_up + n_dn, taus, duration=30.0)
-            print(f"  {name} walkers with the guess {label}: {e0:.5f} ± {s0:.5f}   (reference {reference:.6f}, "
-                  f"difference {1e3 * (e0 - reference):+.2f} mEh)", flush=True)
-        print(f"  ({time.time() - t0:.0f} s)")
+        rich, rich_start = richer(make, len(start)), tuple(start) + (1.0,) + (0.0,) * len(TERMS)
+        first = [0.05] * (len(start) + 1) + [0.05] * len(TERMS)
+        for label, m, p0, steps, polish in ((f"simple form ({what}), simplex", make, start, None, False),
+                                            (f"richer form (+ scale and {len(TERMS)} terms), simplex", rich, rich_start, None, False),
+                                            ("richer form, iterated search", rich, rich_start, first, False),
+                                            ("richer form, iterated search then simplex", rich, rich_start, first, True)):
+            if only and only not in label:
+                continue
+            t0 = time.time()
+            trace = []
+            best = improve(m, p0, n_up + n_dn, report=lambda *a: trace.append(a), steps=steps, budget=4500, polish=polish)
+            for row in (trace[0], trace[-1]):
+                print(f"  {name}, {label}, round {row[0]}: guess alone {row[2]:.4f} ± {row[3]:.4f}  spread of (H g)/g {row[4]:.3f}")
+            print(f"    parameters {np.round(best, 3)}   ({time.time() - t0:.0f} s)", flush=True)
+            for which, p in (("before", p0), ("after", best)) if m is make else (("after", best),):
+                runs, e0, s0 = extrapolated(m(np.array(p, float)), n_up + n_dn, taus, duration=30.0)
+                print(f"    walkers with the guess {which}: {e0:.5f} ± {s0:.5f}   (reference {reference:.6f}, "
+                      f"difference {1e3 * (e0 - reference):+.2f} mEh)", flush=True)
 
 
 def energy_rust(guess, electrons, tau, walkers=3000, duration=150.0, seed=1):
     """The same as `energy`, with the walker loop in the Rust kernel (cikernel/src/walk.rs)."""
-    import ctypes
     import mesh_ci
     lib = mesh_ci.kernel()
     warm, steps = int(20.0 / tau), int(duration / tau)
@@ -243,7 +356,6 @@ def particles_energy(masses, charges, pairs, tau, length=1.0, time_unit=1.0, wal
     guess is multiplied by z_i - z_j: the lowest state odd under reflection (a P state). pairs[(i, j)] = (a, b, c) gives the guess
     exp(sum of (a r + c r^2) / (1 + b r)) (see cikernel/src/walk.rs). `duration` and the
     warm-up of 20 are in units of `time_unit`. Returns (mean, error, mean of the guess alone)."""
-    import ctypes
     import mesh_ci
     lib = mesh_ci.kernel()
     n = len(masses)
@@ -383,7 +495,7 @@ def main():
     if "particles" in args:
         return particles_main(quick)
     if "improve" in args:
-        return improve_main()
+        return improve_main("then simplex" if "polish" in args else None)
     if "charmonium" in args:
         return charmonium_main(quick)
     run = energy if "python" in args else energy_rust

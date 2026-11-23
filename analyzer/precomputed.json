@@ -770,5 +770,214 @@
    },
    "note": "the three optima lie within 8 % of each other and the affinities within 0.03 eV; all are 0.14 to 0.17 eV below the hand-picked start. The choice of objective is therefore not what lowers the affinity."
   }
+ },
+ "diffusion_with_reaction": {
+  "note": "Diffusion Monte Carlo written from first principles (analyzer/diffusion_mc.py, cikernel/src/walk.rs). Long runs on two threads: 20000 walkers, time steps 0.02/0.01/0.005 (times the system's time unit), straight line to step zero. Values are (energy, statistical error). References marked unchecked were entered from memory.",
+  "electrons_hartree": {
+   "H": [
+    -0.50006,
+    0.00027,
+    -0.5,
+    "exact"
+   ],
+   "He": [
+    -2.90263,
+    0.00069,
+    -2.903724,
+    "Pekeris"
+   ],
+   "H2": [
+    -1.17368,
+    0.00044,
+    -1.174476,
+    "Kolos and Wolniewicz, 1.4 bohr"
+   ],
+   "H3+": [
+    -1.34422,
+    0.00074,
+    -1.343836,
+    "unchecked"
+   ],
+   "HeH+": [
+    -2.97747,
+    0.00107,
+    -2.978706,
+    "unchecked"
+   ],
+   "H3_saddle": [
+    -1.65226,
+    0.00114,
+    -1.659162,
+    "unchecked; fixed zero surfaces of a simple guess, upper bound"
+   ]
+  },
+  "reactions_millihartree": {
+   "H2 -> 2 H": [
+    173.55,
+    0.69,
+    174.48
+   ],
+   "H + H2 -> H3 (barrier)": [
+    21.48,
+    1.25,
+    15.31
+   ],
+   "H3+ -> H2 + H+": [
+    170.54,
+    0.86,
+    169.36
+   ],
+   "HeH+ -> He + H+": [
+    74.84,
+    1.27,
+    74.98
+   ]
+  },
+  "particles_hartree": {
+   "positronium": [
+    -0.249823,
+    0.00019,
+    -0.25,
+    "exact"
+   ],
+   "hydrogen_moving_proton": [
+    -0.499739,
+    0.00023,
+    -0.499728,
+    "exact"
+   ],
+   "muonic_hydrogen": [
+    -92.8856,
+    0.046,
+    -92.9204,
+    "exact"
+   ],
+   "positronium_ion": [
+    -0.260314,
+    0.00075,
+    -0.26200507,
+    "unchecked"
+   ]
+  },
+  "charmonium_GeV": {
+   "model": "Cornell, kappa 0.52, a 2.34/GeV, m_c 1.84 GeV (as quoted in arXiv:1208.2186)",
+   "1S": [
+    0.2576,
+    0.0001,
+    0.2575,
+    "radial grid"
+   ],
+   "1P": [
+    0.686,
+    0.0002,
+    0.6859,
+    "radial grid"
+   ],
+   "1P_minus_1S_MeV": {
+    "walkers": 428,
+    "radial_grid": 428,
+    "measured_unchecked": 457
+   }
+  },
+  "guess_improvement_small_test": {
+   "command": "python3 analyzer/diffusion_mc.py improve",
+   "note": "4000 sample points, three rounds, 4500 evaluations per round for every method; walker runs of duration 30. [spread of (H g)/g, guess alone, walkers step->0, error]. The richer form adds a scale and 8 terms (diffusion_mc.TERMS). Short runs: the error bars are themselves uncertain.",
+   "He": {
+    "start": [
+     0.296,
+     -2.8604,
+     -2.88892,
+     0.00878
+    ],
+    "simple, simplex": [
+     0.16,
+     -2.9033,
+     -2.90275,
+     0.00113
+    ],
+    "richer, simplex": [
+     0.16,
+     -2.9033,
+     -2.90343,
+     0.00137
+    ],
+    "richer, iterated": [
+     0.087,
+     -2.9059,
+     -2.90411,
+     0.00051
+    ],
+    "richer, iterated then simplex": [
+     0.087,
+     -2.906,
+     -2.90316,
+     0.00038
+    ]
+   },
+   "H2": {
+    "start": [
+     0.228,
+     -1.1517,
+     -1.17414,
+     0.00389
+    ],
+    "simple, simplex": [
+     0.224,
+     -1.1524,
+     -1.17189,
+     0.00367
+    ],
+    "richer, simplex": [
+     0.082,
+     -1.1727,
+     -1.17394,
+     0.00083
+    ],
+    "richer, iterated": [
+     0.09,
+     -1.1709,
+     -1.17321,
+     0.00103
+    ],
+    "richer, iterated then simplex": [
+     0.085,
+     -1.1728,
+     -1.17332,
+     0.00084
+    ]
+   },
+   "H3": {
+    "start": [
+     0.373,
+     -1.5673,
+     -1.65042,
+     0.00872
+    ],
+    "simple, simplex": [
+     0.31,
+     -1.6005,
+     -1.65865,
+     0.0062
+    ],
+    "richer, simplex": [
+     0.187,
+     -1.6395,
+     -1.64723,
+     0.0038
+    ],
+    "richer, iterated": [
+     0.213,
+     -1.6421,
+     -1.65505,
+     0.00274
+    ],
+    "richer, iterated then simplex": [
+     0.176,
+     -1.6466,
+     -1.65363,
+     0.0039
+    ]
+   }
+  }
  }
 }

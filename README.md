@@ -394,6 +394,67 @@ The well is a small difference of large terms: at the minimum 9 K of repulsion a
 
 At its strongest the attraction corresponds to 11 K, about 0.001 eV: five thousand times weaker than the bond in H₂. That is why helium only liquefies at 4 K. The reference curve is itself a calculation (accurate to about 0.002 %), not a measurement; the virial coefficient and the molecule's binding energy are measured.
 
+### The Schrödinger equation as diffusion with reaction
+
+Sections 4 and 5 say that the Schrödinger equation in imaginary time is a heat equation. With a potential it becomes diffusion with reaction: `∂ₜu = D ∂ₓₓu − (V − E_T) u`. Walkers diffuse, and multiply or die at the rate `E_T − V`. [`Heat.lean`](Movement/Heat.lean) proves what the method rests on:
+
+| Theorem | Statement |
+|---|---|
+| `reactionDiffusion_solves` | A heat-equation solution times `exp(−kt)` solves the equation with a constant reaction rate `k`. |
+| `eigenstate_reaction_diffusion` | A state with energy `E` evolves as `exp(−(E − E_T) t)` times itself. |
+| `steady_iff_shift_eq_energy` | The population is steady exactly when the shift `E_T` equals the energy. |
+
+So the energy is read off as the shift that keeps the number of walkers constant. [`analyzer/diffusion_mc.py`](analyzer/diffusion_mc.py) does this, with the walker loop in Rust ([`walk.rs`](analyzer/cikernel/src/walk.rs)). There are no basis functions and no determinants to count. A guess `g` for the wavefunction steers the walkers (they drift along `∇ ln g`, and the rate becomes `E_T − (H g)/g`), and the time step is removed by repeating with smaller steps. For two electrons the answer does not depend on the guess. With three or more the wavefunction changes sign, the walkers are kept on one side of the surfaces where the guess is zero, and the result is an upper bound that depends on those surfaces. The engine is written from first principles; established codes of this kind (QMCPACK, CASINO, QWalk and others) exist and are far more developed.
+
+Long runs (20 000 walkers, three time steps, statistical error in brackets):
+
+| System | Walkers | Reference | Difference |
+|---|---|---|---|
+| H | −0.50006(27) Eh | −0.5 (exact) | −0.06 mEh |
+| He | −2.90263(69) | −2.903724 | +1.10 mEh |
+| H₂ at 1.4 bohr | −1.17368(44) | −1.174476 | +0.80 mEh |
+| H₃⁺, triangle | −1.34422(74) | −1.343836 * | −0.38 mEh |
+| HeH⁺ | −2.97747(107) | −2.978706 * | +1.24 mEh |
+| H₃ at the saddle of H + H₂ (three electrons) | −1.65226(114) | −1.659162 * | +6.90 mEh |
+| Binding energy of H₂ | 173.6(7) mEh | 174.5 | −0.9 mEh |
+| Barrier of H + H₂ → H₂ + H | 21.5(1.3) mEh | 15.3 * | +6.2 mEh |
+| Positronium (e⁻ e⁺, nothing held fixed) | −0.24982(19) | −0.25 (exact) | +0.07 % |
+| Hydrogen with a moving proton | −0.49974(23) | −0.499728 (exact) | 0.00 % |
+| Muonic hydrogen (μ⁻ p) | −92.886(46) | −92.920 (exact) | +0.04 % |
+| Positronium ion (e⁻ e⁻ e⁺) | −0.26031(75) | −0.262005 * | +0.65 % |
+| Charm quark and antiquark, 1S | 0.2576(1) GeV | 0.2575 (radial grid) | +0.0 MeV |
+| Charm quark and antiquark, 1P | 0.6860(2) GeV | 0.6859 (radial grid) | +0.1 MeV |
+
+\* reference entered from memory and not yet checked against a source.
+
+Three things should be said plainly:
+
+- **The two-electron results are right to about one error bar; the three-electron one is not.** H₃ comes out 7 mEh too high because the zero surfaces of its simple guess are not the true ones. The barrier of H + H₂ inherits the whole error: 21.5 mEh against 15.3.
+- **The same loop handles other particles.** Each particle has its own mass and charge, so positronium, a moving proton and a muon need no new code. For charmonium the pair also gets a constant pull (the Cornell model, `V = −0.52/r + r/2.34²` in GeV units). The walkers agree with a direct solution of the radial equation to 0.1 MeV. That is a test of the method, not of the model: the model's 1P − 1S splitting is 428 MeV, the measured one is 457 MeV *.
+- **The noise depends on the guess**, which is what the next step addresses.
+
+**Improving the guess.** For the exact wavefunction `(H g)/g` equals the energy at every point. Its spread over a set of sample points therefore measures how wrong the guess is, and can be minimised without knowing the answer. Two things were built and tested at small scale (4000 sample points, short walker runs):
+
+- *A richer form.* To the simple guess (orbitals of `exp(−ζr)` on the nuclei, one term per electron pair) eight terms are added: powers of the electron–nucleus and electron–electron distances, and products of the two, so that the pull between two electrons can depend on where they are relative to a nucleus. The derivatives in the kernel agree with finite differences to 10⁻⁶.
+- *An iterated search*, after the route optimiser in [MPEE](https://github.com/punnerud/mpee): many cheap moves of one parameter at a time, a move kept if it is no worse than now or than twenty moves ago, move sizes that adapt, kicks when the search stalls, several starts, and the best point ever seen returned. It is compared with the simplex method of Nelder and Mead at the same number of evaluations.
+
+| | Spread of `(H g)/g` | Noise of a short walker run |
+|---|---|---|
+| He, simple form | 0.160 | 1.1 mEh |
+| He, richer form, simplex | 0.160 (failed) | 1.4 |
+| He, richer form, iterated search | 0.087 | 0.5 |
+| He, richer form, search then simplex | 0.087 | 0.4 |
+| H₂, simple form | 0.224 | 3.7 |
+| H₂, richer form, simplex | 0.082 | 0.8 |
+| H₂, richer form, iterated search | 0.090 | 1.0 |
+| H₂, richer form, search then simplex | 0.085 | 0.8 |
+| H₃, simple form | 0.310 | 6.2 |
+| H₃, richer form, simplex | 0.187 | 3.8 |
+| H₃, richer form, iterated search | 0.213 | 2.7 |
+| H₃, richer form, search then simplex | 0.176 | 3.9 |
+
+The richer form cuts the noise of H₂ by a factor of four, which the simple form could not do with any parameters. The iterated search is the more robust of the two: on helium the simplex let the scale of the new terms run off until they vanished, and gained nothing. Where the simplex works it gets slightly further, and the search followed by a simplex polish is best or close to best in all three. For H₃ the new terms do not move the zero surfaces, so the error from them remains: the short runs with the richer guess lie 4 to 12 mEh above the reference, with error bars of 3 to 4. The improved guesses have not yet been used in long runs.
+
 ### Where do the deviations come from?
 
 For each simple model that misses, the analyzer adds the known physical correction and checks whether the gap closes:

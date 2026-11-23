@@ -55,10 +55,11 @@ def kernel():
             f("ci_candidates").argtypes = [ptr, dbl, ctypes.c_double, ctypes.c_double, size, u64, u64, dbl, dbl,
                                            ctypes.POINTER(size)]
         lib.walk_run.restype = ctypes.c_int
-        lib.walk_run.argtypes = [size, dbl, dbl, dbl, size, size, dbl, dbl] + [ctypes.c_double] * 2 + [size, size, size, ctypes.c_uint64, dbl, dbl]
+        guess = [size, dbl, dbl, dbl, size, size, dbl, dbl, ctypes.c_double, size, ctypes.POINTER(ctypes.c_int32), dbl, ctypes.c_double]
+        lib.walk_run.argtypes = guess + [ctypes.c_double, size, size, size, ctypes.c_uint64, dbl, dbl]
         lib.walk_sample.restype = lib.walk_local.restype = ctypes.c_int
-        lib.walk_sample.argtypes = [size, dbl, dbl, dbl, size, size, dbl, dbl] + [ctypes.c_double] * 2 + [size, size, ctypes.c_uint64, dbl, dbl]
-        lib.walk_local.argtypes = [size, dbl, dbl, dbl, size, size, dbl, dbl, ctypes.c_double, size, dbl, dbl, dbl]
+        lib.walk_sample.argtypes = guess + [ctypes.c_double, size, size, ctypes.c_uint64, dbl, dbl]
+        lib.walk_local.argtypes = guess + [size, dbl, dbl, dbl]
         lib.walk_particles.restype = ctypes.c_int
         lib.walk_particles.argtypes = [size, dbl, dbl, dbl, dbl, dbl, dbl, ctypes.c_int64] + [ctypes.c_double] * 2 + [size, size, size, ctypes.c_uint64, dbl, dbl]
         _lib = lib
