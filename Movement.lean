@@ -7,3 +7,4 @@ import Movement.Rotation4D
 import Movement.Waveguide
 import Movement.Atoms
 import Movement.Forces
+import Movement.Spectrum

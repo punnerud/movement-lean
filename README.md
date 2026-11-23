@@ -9,7 +9,7 @@ This repository starts from a sailor's rule of thumb:
 
 It then follows the idea down to the molecular scale (billiard-ball collisions, spinning molecules, diffusion), on to the heat equation, and across to quantum mechanics (the Schrödinger equation, Bohr's electron orbits, and a test of whether spin can be a circulation at light speed). Each step is proved formally in [Lean 4](https://lean-lang.org/) with [Mathlib](https://github.com/leanprover-community/mathlib4).
 
-The proofs are in [`Movement/`](Movement): [`Basic.lean`](Movement/Basic.lean) (sections 1–3), [`Heat.lean`](Movement/Heat.lean) (4), [`Quantum.lean`](Movement/Quantum.lean) (5) [`Bohr.lean`](Movement/Bohr.lean) (6), [`Spin.lean`](Movement/Spin.lean) (7), [`Rotation4D.lean`](Movement/Rotation4D.lean) (8), [`Waveguide.lean`](Movement/Waveguide.lean) (9) [`Atoms.lean`](Movement/Atoms.lean) (10) and [`Forces.lean`](Movement/Forces.lean) (11). There is no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
+The proofs are in [`Movement/`](Movement): [`Basic.lean`](Movement/Basic.lean) (sections 1–3), [`Heat.lean`](Movement/Heat.lean) (4), [`Quantum.lean`](Movement/Quantum.lean) (5) [`Bohr.lean`](Movement/Bohr.lean) (6), [`Spin.lean`](Movement/Spin.lean) (7), [`Rotation4D.lean`](Movement/Rotation4D.lean) (8), [`Waveguide.lean`](Movement/Waveguide.lean) (9) [`Atoms.lean`](Movement/Atoms.lean) (10), [`Forces.lean`](Movement/Forces.lean) (11) and [`Spectrum.lean`](Movement/Spectrum.lean) (12). There is no `sorry`, and every theorem depends only on Lean's three standard axioms (`propext`, `Classical.choice`, `Quot.sound`).
 
 ---
 
@@ -518,6 +518,36 @@ The bonds and the helium–helium curve in section 10 are computed numerically. 
 | `einstein_function_le_one` | A quantised vibration holds at most the classical share `R` of heat capacity |
 
 What stays outside Lean: the integrals over Gaussian functions, the matrix diagonalisations, the QED formula for the Lamb shift, and every measured or benchmark value. Those are tested by the comparison with reference data, not proved. `casimir_polder_value` takes the integral `∫ dx/(a² + x²) = π/(2a)` as given and proves the algebra around it.
+
+## 12. Real eigenvalues, and the zeros of the zeta function
+
+Every energy in section 10 is an eigenvalue of a self-adjoint operator. [`Spectrum.lean`](Movement/Spectrum.lean) proves the property that makes such numbers real:
+
+| Theorem | Statement |
+|---|---|
+| `symmetric_eigenvalue_real` | If `⟨Tx, y⟩ = ⟨x, Ty⟩` and `Tv = μv` with `v ≠ 0`, then `μ` equals its complex conjugate. |
+| `symmetric_eigenvectors_orthogonal` | Eigenvectors of different eigenvalues are orthogonal. |
+| `zero_on_line_of_symmetric` | If `s = 1/2 + iμ` and `μ` is an eigenvalue of a symmetric operator, then `s` has real part `1/2`. |
+
+The last line is the easy half of an old idea of Hilbert and Pólya about the Riemann hypothesis: *if* the zeros of the zeta function are `1/2 + iE` with `E` the eigenvalues of some self-adjoint operator, they all lie on one line. The hard half is the operator, which nobody has found, and nothing here finds it. (A machine-checked proof of the hypothesis itself, 17 million lines of Lean, was announced in November 2026; it is not used or examined here.)
+
+What can be done at small scale is to ask whether the zeros *look* like eigenvalues. [`analyzer/zeta_zeros.py`](analyzer/zeta_zeros.py) computes them from the defining sum of the zeta function, with no table:
+
+| Test | Result |
+|---|---|
+| Zeros found on the line below height 5000 | 4520 (the first: 14.134725, 21.022040, 25.010858) |
+| Zeros in the whole strip below 4998.85, counted separately from the change of the argument of zeta | 4519.0000, against 4519 on the line: none is off the line |
+| Mean gap ratio of the zeros | 0.6165 ± 0.0033 |
+| The same for complex Hermitian matrices (built here, 600 × 600) | 0.6029 ± 0.0017 |
+| for real symmetric matrices | 0.5271 ± 0.0019 |
+| for independent points (no operator) | 0.3853 ± 0.0021 |
+
+The gap ratio is the smaller of two neighbouring gaps divided by the larger; it needs no knowledge of how dense the levels are. Three things follow, and one does not:
+
+- **The zeros repel each other like eigenvalues.** Independent points are ruled out by about 60 error bars.
+- **They resemble a complex Hermitian operator, not a real symmetric one.** The Hamiltonians of the molecules in section 10 are real symmetric (they are unchanged when time is reversed). An operator behind the zeros would have to lack that symmetry.
+- **The match is not exact at this height.** The zeros lie 3.7 error bars above the complex Hermitian matrices. The first and second half of the zeros give the same value, so within this range it is not visibly closing.
+- **None of this is evidence of proof.** The count shows that the first 4519 zeros are on the line, numerically and without rigorous error bounds. Statistics that resemble an operator's do not produce the operator.
 
 ## What is *not* proved here
 

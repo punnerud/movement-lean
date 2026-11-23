@@ -320,6 +320,9 @@ footer{margin-top:64px;color:var(--muted);font-size:14px}
 </ul>
 <p>What stays outside Lean: the integrals, the matrix diagonalisations, the QED formula for the Lamb shift, and every measured value. Those are tested against reference data, not proved.</p>
 
+<h2>12. Real eigenvalues, and the zeros of the zeta function</h2>
+<p>Every energy in section 10 is an eigenvalue of a self-adjoint operator, and Lean proves that such eigenvalues are real (<code>symmetric_eigenvalue_real</code>). The same lemma is the easy half of an old idea of Hilbert and Pólya about the Riemann hypothesis: if the zeros of the zeta function are 1/2 + iE with E the eigenvalues of a self-adjoint operator, they all lie on one line (<code>zero_on_line_of_symmetric</code>). The hard half is the operator, which nobody has found.</p>
+<p>At small scale one can ask whether the zeros look like eigenvalues. Computed here from the defining sum, 4520 zeros lie on the line below height 5000, and a separate count over the whole strip finds no others. The ratio of neighbouring gaps averages 0.6165 ± 0.0033 for the zeros, 0.6029 ± 0.0017 for complex Hermitian matrices, 0.5271 for real symmetric ones and 0.3853 for independent points. The zeros repel like eigenvalues of an operator without time-reversal symmetry, unlike the Hamiltonians of molecules; the match is close but not exact at this height (3.7 error bars). This is a numerical observation, not evidence of a proof.</p>
 <h2 id="further">Where this leads: Boltzmann and Navier–Stokes</h2>
 <p>The pieces above are textbook physics. The <em>bridge</em> between them is the deep part: showing that deterministic hard-sphere collisions really produce random-walk behaviour, and that it averages out to fluid equations.</p>
 <table>
