@@ -495,6 +495,13 @@ if NACL_HF and quantum is not None:
                  "rayleigh_ritz_bound", de_ions - ie_na + ea_ci, de_nacl, "eV", "limit", 0.05,
                  UNC["NaCl_De"], base=h1, fix="the outer electrons of Cl and Cl⁻ by full CI",
                  note="still nothing measured; closes over half the gap, limited by the electron affinity below")
+    CL_SEL = PRECOMPUTED.get("Cl_affinity_selected")
+    if CL_SEL:
+        ea_sel = (CL_SEL["E_Cl_hartree"] - CL_SEL["E_Cl_minus_hartree"]) * HARTREE_EV
+        h1 = row(G_BOND, "NaCl", "binding energy D_e", "Hartree–Fock + correlation in Cl and Cl⁻, 44 orbitals",
+                 "rayleigh_ritz_bound", de_ions - ie_na + ea_sel, de_nacl, "eV", "ok", 0.05,
+                 UNC["NaCl_De"], base=h1, fix="s, p, d and f correlating functions, selected determinants",
+                 note="still nothing measured; the determinant list is not converged, see the electron affinity below")
     row(G_BOND, "NaCl", "binding energy D_e", "Hartree–Fock separation into ions + measured cost of the ions",
         "rayleigh_ritz_bound, coulomb_crossing", de_ions - gap_nacl, de_nacl, "eV", "ok", 0.07,
         UNC["NaCl_De"], base=h1, fix="measured ionization energy and electron affinity replace the Hartree–Fock ones",
@@ -514,6 +521,19 @@ if NACL_HF and quantum is not None:
             "so the rest lies elsewhere (f functions, more s and p functions)")
         VARIATIONAL += [("Cl⁻: Hartree–Fock ≥ valence full CI", CL_CI["E_Cl_minus_hartree_fock"],
                          CL_CI["E_Cl_minus_hartree"])]
+    if CL_SEL:
+        row(G_BOND, "Cl", "electron affinity",
+            f"outer electrons by selected CI, inner ten frozen ({CL_SEL['active_orbitals']} orbitals, "
+            f"{CL_SEL['determinants'] // 1000000} million determinants)",
+            "rayleigh_ritz_bound, second_order_estimate_brackets", ea_sel, NACL["Cl_electron_affinity_eV"],
+            "eV", "ok", 0.05, UNC["electron_affinity"],
+            "precomputed; f functions and more s, p and d functions. Each energy is an upper bound, the "
+            "difference is not; the value still rises slowly with the number of determinants")
+        if CL_CI:
+            VARIATIONAL += [("Cl⁻: 20-orbital full CI ≥ 44-orbital selected CI", CL_CI["E_Cl_minus_hartree"],
+                             CL_SEL["E_Cl_minus_hartree"]),
+                            ("Cl: 20-orbital full CI ≥ 44-orbital selected CI", CL_CI["E_Cl_hartree"],
+                             CL_SEL["E_Cl_hartree"])]
     # the same numbers against other people's Hartree-Fock: tests the code, not the physics
     row(G_VAL, "NaCl", "bond length (Hartree–Fock)", "this code vs. large-basis Hartree–Fock",
         "rayleigh_ritz_bound", r_hf, HFR["r_e_angstrom"], "Å", "ok", 0.005, 1e-4)
@@ -1062,7 +1082,7 @@ CAVEATS = [
     "(dispersion 22.395 K) are quoted from a secondary source.",
     "NaCl from first principles is unrestricted Hartree–Fock in a basis about 26 mEh above the "
     "large-basis energy, most of it in the inner shells. The chlorine electron affinity with "
-    "correlation freezes the inner ten electrons and uses 20 orbitals; it is not converged.",
+    "correlation freezes the inner ten electrons; the 44-orbital value comes from a selected list of determinants and is converged in neither the orbitals nor the list.",
     "The NaCl ionic model takes the bond length and vibration frequency from measurement and uses "
     "free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.",
     "The uncertainty column uses one representative relative uncertainty per class of data "

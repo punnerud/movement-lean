@@ -457,5 +457,33 @@
     "E_Cl_minus_hartree_fock": -459.560857,
     "seconds": 409,
     "note": "values as printed, six decimals. Smaller sets: 15 orbitals (one d shell) 3.159 eV, 16 orbitals (+ one s) 3.161 eV."
+  },
+  "Cl_affinity_selected": {
+    "extra_s": [
+      0.15,
+      0.6
+    ],
+    "extra_p": [
+      0.1,
+      0.4,
+      1.2
+    ],
+    "extra_d": [
+      0.15,
+      0.4,
+      1.0
+    ],
+    "extra_f": [
+      0.3,
+      0.8
+    ],
+    "active_orbitals": 44,
+    "determinants": 2000000,
+    "E_Cl_minus_hartree": -459.790452,
+    "E_Cl_hartree": -459.663146,
+    "E_Cl_minus_hartree_fock": -459.560857,
+    "seconds": 6031,
+    "command": "python3 analyzer/cl_affinity.py 0.15,0.6 0.1,0.4,1.2 0.15,0.4,1.0 0.3,0.8 -2000000",
+    "note": "selected CI on a free list of determinants (mesh_ci), two threads on an M3; values as printed, six decimals. Each energy is an upper bound for its species; the difference is not a bound. Smaller lists: 823296 determinants give Cl- -459.788737, Cl -459.662617."
   }
 }

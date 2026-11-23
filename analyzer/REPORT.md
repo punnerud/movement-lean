@@ -54,13 +54,13 @@ One line per quantity, showing only the best model in this analyzer. The section
 | H⁻, Hartree–Fock | total energy | this code vs. published benchmark | -0.4879296 hartree | -0.48793 hartree | -0.00008 % | 1 |
 | H⁻, Hylleraas | total energy | this code vs. published benchmark | -0.5277501 hartree | -0.527751 hartree | -0.00018 % | 1 |
 | H₂, full CI at minimum | total energy | this code vs. published benchmark | -1.172484 hartree | -1.174476 hartree | -0.17 % | 1 |
-| NaCl | binding energy D_e | + polarization of the ions | 4.087042 eV | 4.252608 eV | -3.89 % | 6 |
+| NaCl | binding energy D_e | + polarization of the ions | 4.087042 eV | 4.252608 eV | -3.89 % | 7 |
 | NaCl | electric dipole moment | Hartree–Fock, at the measured bond length | 9.465975 D | 8.971 D | +5.52 % | 4 |
 | NaCl | bond length | Hartree–Fock, all 28 electrons, nothing measured | 2.39906 Å | 2.3608 Å | +1.62 % | 1 |
 | NaCl | vibration wavenumber ω_e | Hartree–Fock, all 28 electrons, nothing measured | 352.9541 cm⁻¹ | 364.684 cm⁻¹ | -3.22 % | 1 |
 | NaCl | energy to separate into ions Na⁺ + Cl⁻ | Hartree–Fock, all 28 electrons, nothing measured | 5.53774 eV | 5.778959 eV | -4.17 % | 1 |
 | Na | first ionization energy | Hartree–Fock, E(Na⁺) − E(Na) | 4.953699 eV | 5.139077 eV | -3.61 % | 1 |
-| Cl | electron affinity | outer electrons by full CI, inner ten frozen (20 orbitals) (**no model here matches**) | 3.161936 eV | 3.612725 eV | -12 % | 2 |
+| Cl | electron affinity | outer electrons by selected CI, inner ten frozen (44 orbitals, 2 million determinants) | 3.464173 eV | 3.612725 eV | -4.11 % | 3 |
 | NaCl | bond length (Hartree–Fock) | this code vs. large-basis Hartree–Fock | 2.39906 Å | 2.3958 Å | +0.14 % | 1 |
 | NaCl | vibration wavenumber (Hartree–Fock) | this code vs. large-basis Hartree–Fock | 352.9541 cm⁻¹ | 356 cm⁻¹ | -0.86 % | 1 |
 | NaCl | dipole moment (Hartree–Fock) | this code vs. large-basis Hartree–Fock | 9.633569 D | 9.456 D | +1.88 % | 1 |
@@ -233,10 +233,12 @@ One line per quantity, showing only the best model in this analyzer. The section
 | NaCl | energy to separate into ions Na⁺ + Cl⁻ | Hartree–Fock, all 28 electrons, nothing measured | `rayleigh_ritz_bound` | 5.53774 eV | 5.778959 eV | -4.17 % | matches (reference: measured binding energy + ionization energy − electron affinity) | 2.0× |
 | NaCl | binding energy D_e | Hartree–Fock, all 28 electrons, nothing measured | `rayleigh_ritz_bound` | 3.02238 eV | 4.252608 eV | -29 % | fails, as expected (to neutral atoms: fails because Hartree–Fock gets the electron affinity of Cl wrong) | 14× |
 | NaCl | binding energy D_e | Hartree–Fock + correlation in Cl and Cl⁻ | `rayleigh_ritz_bound` | 3.745977 eV | 4.252608 eV | -12 % | fails, as expected (still nothing measured; closes over half the gap, limited by the electron affinity below) | 5.7× |
+| NaCl | binding energy D_e | Hartree–Fock + correlation in Cl and Cl⁻, 44 orbitals | `rayleigh_ritz_bound` | 4.048213 eV | 4.252608 eV | -4.81 % | matches (still nothing measured; the determinant list is not converged, see the electron affinity below) | 2.3× |
 | NaCl | binding energy D_e | Hartree–Fock separation into ions + measured cost of the ions | `rayleigh_ritz_bound, coulomb_crossing` | 4.011388 eV | 4.252608 eV | -5.67 % | matches (borrows two measured atomic numbers; nothing about the molecule is borrowed) | 2.7× |
 | Na | first ionization energy | Hartree–Fock, E(Na⁺) − E(Na) | `rayleigh_ritz_bound` | 4.953699 eV | 5.139077 eV | -3.61 % | matches (the missing 4 % is electron correlation) | 360 722× |
 | Cl | electron affinity | Hartree–Fock, E(Cl) − E(Cl⁻) | `rayleigh_ritz_bound` | 2.438338 eV | 3.612725 eV | -33 % | fails, as expected (the extra electron is held largely by correlation with the other seven outer electrons) | 13 003× |
 | Cl | electron affinity | outer electrons by full CI, inner ten frozen (20 orbitals) | `rayleigh_ritz_bound` | 3.161936 eV | 3.612725 eV | -12 % | fails, as expected (precomputed; over half the gap closed. A second d shell changed it by only 0.003 eV, so the rest lies elsewhere (f functions, more s and p functions)) | 4 991× |
+| Cl | electron affinity | outer electrons by selected CI, inner ten frozen (44 orbitals, 2 million determinants) | `rayleigh_ritz_bound, second_order_estimate_brackets` | 3.464173 eV | 3.612725 eV | -4.11 % | matches (precomputed; f functions and more s, p and d functions. Each energy is an upper bound, the difference is not; the value still rises slowly with the number of determinants) | 1 645× |
 | H₂ at 0.53 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 3.334935 eV | 3.388898 eV | -1.59 % | matches (reference: benchmark calculation, not a measurement) | 159 236× |
 | H₂ at 1.06 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 3.709666 eV | 3.758789 eV | -1.31 % | matches (reference: benchmark calculation, not a measurement) | 130 690× |
 | H₂ at 1.59 Å | energy below two free atoms | full CI | `rayleigh_ritz_bound` | 1.52114 eV | 1.559927 eV | -2.49 % | matches (reference: benchmark calculation, not a measurement) | 248 650× |
@@ -407,6 +409,7 @@ Each line follows one quantity from the simplest model to the best one here.
 | | | **remaining** | 1 299× the reference uncertainty | model error, far above the reference uncertainty |
 | NaCl | binding energy D_e | Hartree–Fock, all 28 electrons, nothing measured | -29 % | starting point |
 |  |  | Hartree–Fock + correlation in Cl and Cl⁻ | -12 % | the outer electrons of Cl and Cl⁻ by full CI |
+|  |  | Hartree–Fock + correlation in Cl and Cl⁻, 44 orbitals | -4.81 % | s, p, d and f correlating functions, selected determinants |
 |  |  | Hartree–Fock separation into ions + measured cost of the ions | -5.67 % | measured ionization energy and electron affinity replace the Hartree–Fock ones |
 | | | **remaining** | 2.7× the reference uncertainty | within the reference uncertainty |
 | He | field shielded at the nucleus | two independent Bohr electrons | +18 % | starting point |
@@ -442,9 +445,9 @@ Each line follows one quantity from the simplest model to the best one here.
 - NIST-JANAF heat capacities are calculated from measured spectroscopic constants, not measured in a calorimeter. Agreement with the vibration-corrected rows therefore partly compares two versions of the same theory.
 - Helium's diamagnetic susceptibility is the one case here where the measurement is the likely weak link: the only gas-phase value (1960, ±3.5 %) lies 7 % from both this code and the best published calculation, which agree with each other to better than 0.001 %. The cause is not known.
 - The helium–helium curve comes in three versions. Hartree–Fock repulsion plus a damped series to C₁₀: 2 % too deep, partly by cancellation. Full-CI repulsion plus the damped series to C₁₆: 3 % too shallow. Full-CI repulsion (with d functions) plus directly computed dispersion: 1.4 % too deep, with the repulsion about 0.3 K short at the minimum. The full CI and the direct dispersion are precomputed on a larger machine. The reference curve is itself a calculation; only the virial coefficient and the binding energy of He₂ are measurements. Component references at the minimum (dispersion 22.395 K) are quoted from a secondary source.
-- NaCl from first principles is unrestricted Hartree–Fock in a basis about 26 mEh above the large-basis energy, most of it in the inner shells. The chlorine electron affinity with correlation freezes the inner ten electrons and uses 20 orbitals; it is not converged.
+- NaCl from first principles is unrestricted Hartree–Fock in a basis about 26 mEh above the large-basis energy, most of it in the inner shells. The chlorine electron affinity with correlation freezes the inner ten electrons; the 44-orbital value comes from a selected list of determinants and is converged in neither the orbitals nor the list.
 - The NaCl ionic model takes the bond length and vibration frequency from measurement and uses free-ion polarizabilities, which are not well defined for Cl⁻ inside a molecule.
 - The uncertainty column uses one representative relative uncertainty per class of data (see relative_uncertainty in reference_data.json), not a separate figure for every value.
 - The numerical methods are non-relativistic with fixed nuclei, use small sets of s, p, d and f orbitals, and are not formalised in Lean. Lean covers only the principle that makes their energies upper bounds.
 
-**165 comparisons: 132 inside the model's domain and matching, 33 documented limits.**
+**167 comparisons: 134 inside the model's domain and matching, 33 documented limits.**
