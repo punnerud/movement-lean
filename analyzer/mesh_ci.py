@@ -198,11 +198,69 @@ def rest_table(mesh, c, energy, thresholds=(1e-4, 3e-5, 1e-5, 3e-6, 1e-6), memor
     return table
 
 
-def save_state(path, alpha, beta, c, history):
+def save_state(path, alpha, beta, c, history, mesh=None, energy=None):
     """Determinants in the order they were added, coefficients in single
-    precision. A starting point for a later run, not a result."""
+    precision. A starting point for a later run, not a result.
+
+    With `mesh` and `energy` (64-bit strings only) the compact form is
+    written instead, about a third of the size. It needs the Hamiltonian to
+    be read back, so it is used where the file is keyed by the integrals:
+    - The list is cut into a first sixteenth and blocks that double, and the strings are
+      sorted inside each block and stored as differences.
+    - The coefficients of a block are predicted from the blocks before it,
+      c_j = (sum_i H_ji c_i) / (E - H_jj), and only what the prediction
+      misses is stored, on a logarithmic scale with a threshold. Reading
+      repeats the prediction and adds the stored remainder: a transform
+      whose loss is kept next to it, so that it can be undone."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(path, alpha=alpha, beta=beta, c=c.astype(np.float32), history=np.array(history, dtype=float))
+    if mesh is None or np.ndim(alpha) != 1:
+        np.savez_compressed(path, alpha=alpha, beta=beta, c=c.astype(np.float32), history=np.array(history, dtype=float))
+        return
+    import quantum
+    size = len(c)
+    bounds = _blocks(size)
+    order = np.concatenate([lo + np.lexsort((beta[lo:hi], alpha[lo:hi])) for lo, hi in zip([0] + bounds[:-1], bounds)])
+    keep = 1e-5 * np.abs(c).max()
+    codes, known = np.zeros(size, dtype=np.int16), np.zeros(size)
+    known[:bounds[0]] = c[:bounds[0]].astype(np.float32)
+    for lo, hi in zip(bounds[:-1], bounds[1:]):
+        guess = _predict(mesh, known, energy, lo, hi)
+        codes[lo:hi] = quantum._log_code(c[lo:hi] - guess, keep)
+        known[lo:hi] = guess + quantum._log_decode(codes[lo:hi])
+    np.savez_compressed(path, packed=2, size=size, energy=energy, history=np.array(history, dtype=float),
+                        alpha_steps=np.diff(alpha[order], prepend=np.uint64(0)),
+                        beta_steps=np.diff(beta[order], prepend=np.uint64(0)),
+                        head=c[order[:bounds[0]]].astype(np.float32), codes=codes[order])
+
+
+def _blocks(size):
+    """Ends of the blocks: the first sixteenth of the list (stored as it is),
+    then blocks that double. Each block costs one application of the
+    Hamiltonian to write and one to read."""
+    ends, end = [], max(256, size // 16)
+    while end < size:
+        ends.append(end)
+        end *= 2
+    return ends + [size]
+
+
+def _predict(mesh, known, energy, lo, hi):
+    """First-order estimate of the coefficients lo..hi from those before lo."""
+    source = known.copy()
+    source[lo:] = 0.0
+    return mesh.sigma(source)[lo:hi] / np.minimum(energy - mesh.diag[lo:hi], -1e-6)
+
+
+def _unpack(mesh, packed):
+    """Coefficients of a compact state, for the first len(mesh.alpha) determinants."""
+    import quantum
+    size = len(mesh.alpha)
+    bounds = [b for b in _blocks(int(packed["size"])) if b < size] + [size]
+    c = np.zeros(size)
+    c[:bounds[0]] = packed["head"][:bounds[0]]
+    for lo, hi in zip(bounds[:-1], bounds[1:]):
+        c[lo:hi] = _predict(mesh, c, float(packed["energy"]), lo, hi) + quantum._log_decode(packed["codes"][lo:hi])
+    return c
 
 
 def exchange(h, eri, mesh, c, energy, eps, swap=0.25, plan_bytes=2_000_000_000):
@@ -302,17 +360,34 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
     were looked at) is not."""
     wide = h.shape[0] > 64 if wide is None else wide      # 128-bit strings; forced on only for testing
     alpha, beta = strings([(1 << n_alpha) - 1], wide), strings([(1 << n_beta) - 1], wide)
+    compact = isinstance(store, str) and store == "content" and not wide
+    if isinstance(store, str) and store == "content":      # keyed by the integrals: the same problem finds its list again
+        import content_cache
+        store = content_cache.path("state:1", np.ascontiguousarray(h), np.ascontiguousarray(eri), n_alpha, n_beta,
+                                   suffix=".npz") if content_cache.ENABLED else None
     c, history = np.ones(1), []
+    packed = None                                          # a compact state whose coefficients are still to be decoded
+    unchanged = False                                      # the list is exactly the one in the compact file
     if store and Path(store).exists():
         with np.load(store) as f:
-            k = min(len(f["alpha"]), max_determinants)
-            if (k and (f["alpha"].ndim == 2) == wide and electrons(f["alpha"][0]) == n_alpha
-                    and electrons(f["beta"][0]) == n_beta):
-                alpha, beta, c = f["alpha"][:k].copy(), f["beta"][:k].copy(), f["c"][:k].astype(float)
+            if "packed" in f and not wide:
+                k = min(int(f["size"]), max_determinants)
+                a, b = np.cumsum(f["alpha_steps"], dtype=np.uint64)[:k], np.cumsum(f["beta_steps"], dtype=np.uint64)[:k]
+                if k and electrons(a[0]) == n_alpha and electrons(b[0]) == n_beta:
+                    alpha, beta, c = a, b, None
+                    unchanged = k == int(f["size"])
+                    packed = {name: f[name] for name in ("size", "energy", "head", "codes")}
+            elif "packed" not in f:
+                k = min(len(f["alpha"]), max_determinants)
+                if (k and (f["alpha"].ndim == 2) == wide and electrons(f["alpha"][0]) == n_alpha
+                        and electrons(f["beta"][0]) == n_beta):
+                    alpha, beta, c = f["alpha"][:k].copy(), f["beta"][:k].copy(), f["c"][:k].astype(float)
     while True:
         mesh = Mesh(h, eri, alpha, beta)
         if plan_bytes:
             mesh.plan(plan_bytes)
+        if packed is not None:
+            c, packed = _unpack(mesh, packed), None
         energy, c = mesh.solve(start=c)
         room = min(max(int(len(alpha) * (growth - 1.0)), 200), max_determinants - len(alpha))
         rest, step_eps = 0.0, eps
@@ -323,7 +398,7 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
                 break
             step_eps *= 0.3
         history.append((len(alpha), energy + e_nuc, rest))
-        if store:
+        if store and not unchanged:                        # a plain file per step, in case the run is cut short
             save_state(store, alpha, beta, c, history)
         if report:
             report(*history[-1])
@@ -334,6 +409,7 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
                     if better is None or energy - better[2] <= tol:
                         break
                     mesh, c, energy, rest, swapped = better
+                    unchanged = False
                     alpha, beta = mesh.alpha, mesh.beta
                     history.append((len(alpha), energy + e_nuc, rest))
                     if store:
@@ -343,6 +419,9 @@ def mesh_ci(h, eri, n_alpha, n_beta, e_nuc=0.0, max_determinants=1_000_000, grow
             break
         alpha = np.concatenate([alpha, new_a[:room]])
         beta = np.concatenate([beta, new_b[:room]])
+        unchanged = False
         c = np.concatenate([c, np.zeros(min(room, len(new_a)))])
         del mesh
+    if store and compact and not unchanged:
+        save_state(store, alpha, beta, c, history, mesh, energy)
     return energy + e_nuc, rest, history

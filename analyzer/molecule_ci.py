@@ -68,10 +68,9 @@ def outer_ci(name, S, h, eri, occupations, frozen, n_alpha, n_beta, e_nuc, deter
         e = quantum.fci(ha, ga, n_alpha, n_beta, e_nuc=e_core + e_nuc, tol=1e-7, low_memory=True)
         print(f"{name}: {ha.shape[0]} orbitals, full CI {e:.6f}", flush=True)
         return e
-    store = Path(__file__).resolve().parent / "ci_cache" / f"{tag}_{name}_{ha.shape[0]}.npz"
     print(f"{name}: {n_alpha}+{n_beta} outer electrons in {ha.shape[0]} orbitals", flush=True)
     e, rest, _ = mesh_ci.mesh_ci(
-        ha, ga, n_alpha, n_beta, e_nuc=e_core + e_nuc, max_determinants=determinants, store=store,
+        ha, ga, n_alpha, n_beta, e_nuc=e_core + e_nuc, max_determinants=determinants, store="content",
         report=lambda nd, en, r: print(f"    {nd:9d} determinants  {en:.6f}   with estimate of the rest {en + r:.6f}", flush=True))
     print(f"{name}: energy {e:.6f}  with estimate of the rest {e + rest:.6f}  ({time.time() - t0:.0f} s)", flush=True)
     return e, rest

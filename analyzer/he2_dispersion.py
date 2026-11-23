@@ -75,7 +75,21 @@ def basis(R, small=False):
 
 def contracted_eri(exps, cen, W):
     """(ab|cd) for the contracted functions, using the symmetry of each pair
-    and the sparsity of W, so that the primitive array is never stored."""
+    and the sparsity of W, so that the primitive array is never stored.
+    The result is kept in the content store, keyed by the basis itself."""
+    import content_cache
+    nc = W.shape[1]
+    A, B = np.triu_indices(nc)
+    pair_of = np.zeros((nc, nc), dtype=np.int64)
+    pair_of[A, B] = pair_of[B, A] = np.arange(len(A))
+    exps, cen, W = np.asarray(exps, float), np.asarray(cen, float), np.asarray(W, float)
+    out = content_cache.array("eri:1", (exps, cen, W), lambda: _packed_eri(exps, cen, W))
+    # `out` holds one value per pair of function pairs; unfold to the full array
+    return out[pair_of.ravel()][:, pair_of.ravel()].reshape(nc, nc, nc, nc)
+
+
+def _packed_eri(exps, cen, W):
+    """(ab|cd) for a <= b, c <= d, as a matrix over pairs."""
     n, nc = W.shape
     I, J = np.triu_indices(n)
     p = exps[I] + exps[J]
@@ -112,8 +126,7 @@ def contracted_eri(exps, cen, W):
                  * K[lo:hi, None] * K[None, :] * quantum.boys0(p[lo:hi, None] * p[None, :] / pq * R2))
         half = (WpT @ block.T).T                  # (slice, contracted pairs)
         out += WpT[:, lo:hi] @ half
-    # `out` holds sums over ordered function pairs folded onto a <= b; unfold to the full array
-    return out[pair_of.ravel()][:, pair_of.ravel()].reshape(nc, nc, nc, nc)
+    return out                                    # sums over ordered function pairs, folded onto a <= b
 
 
 def one_electron(exps, cen, W, nuclei, dipole=False):
