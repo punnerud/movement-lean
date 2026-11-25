@@ -553,12 +553,22 @@ Every species is now within one error bar, the three that were three error bars 
 
 | | Nuclear mass / light mass | Orbit energy / vibration quantum | Nuclei at rest, then vibration | Walkers, all free | Published |
 |---|---|---|---|---|---|
-| H₂⁺ | 1836 | 47 | −0.597368 (−0.23 milli-units) | −0.59707(26) | −0.597139 |
-| ttμ | 26.6 | 5.7 | −0.562622 (−16) | −0.54698(133), −0.54513(118) | −0.546374 |
-| ddμ | 17.8 | 4.7 | −0.554829 (−24) | −0.53174(108), −0.52852(113) | −0.531111 |
-| ppμ | 8.9 | 3.3 | −0.538866 (−44) | −0.49278(141), −0.49241(149) | −0.494387 |
+| H₂⁺ | 1836 | 47 | −0.597368 (−0.23 milli-units) | −0.59656(26) | −0.597139 |
+| ttμ | 26.6 | 5.7 | −0.562622 (−16) | −0.54703(108) | −0.546374 |
+| ddμ | 17.8 | 4.7 | −0.554829 (−24) | −0.53115(95) | −0.531111 |
+| ppμ | 8.9 | 3.3 | −0.538866 (−44) | −0.49466(111) | −0.494387 |
 
-(Two walker values: with and without the old limit on the rate.) The picture with nuclei at rest is good to 0.2 % of the binding energy in H₂⁺ and wrong by the whole binding energy in ppμ; its error grows as the ratio of the two motions shrinks. Most of that error is the recoil of the nucleus under the light particle, which the picture leaves out. The walkers make no such separation and agree with the published energies within their errors in seven runs out of eight (ddμ without the limit is 2.3 errors high). But the errors are large: the binding energy of ppμ comes out as 244 ± 8 eV and 242 ± 8 eV against 253.2 eV, so the walkers tell a 3 % statement, not more. The guess is the weak part: it has one decay constant for all distances between the nuclei, and its own energy is 25 milli-units above the answer.
+The picture with nuclei at rest is good to 0.2 % of the binding energy in H₂⁺ and wrong by the whole binding energy in ppμ; its error grows as the ratio of the two motions shrinks. Most of that error is the recoil of the nucleus under the light particle, which the picture leaves out. The walkers make no such separation, and for the three muonic ions they agree with the published energies within their errors: binding energies 254.7 ± 6.2, 325.3 ± 5.3 and 366.6 ± 6.1 eV against 253.2, 325.1 and 362.9. That is a 2 % statement, not more. H₂⁺ comes out 0.58 milli-units too high, 2.2 errors, and above the energy of its own guess (−0.5970 in a short scan), which a correct run cannot be; the narrow nuclear part of that guess probably keeps the nuclei from moving enough in the time given. That is not resolved.
+
+Three shapes of the guess were tried, judged by the energy of the guess alone (ppμ, H₂⁺; published −0.4944, −0.5971):
+
+| Light particle's part | ppμ | H₂⁺ |
+|---|---|---|
+| two bare exponentials, `exp(−κr₁) + exp(−κr₂)` | −0.4688 | −0.5737 |
+| the same with κ following the distance between the nuclei | −0.4697 | −0.5761 |
+| each term also falling off toward the other nucleus, `exp(−(κ+q)r₁ − q r₂) + …` | −0.4851 | −0.5970 |
+
+Letting the decay constant follow the nuclei, the first idea, gains almost nothing. What was missing is that the cloud is drawn in between the nuclei, which the third form has. Even so the walkers' errors fell by only a fifth (earlier long runs with the bare form gave 244 ± 8 and 242 ± 8 eV for ppμ): the noise now comes mostly from the nuclear part of the guess. Short runs of these systems are not to be trusted; three of them for ppμ scattered by up to 4.5 of their own error bars, because the nuclei move too slowly for a short run to sample them. The derivatives of all three forms are checked against differences in a test (`cargo test`).
 
 **Following the gradient instead of searching.** The spread on a fixed set of sample points is a smooth function of the parameters, so its gradient can be followed (`diffusion_mc.py gradient`; the gradient is taken by differences, not yet by automatic differentiation). Three uses of the gradient were compared with the search at the same number of evaluations, each also with the positive parameters on a logarithmic scale. Spread on fresh sample points after three rounds:
 

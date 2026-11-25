@@ -491,7 +491,8 @@ def particles_energy(masses, charges, pairs, tau, length=1.0, time_unit=1.0, wal
     guess is multiplied by z_i - z_j: the lowest state odd under reflection (a P state). pairs[(i, j)] = (a, b, c) gives the guess
     exp(sum of (a r + c r^2) / (1 + b r)) (see cikernel/src/walk.rs). `duration` and the
     warm-up of 20 are in units of `time_unit`. With shared=(i, j, k, kappa) the guess is multiplied by
-    exp(-kappa r_ik) + exp(-kappa r_jk): particle k belongs to i and to j alike. Returns (mean, error, mean of the guess alone)."""
+    exp(-kap r_ik) + exp(-kap r_jk): particle k belongs to i and to j alike; with shared=(i, j, k, kappa,
+    extra, range) the constant follows their distance R, kap = kappa + extra exp(-R / range). Returns (mean, error, mean of the guess alone)."""
     import mesh_ci
     lib = mesh_ci.kernel()
     n = len(masses)
@@ -506,13 +507,16 @@ def particles_energy(masses, charges, pairs, tau, length=1.0, time_unit=1.0, wal
     warm, steps = int(20.0 * time_unit / tau), int(duration * time_unit / tau)
     out, alone = np.zeros(steps), ctypes.c_double(0.0)
     m, q = np.array(masses, float), np.array(charges, float)
-    lib.walk_shared(-1 if shared is None else (shared[0] * 8 + shared[1]) * 8 + shared[2], 0.0 if shared is None else shared[3])
+    if shared is None:
+        lib.walk_shared(-1, 0.0, 0.0, 1.0)
+    else:
+        lib.walk_shared((shared[0] * 8 + shared[1]) * 8 + shared[2], *(tuple(shared[3:]) + (0.0, 1.0))[:3])
     try:
         failed = lib.walk_particles(n, mesh_ci._d(m), mesh_ci._d(q), mesh_ci._d(A), mesh_ci._d(B), mesh_ci._d(C), mesh_ci._d(L),
                                     -1 if odd is None else odd[0] * n + odd[1], length, tau,
                                     walkers, warm, steps, seed, mesh_ci._d(out), ctypes.byref(alone))
     finally:
-        lib.walk_shared(-1, 0.0)
+        lib.walk_shared(-1, 0.0, 0.0, 1.0)
     if failed:
         raise ValueError("two to eight particles")
     return (*_blocks(out), alone.value)

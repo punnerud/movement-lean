@@ -63,7 +63,7 @@ def kernel():
         lib.walk_particles.restype = ctypes.c_int
         lib.walk_options.restype = None
         lib.walk_shared.restype = None
-        lib.walk_shared.argtypes = [ctypes.c_int64, ctypes.c_double]
+        lib.walk_shared.argtypes = [ctypes.c_int64] + [ctypes.c_double] * 3
         lib.walk_options.argtypes = [ctypes.c_double, ctypes.c_int]
         lib.walk_particles.argtypes = [size, dbl, dbl, dbl, dbl, dbl, dbl, ctypes.c_int64] + [ctypes.c_double] * 2 + [size, size, size, ctypes.c_uint64, dbl, dbl]
         _lib = lib

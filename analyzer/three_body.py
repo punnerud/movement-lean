@@ -15,7 +15,7 @@ Bohr radius, its hartree):
      the motions is assumed. The guess is built from step 2 (where the nuclei sit and how far
      they swing), not from any reference value.
 
-    python3 analyzer/three_body.py [quick] [limit] [name ...]
+    python3 analyzer/three_body.py [quick] [limit] [plain | following] [name ...]   # simpler shapes of the guess, for comparison
 """
 import sys
 import time
@@ -79,17 +79,21 @@ def vibration(U, M, r_max=14.0, points=14000):
     return float(e[0]), mean, float(np.sqrt((w * (r - mean) ** 2).sum()))
 
 
-def guess(M, r0, sigma, kappa):
+def guess(M, r0, sigma, kappa, extra=0.0, reach=1.0, toward=0.0):
     """Pair functions (a, b, c) of exp((a r + c r^2) / (1 + b r)): the nuclei repel with the right
     slope at contact, and peak at r0 with the spread sigma. The light particle belongs to both
     nuclei, exp(-kappa r_1) + exp(-kappa r_2) (the `shared` factor of the engine); its pair
-    functions only correct the slope at each nucleus and die out at a distance."""
+    functions only correct the slope at each nucleus and die out at a distance. With `extra` the
+    decay constant follows the distance R between the nuclei, kappa + extra exp(-R / reach). With
+    `toward` the pair functions also fall off with that slope far away, so each term becomes
+    exp(-(kappa + toward) r_1 - toward r_2): the cloud is drawn in between the nuclei."""
     a, g = M / 2, 1 / (4 * sigma ** 2)
     k = a / (g * r0)
     y = (-3 + np.sqrt(1 + 4 * k)) / 2 if k > 2 else 0.0          # (1 + y)(2 + y) = k, y = b r0
     nuclei = (a, y / r0, -g * (1 + y)) if y > 0 else (2 * g * r0, 0.0, -g)
     m = M / (1 + M)
-    light = (-m + kappa / (1 + np.exp(-kappa * r0)), 1.0, 0.0)
+    kap = kappa + extra * np.exp(-r0 / reach)
+    light = (-m + toward + kap / (1 + np.exp(-kap * r0)), 1.0, -toward)
     return {(0, 1): nuclei, (0, 2): light, (1, 2): light}
 
 
@@ -116,17 +120,25 @@ def main():
         # the nuclei settle in about 1 / (vibration quantum): the warm-up of 20 time units is six of those, at least 100
         unit = max(0.3 / quantum, 5.0)
         kw = dict(walkers=3000, duration=40.0) if quick else dict(walkers=20000, duration=250.0)
-        fars = (0.8, 0.9, 1.0, 1.1, 1.2)
-        alone = [diffusion_mc.particles_energy((M, M, 1.0), (1, 1, -1), guess(M, r0, sigma, f), 0.02, 1.5, unit, walkers=3000, duration=5.0, seed=7,
-                                               shared=(0, 1, 2, f))[2] for f in fars]
-        far = fars[int(np.argmin(alone))]
-        pairs = guess(M, r0, sigma, far)
-        kw["shared"] = (0, 1, 2, far)
+        # the shape of the guess, chosen by the energy of the guess alone (lower is better): decay constant, its extra
+        # part and reach, the pull toward the other nucleus, and the width of the nuclear part relative to step 2
+        if "plain" in args:                                      # two bare exponentials, one decay constant
+            shapes = [(f, 0.0, 1.0, 0.0, 1.0) for f in (0.8, 0.9, 1.0, 1.1, 1.2)]
+        elif "following" in args:                                # the constant follows the distance between the nuclei
+            shapes = [(M / (1 + M), c, d, 0.0, 1.0) for c in (0.5, 1.0, 1.5) for d in (1.0, 1.5, 2.5)]
+        else:                                                    # drawn in between the nuclei
+            shapes = [(f, 0.0, 1.0, q, w) for f in (0.7, 0.85, 1.05) for q in (0.15, 0.3) for w in (0.7, 1.0)]
+        build = lambda f: guess(M, r0, sigma * f[4], f[0], f[1], f[2], f[3])
+        alone = [diffusion_mc.particles_energy((M, M, 1.0), (1, 1, -1), build(f), 0.02, 1.5, unit, walkers=3000, duration=10.0, seed=7,
+                                               shared=(0, 1, 2) + f[:3])[2] for f in shapes]
+        far = shapes[int(np.argmin(alone))]
+        pairs = build(far)
+        kw["shared"] = (0, 1, 2) + far[:3]
         taus = (0.02, 0.01, 0.005)
         runs = [diffusion_mc.particles_energy((M, M, 1.0), (1, 1, -1), pairs, tau, 1.5, unit, seed=k + 1, **kw) for k, tau in enumerate(taus)]
         e0, s0 = diffusion_mc.straight_line(taus, runs)
         to_ev = HARTREE_EV * light
-        print(f"  the guess alone: {min(alone):.5f} (decay constant {far}); walkers, all three free: " +
+        print(f"  the guess alone: {min(alone):.5f} (decay constant, extra, reach, toward, width: {far[0]:.3f}, {far[1]}, {far[2]}, {far[3]}, {far[4]}); walkers, all three free: " +
               ", ".join(f"step {tau:g}: {e:.5f} ± {s:.5f}" for tau, (e, s, _) in zip(taus, runs)) + f"; step -> 0: {e0:.5f} ± {s0:.5f}", flush=True)
         print(f"  walkers - published: {1e3 * (e0 - published):+.3f} milli-units = {(e0 - published) / s0:+.1f} errors.   "
               f"Binding energy (threshold {threshold:.6f}): walkers {(threshold - e0) * to_ev:.4g} ± {s0 * to_ev:.2g} eV, "

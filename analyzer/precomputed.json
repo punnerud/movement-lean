@@ -1530,7 +1530,7 @@
   },
   "three_bodies_nothing_fixed": {
    "command": "python3 analyzer/three_body.py [limit]",
-   "note": "energies in units of the light particle; 20000 walkers; published values from arXiv:1008.3010 (table 3) and arXiv:physics/9811043 (table 2)",
+   "note": "energies in units of the light particle; 20000 walkers; published values from arXiv:1008.3010 (table 3) and arXiv:physics/9811043 (table 2); walkers_with_limit and walkers_no_limit used two bare exponentials (python3 analyzer/three_body.py plain)",
    "nuclei_at_rest_then_vibration": {
     "H2+": -0.597368,
     "ttμ": -0.562622,
@@ -1574,6 +1574,37 @@
     "ttμ": -0.54637422561382,
     "ddμ": -0.53111113540239,
     "ppμ": -0.49438682024893
+   },
+   "walkers_drawn_in_guess_no_limit": {
+    "H2+": [
+     -0.59656,
+     0.00026
+    ],
+    "ttμ": [
+     -0.54703,
+     0.00108
+    ],
+    "ddμ": [
+     -0.53115,
+     0.00095
+    ],
+    "ppμ": [
+     -0.49466,
+     0.00111
+    ]
+   },
+   "guess_alone": {
+    "_note": "energy of the guess alone from a short scan (3000 walkers), lower is better: two bare exponentials / decay constant following the nuclear distance / cloud drawn in between the nuclei",
+    "ppμ": [
+     -0.4688,
+     -0.4697,
+     -0.4851
+    ],
+    "H2+": [
+     -0.5737,
+     -0.5761,
+     -0.597
+    ]
    }
   }
  }

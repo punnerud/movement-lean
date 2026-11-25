@@ -315,9 +315,10 @@ struct PairGuess<'a> {
     c: &'a [f64],
     linear: &'a [f64],
     odd: Option<(usize, usize)>,
-    /// (i, j, k, kappa): g is multiplied by exp(-kappa r_ik) + exp(-kappa r_jk), particle k
-    /// belonging to i and to j alike (the light particle of a molecule with two nuclei).
-    shared: Option<(usize, usize, usize, f64)>,
+    /// (i, j, k, kappa, extra, range): g is multiplied by exp(-kap r_ik) + exp(-kap r_jk), particle
+    /// k belonging to i and to j alike (the light particle of a molecule with two nuclei). The
+    /// decay constant follows the distance R between i and j: kap = kappa + extra exp(-R / range).
+    shared: Option<(usize, usize, usize, f64, f64, f64)>,
 }
 
 fn evaluate_pairs(g: &PairGuess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) {
@@ -354,9 +355,11 @@ fn evaluate_pairs(g: &PairGuess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) 
         lap[i] -= 1.0 / (z * z);
         lap[j] -= 1.0 / (z * z);
     }
-    if let Some((i, j, k, kappa)) = g.shared {
-        // f = e_i + e_j with e = exp(-kappa r): the Laplacian of f over f is the weighted sum of
-        // kappa^2 - 2 kappa / r, and the Laplacian of ln f is that minus the squared slope of ln f.
+    if let Some((i, j, k, kappa, extra, range)) = g.shared {
+        // f = e_i + e_j with e = exp(-kap r), kap = kappa + extra exp(-R / range), R the distance
+        // between i and j. For the light particle the Laplacian of f over f is the weighted sum of
+        // kap^2 - 2 kap / r; for i and j there are more terms because kap moves with R. The
+        // Laplacian of ln f is that of f over f minus the squared slope of ln f.
         let (mut n, mut r, mut w) = ([[0.0; 3]; 2], [0.0; 2], [0.0; 2]);
         for (t, &c) in [i, j].iter().enumerate() {
             for d in 0..3 {
@@ -367,21 +370,39 @@ fn evaluate_pairs(g: &PairGuess, x: &[f64; DIM]) -> (f64, f64, [f64; DIM], f64) 
                 n[t][d] /= r[t];
             }
         }
+        let mut axis = [x[3 * i] - x[3 * j], x[3 * i + 1] - x[3 * j + 1], x[3 * i + 2] - x[3 * j + 2]];
+        let big = (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]).sqrt();
+        for a in axis.iter_mut() {
+            *a /= big;
+        }
+        let tail = if extra != 0.0 { extra * (-big / range).exp() } else { 0.0 };
+        let (kap, k1, k2) = (kappa + tail, -tail / range, tail / (range * range));
         let low = r[0].min(r[1]);
-        let e = [(-kappa * (r[0] - low)).exp(), (-kappa * (r[1] - low)).exp()];
+        let e = [(-kap * (r[0] - low)).exp(), (-kap * (r[1] - low)).exp()];
         let f = e[0] + e[1];
-        ln += f.ln() - kappa * low;
+        ln += f.ln() - kap * low;
+        w[0] = e[0] / f;
+        w[1] = e[1] / f;
+        let reach = w[0] * r[0] + w[1] * r[1];
         let mut own = [0.0; 3];
         let mut mean = 0.0;
         for (t, &c) in [i, j].iter().enumerate() {
-            w[t] = e[t] / f;
-            let part = w[t] * (kappa * kappa - 2.0 * kappa / r[t]);
-            mean += part;
-            lap[c] += part - kappa * kappa * w[t] * w[t];
+            let o = 1 - t;
+            let side = if t == 0 { 1.0 } else { -1.0 };                 // the slope of R with respect to this nucleus is side * axis
+            let along = side * (n[t][0] * axis[0] + n[t][1] * axis[1] + n[t][2] * axis[2]);
+            mean += w[t] * (kap * kap - 2.0 * kap / r[t]);
+            let over = w[t]
+                * (k1 * k1 * r[t] * r[t] - 2.0 * kap * k1 * r[t] * along + kap * kap - k2 * r[t] - 2.0 * k1 * r[t] / big
+                    + 2.0 * k1 * along
+                    - 2.0 * kap / r[t])
+                + w[o] * (k1 * k1 * r[o] * r[o] - k2 * r[o] - 2.0 * k1 * r[o] / big);
+            let mut slope = [0.0; 3];
             for d in 0..3 {
-                grad[3 * c + d] += kappa * w[t] * n[t][d];
-                own[d] -= kappa * w[t] * n[t][d];
+                slope[d] = -k1 * reach * side * axis[d] + kap * w[t] * n[t][d];
+                grad[3 * c + d] += slope[d];
+                own[d] -= kap * w[t] * n[t][d];
             }
+            lap[c] += over - (slope[0] * slope[0] + slope[1] * slope[1] + slope[2] * slope[2]);
         }
         lap[k] += mean - (own[0] * own[0] + own[1] * own[1] + own[2] * own[2]);
         for d in 0..3 {
@@ -427,12 +448,15 @@ pub extern "C" fn walk_options(clamp: f64, react_rejected: i32) {
 /// The shared factor of the particle guess (see `PairGuess`), for the runs that follow:
 /// `code` is -1 for none or (i * 8 + j) * 8 + k.
 static SHARED: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(-1);
-static SHARED_KAPPA: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static SHARED_KAPPA: [std::sync::atomic::AtomicU64; 3] =
+    [std::sync::atomic::AtomicU64::new(0), std::sync::atomic::AtomicU64::new(0), std::sync::atomic::AtomicU64::new(0)];
 
 #[no_mangle]
-pub extern "C" fn walk_shared(code: i64, kappa: f64) {
+pub extern "C" fn walk_shared(code: i64, kappa: f64, extra: f64, range: f64) {
     SHARED.store(code, std::sync::atomic::Ordering::Relaxed);
-    SHARED_KAPPA.store(kappa.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    for (slot, value) in SHARED_KAPPA.iter().zip([kappa, extra, range]) {
+        slot.store(value.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// The walker loop. `evaluate` gives (ln |g|, sign, grad ln |g|, (H g)/g); particle i diffuses
@@ -713,7 +737,9 @@ pub unsafe extern "C" fn walk_particles(
                 code as usize / 64,
                 code as usize / 8 % 8,
                 code as usize % 8,
-                f64::from_bits(SHARED_KAPPA.load(std::sync::atomic::Ordering::Relaxed)),
+                f64::from_bits(SHARED_KAPPA[0].load(std::sync::atomic::Ordering::Relaxed)),
+                f64::from_bits(SHARED_KAPPA[1].load(std::sync::atomic::Ordering::Relaxed)),
+                f64::from_bits(SHARED_KAPPA[2].load(std::sync::atomic::Ordering::Relaxed)),
             )),
             _ => None,
         },
@@ -728,4 +754,50 @@ pub unsafe extern "C" fn walk_particles(
     };
     *guess_alone = run(|x| evaluate_pairs(&g, x), start, &inv_mass, tau, walkers, warm, steps, warm / 2, seed, out).0;
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The local energy of the particle guess against the same thing from differences of ln g.
+    #[test]
+    fn shared_factor_matches_differences() {
+        let n = 3;
+        let inv_mass = [1.0 / 8.88, 1.0 / 8.88, 1.0];
+        let charge = [1.0, 1.0, -1.0];
+        let (mut a, mut b, mut c) = ([0.0; 9], [0.0; 9], [0.0; 9]);
+        for &(p, q, va, vb, vc) in &[(0usize, 1usize, 4.44, 0.4, -0.5), (0, 2, -0.3, 1.0, 0.0), (1, 2, -0.3, 1.0, 0.0)] {
+            for &t in &[p * n + q, q * n + p] {
+                a[t] = va;
+                b[t] = vb;
+                c[t] = vc;
+            }
+        }
+        let linear = [0.0; 9];
+        for shared in [Some((0, 1, 2, 1.1, 0.0, 1.0)), Some((0, 1, 2, 0.9, 1.0, 1.4)), None] {
+            let g = PairGuess { n, inv_mass: &inv_mass, charge: &charge, a: &a, b: &b, c: &c, linear: &linear, odd: None, shared };
+            let mut x = [0.0; DIM];
+            x[..9].copy_from_slice(&[0.3, -0.2, 1.1, 0.1, 0.4, -1.3, 0.7, 0.5, 0.2]);
+            let (ln0, _, grad, local) = evaluate_pairs(&g, &x);
+            let h = 1e-4;
+            let (mut kinetic, mut v) = (0.0, 0.0);
+            for t in 0..9 {
+                let (mut up, mut down) = (x, x);
+                up[t] += h;
+                down[t] -= h;
+                let (lu, ld) = (evaluate_pairs(&g, &up).0, evaluate_pairs(&g, &down).0);
+                let first = (lu - ld) / (2.0 * h);
+                assert!((first - grad[t]).abs() < 1e-6, "slope {t}: {first} against {}", grad[t]);
+                kinetic -= 0.5 * inv_mass[t / 3] * ((lu - 2.0 * ln0 + ld) / (h * h) + first * first);
+            }
+            for i in 0..n {
+                for j in 0..i {
+                    let d: f64 = (0..3).map(|k| (x[3 * i + k] - x[3 * j + k]).powi(2)).sum();
+                    v += charge[i] * charge[j] / d.sqrt();
+                }
+            }
+            assert!((kinetic + v - local).abs() < 1e-5, "local energy {} against {}", kinetic + v, local);
+        }
+    }
 }
