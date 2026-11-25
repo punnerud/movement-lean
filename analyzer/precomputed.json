@@ -1050,7 +1050,7 @@
   },
   "improved_guesses_long_runs": {
    "command": "python3 analyzer/diffusion_mc.py improved",
-   "note": "20000 walkers, duration 600, steps 0.02/0.01/0.005, guesses improved from samples (extra terms; H3 also richer orbitals). No reference value enters. H2, HeH+ and H3 lie about 3 errors above the published values: an unexplained bias of 0.3 to 0.7 mEh, probably the straight-line extrapolation in the time step.",
+   "note": "20000 walkers, duration 600, steps 0.02/0.01/0.005, guesses improved from samples (extra terms; H3 also richer orbitals). No reference value enters. These runs had the limit 0.2 on the reaction rate, which raised H2, HeH+ and H3 by 0.3 to 0.7 mEh; see no_limit_long_runs.",
    "species": {
     "H": {
      "energy": -0.499999999999306,
@@ -1412,6 +1412,168 @@
      0.363,
      0.21
     ]
+   }
+  },
+  "no_limit_long_runs": {
+   "command": "python3 analyzer/diffusion_mc.py unlimited",
+   "note": "the same guesses, 20000 walkers, duration 600, no limit on the reaction rate (now the default)",
+   "species": {
+    "H": {
+     "energy": -0.499999999999306,
+     "error": 1.012521051791231e-12,
+     "steps": [
+      [
+       -0.5000000000001479,
+       1.2095469291102474e-12
+      ],
+      [
+       -0.49999999999977685,
+       7.459014189944845e-13
+      ],
+      [
+       -0.49999999999950184,
+       7.390955993263774e-13
+      ]
+     ]
+    },
+    "He": {
+     "energy": -2.90370873181914,
+     "error": 4.9144113011953896e-05,
+     "steps": [
+      [
+       -2.9037171554677115,
+       2.648627136135463e-05
+      ],
+      [
+       -2.9036405928991145,
+       3.425571372094924e-05
+      ],
+      [
+       -2.903790271589911,
+       4.703979901237791e-05
+      ]
+     ]
+    },
+    "H2": {
+     "energy": -1.1745091280650657,
+     "error": 9.197976547561518e-05,
+     "steps": [
+      [
+       -1.1745649788373684,
+       5.920074214804682e-05
+      ],
+      [
+       -1.1745335608613305,
+       6.897654987879412e-05
+      ],
+      [
+       -1.174525804843394,
+       8.163850523459513e-05
+      ]
+     ]
+    },
+    "H3+": {
+     "energy": -1.3438080455524162,
+     "error": 9.010925983759433e-05,
+     "steps": [
+      [
+       -1.3438689845342664,
+       5.337491597090343e-05
+      ],
+      [
+       -1.3437922621399288,
+       8.016219151847073e-05
+      ],
+      [
+       -1.343847625761219,
+       7.618734994120517e-05
+      ]
+     ]
+    },
+    "HeH+": {
+     "energy": -2.9786090929559754,
+     "error": 0.00022017803625694663,
+     "steps": [
+      [
+       -2.979274355321039,
+       0.00020064539968305093
+      ],
+      [
+       -2.9788913851050296,
+       0.00014496579002671925
+      ],
+      [
+       -2.978810313925004,
+       0.00018403579125721972
+      ]
+     ]
+    },
+    "H3": {
+     "energy": -1.6590079916180298,
+     "error": 0.0002752489731176329,
+     "steps": [
+      [
+       -1.6588091070410653,
+       0.00012610812115207274
+      ],
+      [
+       -1.6589067923168852,
+       0.00023018550607628005
+      ],
+      [
+       -1.6589594915267631,
+       0.0002449183121551267
+      ]
+     ]
+    }
+   }
+  },
+  "three_bodies_nothing_fixed": {
+   "command": "python3 analyzer/three_body.py [limit]",
+   "note": "energies in units of the light particle; 20000 walkers; published values from arXiv:1008.3010 (table 3) and arXiv:physics/9811043 (table 2)",
+   "nuclei_at_rest_then_vibration": {
+    "H2+": -0.597368,
+    "ttμ": -0.562622,
+    "ddμ": -0.554829,
+    "ppμ": -0.538866
+   },
+   "walkers_with_limit": {
+    "H2+": [
+     -0.59707,
+     0.00026
+    ],
+    "ttμ": [
+     -0.54698,
+     0.00133
+    ],
+    "ddμ": [
+     -0.53174,
+     0.00108
+    ],
+    "ppμ": [
+     -0.49278,
+     0.00141
+    ]
+   },
+   "walkers_no_limit": {
+    "ttμ": [
+     -0.54513,
+     0.00118
+    ],
+    "ddμ": [
+     -0.52852,
+     0.00113
+    ],
+    "ppμ": [
+     -0.49241,
+     0.00149
+    ]
+   },
+   "published": {
+    "H2+": -0.5971390631239,
+    "ttμ": -0.54637422561382,
+    "ddμ": -0.53111113540239,
+    "ppμ": -0.49438682024893
    }
   }
  }

@@ -524,7 +524,7 @@ The richer form cuts the noise of H₂ by a factor of four, which the simple for
 | Binding energy of H₂ | 174.18(10) mEh | 173.6(7) | | 174.48 | −0.30 mEh |
 | Barrier of H + H₂ | 15.74(25) mEh | 21.5(1.3) | | 15.31 | +0.43 mEh |
 
-The improved guesses cut the statistical error by a factor of five to fourteen, and for hydrogen the search found the exact wavefunction. The walkers lie below our own full CI for every species, as they must. But with the noise gone, three of the six (H₂, HeH⁺, H₃) sit about three error bars above the published values, by 0.3 to 0.7 mEh. For H₃ part of this can be the zero surfaces. For H₂ and HeH⁺ it cannot, since with two electrons the answer should not depend on the guess. In HeH⁺ the energy falls steadily as the step shrinks (−2.97752, −2.97768, −2.97812), so a straight line to step zero probably lands too high; that is the likely cause and it has not been examined. Until it is, the honest accuracy of this engine is about half a millihartree, not the quoted error bars.
+The improved guesses cut the statistical error by a factor of five to fourteen, and for hydrogen the search found the exact wavefunction. The walkers lie below our own full CI for every species, as they must. But with the noise gone, three of the six (H₂, HeH⁺, H₃) sit about three error bars above the published values, by 0.3 to 0.7 mEh. For H₃ part of this can be the zero surfaces. For H₂ and HeH⁺ it cannot, since with two electrons the answer should not depend on the guess. In HeH⁺ the energy falls steadily as the step shrinks (−2.97752, −2.97768, −2.97812), so a straight line to step zero probably lands too high; which looked like the cause. It was not the extrapolation as such; the next paragraphs find the cause and remove it.
 
 **Where the bias comes from.** `diffusion_mc.py steps` runs H₂ at five time steps, and at step 0.01 with one thing changed at a time (20 000 walkers; difference from the published energy in mEh):
 
@@ -535,7 +535,30 @@ The improved guesses cut the statistical error by a factor of five to fourteen, 
 | step 0.01, reaction also on rejected moves | +0.30(9) |
 | step 0.01, a tenth of the walkers | +0.36(21) |
 
-The cause is the limit this engine puts on the reaction rate (0.2 √(particles/step)), which was there to keep walkers near a zero surface from multiplying without bound. Where the guess is poor, the rate is cut off on one side more than the other and the energy comes out too high. Since the limit itself moves with the step, the bias falls only as about the square root of the step, and a straight line through three steps does not remove it. Taking the limit away removes the bias at a single step; rejected moves and the size of the population make no difference. Hydrogen with a deliberately wrong guess shows the same thing more noisily (+0.40(41) with the limit, −0.13(27) without), and a hydrogen guess with the right slope at the nucleus shows no bias at any step (all within 0.07 mEh). Long runs of all six species without the limit are the confirmation still to come; whether the species with zero surfaces (H₃) stay stable without it is part of that test.
+The cause is the limit this engine puts on the reaction rate (0.2 √(particles/step)), which was there to keep walkers near a zero surface from multiplying without bound. Where the guess is poor, the rate is cut off on one side more than the other and the energy comes out too high. Since the limit itself moves with the step, the bias falls only as about the square root of the step, and a straight line through three steps does not remove it. Taking the limit away removes the bias at a single step; rejected moves and the size of the population make no difference. Hydrogen with a deliberately wrong guess shows the same thing more noisily (+0.40(41) with the limit, −0.13(27) without), and a hydrogen guess with the right slope at the nucleus shows no bias at any step (all within 0.07 mEh). 
+**Confirmed in long runs, and the limit removed.** All six species again with the same guesses and no limit (`diffusion_mc.py unlimited`):
+
+| | With the limit | No limit | Published | No limit − published |
+|---|---|---|---|---|
+| H | −0.50000(0) | −0.50000(0) | −0.5 | 0.00 mEh |
+| He | −2.90370(5) | −2.90371(5) | −2.903724 | +0.02 mEh, 0.3 errors |
+| H₂ | −1.17418(10) | −1.17451(9) | −1.174476 | −0.03 mEh, 0.4 errors |
+| H₃⁺ | −1.34390(10) | −1.34381(9) | −1.343836 | +0.03 mEh, 0.3 errors |
+| HeH⁺ | −2.97808(21) | −2.97861(22) | −2.978708 | +0.10 mEh, 0.4 errors |
+| H₃ at the saddle | −1.65844(23) | −1.65901(28) | −1.659162 | +0.15 mEh, 0.6 errors |
+
+Every species is now within one error bar, the three that were three error bars off included, and H₃ with its zero surfaces ran stably. The limit has been taken out of the engine (it can be put back with `walk_options`). The barrier of H + H₂ becomes 15.50 ± 0.29 mEh against 15.31 and the binding energy of H₂ 174.51 ± 0.09 against 174.48. Results elsewhere in this section that were produced before this (the simple-guess runs, positronium, charmonium) had the limit and have not been rerun.
+
+**Two nuclei and one light particle, nothing held fixed.** In a molecule the electron goes round many times for each swing of the nuclei, so one solves the electron with the nuclei at rest and lets the nuclei vibrate on the resulting curve. Replace the electron by a muon and the two motions come close: the nuclei are 9 to 27 times heavier than the light particle instead of 1836. [`analyzer/three_body.py`](analyzer/three_body.py) computes H₂⁺ and the muonic ions both ways, in units of the light particle: our own curve and vibration, and walkers with all three particles free. The guess gives the light particle to both nuclei, `exp(−κr₁) + exp(−κr₂)`, and takes the place and swing of the nuclei from the first calculation.
+
+| | Nuclear mass / light mass | Orbit energy / vibration quantum | Nuclei at rest, then vibration | Walkers, all free | Published |
+|---|---|---|---|---|---|
+| H₂⁺ | 1836 | 47 | −0.597368 (−0.23 milli-units) | −0.59707(26) | −0.597139 |
+| ttμ | 26.6 | 5.7 | −0.562622 (−16) | −0.54698(133), −0.54513(118) | −0.546374 |
+| ddμ | 17.8 | 4.7 | −0.554829 (−24) | −0.53174(108), −0.52852(113) | −0.531111 |
+| ppμ | 8.9 | 3.3 | −0.538866 (−44) | −0.49278(141), −0.49241(149) | −0.494387 |
+
+(Two walker values: with and without the old limit on the rate.) The picture with nuclei at rest is good to 0.2 % of the binding energy in H₂⁺ and wrong by the whole binding energy in ppμ; its error grows as the ratio of the two motions shrinks. Most of that error is the recoil of the nucleus under the light particle, which the picture leaves out. The walkers make no such separation and agree with the published energies within their errors in seven runs out of eight (ddμ without the limit is 2.3 errors high). But the errors are large: the binding energy of ppμ comes out as 244 ± 8 eV and 242 ± 8 eV against 253.2 eV, so the walkers tell a 3 % statement, not more. The guess is the weak part: it has one decay constant for all distances between the nuclei, and its own energy is 25 milli-units above the answer.
 
 **Following the gradient instead of searching.** The spread on a fixed set of sample points is a smooth function of the parameters, so its gradient can be followed (`diffusion_mc.py gradient`; the gradient is taken by differences, not yet by automatic differentiation). Three uses of the gradient were compared with the search at the same number of evaluations, each also with the positive parameters on a logarithmic scale. Spread on fresh sample points after three rounds:
 

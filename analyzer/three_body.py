@@ -15,7 +15,7 @@ Bohr radius, its hartree):
      the motions is assumed. The guess is built from step 2 (where the nuclei sit and how far
      they swing), not from any reference value.
 
-    python3 analyzer/three_body.py [quick] [nolimit] [name ...]
+    python3 analyzer/three_body.py [quick] [limit] [name ...]
 """
 import sys
 import time
@@ -96,9 +96,9 @@ def guess(M, r0, sigma, kappa):
 def main():
     args = sys.argv[1:]
     quick = "quick" in args
-    if "nolimit" in args:                                        # no limit on the reaction rate (see diffusion_mc.py steps)
+    if "limit" in args:                                          # the old limit on the reaction rate (see diffusion_mc.py steps)
         import mesh_ci
-        mesh_ci.kernel().walk_options(0.0, 0)
+        mesh_ci.kernel().walk_options(0.2, 0)
     names = [a for a in args if a in SYSTEMS] or list(SYSTEMS)
     U, spline = curve()
     r_min = float(spline.derivative().roots()[0])

@@ -648,6 +648,7 @@ def step_main(args):
     if "HeH+" in stored and "all" in args:
         make = richer(lambda p: Guess(CASES["HeH+"][0], (p[0], p[1]), p[2], up=[[1.0, p[3]]], down=[[1.0, p[3]]]), 4)
         cases.append(("HeH+, improved guess", make(np.array(stored["HeH+"]["parameters"])), 2, CASES["HeH+"][5]))
+    lib.walk_options(0.2, 0)                                     # the limit as it was before this study
     for name, guess, electrons, exact in cases:
         print(f"{name}   (exact or published {exact:.6f})", flush=True)
         for k, tau in enumerate((0.04, 0.02, 0.01, 0.005, 0.0025)):
@@ -658,7 +659,7 @@ def step_main(args):
                                             ("a tenth of the walkers", 0.2, 0, small)):
             lib.walk_options(clamp, rejected)
             e, s, _ = energy_rust(guess, electrons, 0.01, seed=31, **use)
-            lib.walk_options(0.2, 0)
+            lib.walk_options(0.2, 0)                             # the study is of the old limit, 0.2
             print(f"  step 0.01, {label}: {e:.5f} ± {s:.5f}   difference {1e3 * (e - exact):+.3f} mEh", flush=True)
 
 

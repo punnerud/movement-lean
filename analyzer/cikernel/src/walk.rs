@@ -413,10 +413,11 @@ fn shorten(drift: &mut [f64; DIM], inv_mass: &[f64], tau: f64) {
 
 /// Settings for experiments on the walker loop (see `walk_options`): the rate limit as a multiple
 /// of sqrt(particles / tau) (0: no limit), and whether a walker whose move was rejected reacts.
-static CLAMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x3FC9_9999_9999_999A);   // 0.2
+static CLAMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);   // no limit
 static REACT_REJECTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Changes the settings of the walker loop for the runs that follow. The defaults are 0.2 and 0.
+/// Changes the settings of the walker loop for the runs that follow. The defaults are 0 (no limit) and 0. Until the study of the time step
+/// (`diffusion_mc.py steps`) the limit was 0.2, which raised energies by 0.3 to 0.7 mEh.
 #[no_mangle]
 pub extern "C" fn walk_options(clamp: f64, react_rejected: i32) {
     CLAMP.store(clamp.to_bits(), std::sync::atomic::Ordering::Relaxed);
